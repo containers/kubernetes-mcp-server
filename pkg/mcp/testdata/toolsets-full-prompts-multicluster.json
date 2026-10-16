@@ -133,7 +133,7 @@
       },
       {
         "name": "context",
-        "description": "Optional parameter selecting which context to run the prompt in. Defaults to fake-context if not set"
+        "description": "The context to run against, as listed by context_list. Defaults to fake-context."
       }
     ],
     "description": "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",

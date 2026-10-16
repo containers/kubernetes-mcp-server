@@ -179,9 +179,9 @@ func (s *NodesTopSuite) TestNodesTop() {
 		})
 	})
 
-	s.Run("nodes_top(label_selector=node-role.kubernetes.io/worker=)", func() {
+	s.Run("nodes_top(labelSelector=node-role.kubernetes.io/worker=)", func() {
 		toolResult, err := s.CallTool("nodes_top", map[string]interface{}{
-			"label_selector": "node-role.kubernetes.io/worker=",
+			"labelSelector": "node-role.kubernetes.io/worker=",
 		})
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Run("no error", func() {

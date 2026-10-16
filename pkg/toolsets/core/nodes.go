@@ -21,7 +21,8 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "nodes_log",
-			Description: "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
+			Description: "Read the system logs of a node through the kubelet: a service such as kubelet, or a log file under /var/log. The last 100 lines by default; tail 0 returns everything.",
+			Examples:    []api.Example{{Summary: "Kubelet logs of a node", Arguments: map[string]any{"name": "worker-1", "source": "kubelet"}}, {Summary: "A log file on a node", Arguments: map[string]any{"name": "worker-1", "source": "/var/log/kube-proxy.log", "tail": 50}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -29,18 +30,18 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 						Type:        "string",
 						Description: "Name of the node to get logs from",
 					},
-					"query": {
+					"source": {
 						Type:        "string",
-						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")`,
+						Description: "A service name ('kubelet', 'kube-proxy') or a log file path on the node ('/var/log/kubelet.log').",
 					},
-					"tailLines": {
+					"tail": {
 						Type:        "integer",
 						Description: "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
 						Default:     api.ToRawMessage(100),
 						Minimum:     ptr.To(float64(0)),
 					},
 				},
-				Required: []string{"name", "query"},
+				Required: []string{"name", "source"},
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Node: Log",
@@ -65,7 +66,8 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 		), Handler: nodesLog},
 		{Tool: api.Tool{
 			Name:        "nodes_stats_summary",
-			Description: "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
+			Description: "Show the kubelet's resource statistics of a node: CPU, memory, filesystem and network at the node, pod and container level, system containers included. nodes_top is the short CPU and memory table.",
+			Examples:    []api.Example{{Summary: "Resource statistics of a node", Arguments: map[string]any{"name": "worker-1"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -99,7 +101,8 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 		), Handler: nodesStatsSummary},
 		{Tool: api.Tool{
 			Name:        "nodes_top",
-			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
+			Description: "Show the CPU and memory consumption of the nodes as recorded by the Metrics Server: every node, one node with name, or the nodes matching labelSelector.",
+			Examples:    []api.Example{{Summary: "CPU and memory of every node"}, {Summary: "Of the worker nodes", Arguments: map[string]any{"labelSelector": "node-role.kubernetes.io/worker="}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -107,7 +110,7 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 						Type:        "string",
 						Description: "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
 					},
-					"label_selector": {
+					"labelSelector": {
 						Type:        "string",
 						Description: "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
 						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
@@ -146,17 +149,17 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if !ok || name == "" {
 		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument name")), nil
 	}
-	query, ok := params.GetArguments()["query"].(string)
+	query, ok := params.GetArguments()["source"].(string)
 	if !ok || query == "" {
-		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument query")), nil
+		return api.NewToolCallResult("", errors.New("failed to get node log, missing argument source")), nil
 	}
-	tailLines := params.GetArguments()["tailLines"]
+	tail := params.GetArguments()["tail"]
 	var tailInt int64
-	if tailLines != nil {
+	if tail != nil {
 		var err error
-		tailInt, err = api.ParseInt64(tailLines)
+		tailInt, err = api.ParseInt64(tail)
 		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: %w", err)), nil
+			return api.NewToolCallResult("", fmt.Errorf("failed to parse tail parameter: %w", err)), nil
 		}
 	}
 	ret, err := kubernetes.NewCore(params).NodesLog(params, name, query, tailInt)
@@ -185,7 +188,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["name"].(string); ok {
 		nodesTopOptions.Name = v
 	}
-	if v, ok := params.GetArguments()["label_selector"].(string); ok {
+	if v, ok := params.GetArguments()["labelSelector"].(string); ok {
 		nodesTopOptions.LabelSelector = v
 	}
 

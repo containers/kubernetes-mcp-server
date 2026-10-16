@@ -120,14 +120,8 @@ func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
 
 func (s *PodsSuite) TestPodsListInNamespace() {
 	s.InitMcpClient()
-	s.Run("pods_list_in_namespace with nil namespace returns error", func() {
-		toolResult, _ := s.CallTool("pods_list_in_namespace", map[string]interface{}{})
-		s.Truef(toolResult.IsError, "call tool should fail")
-		s.Equalf("failed to list pods in namespace: namespace parameter required", toolResult.Content[0].(*mcp.TextContent).Text,
-			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
-	})
-	s.Run("pods_list_in_namespace(namespace=ns-1) returns pods list", func() {
-		toolResult, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
+	s.Run("pods_list(namespace=ns-1) returns pods list", func() {
+		toolResult, err := s.CallTool("pods_list", map[string]interface{}{
 			"namespace": "ns-1",
 		})
 		s.Run("no error", func() {
@@ -175,9 +169,9 @@ func (s *PodsSuite) TestPodsListDenied() {
 			capture.RequireNoLogNotification(s.T(), 500*time.Millisecond)
 		})
 	})
-	s.Run("pods_list_in_namespace (denied)", func() {
+	s.Run("pods_list(namespace=ns-1) (denied)", func() {
 		capture := s.StartCapturingLogNotifications()
-		podsListInNamespace, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{"namespace": "ns-1"})
+		podsListInNamespace, err := s.CallTool("pods_list", map[string]interface{}{"namespace": "ns-1"})
 		s.Run("has error", func() {
 			s.Truef(podsListInNamespace.IsError, "call tool should fail")
 			s.Nilf(err, "call tool should not return error object")
@@ -276,8 +270,8 @@ func (s *PodsSuite) TestPodsListAsTable() {
 			s.NoErrorf(e, "Error matching a-pod-in-default regex: %v", e)
 		})
 	})
-	s.Run("pods_list_in_namespace (list_output=table)", func() {
-		podsListInNamespace, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
+	s.Run("pods_list(namespace=ns-1) (list_output=table)", func() {
+		podsListInNamespace, err := s.CallTool("pods_list", map[string]interface{}{
 			"namespace": "ns-1",
 		})
 		s.Run("no error", func() {
@@ -778,8 +772,8 @@ func (s *PodsSuite) TestPodsListWithLabelSelector() {
 		})
 	})
 
-	s.Run("pods_list_in_namespace(labelSelector=env=prod, namespace=ns-1) returns filtered pods", func() {
-		toolResult, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
+	s.Run("pods_list(labelSelector=env=prod, namespace=ns-1) returns filtered pods", func() {
+		toolResult, err := s.CallTool("pods_list", map[string]interface{}{
 			"namespace":     "ns-1",
 			"labelSelector": "env=prod",
 		})
@@ -865,8 +859,8 @@ func (s *PodsSuite) TestPodsListWithFieldSelector() {
 		})
 	})
 
-	s.Run("pods_list_in_namespace(fieldSelector=metadata.name=field-selector-target, namespace=default) returns only matching pod", func() {
-		toolResult, err := s.CallTool("pods_list_in_namespace", map[string]interface{}{
+	s.Run("pods_list(fieldSelector=metadata.name=field-selector-target, namespace=default) returns only matching pod", func() {
+		toolResult, err := s.CallTool("pods_list", map[string]interface{}{
 			"namespace":     "default",
 			"fieldSelector": "metadata.name=field-selector-target",
 		})

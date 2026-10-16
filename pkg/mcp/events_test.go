@@ -19,6 +19,16 @@ type EventsSuite struct {
 	BaseMcpSuite
 }
 
+// SetupTest clears the events of the default namespace: envtest's API server
+// records a ClusterIPNotAllocated event for the kubernetes Service while it
+// starts (its repair loop runs before the allocator is primed), which would
+// otherwise pollute the no-events and exact-list cases at random.
+func (s *EventsSuite) SetupTest() {
+	s.BaseMcpSuite.SetupTest()
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	s.Require().NoError(client.CoreV1().Events("default").DeleteCollection(s.T().Context(), metav1.DeleteOptions{}, metav1.ListOptions{}))
+}
+
 func (s *EventsSuite) TestEventsList() {
 	s.InitMcpClient()
 	s.Run("events_list (no events)", func() {

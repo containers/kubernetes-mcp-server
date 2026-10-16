@@ -13,7 +13,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	_ "github.com/containers/kubernetes-mcp-server/pkg/mcp"
+	mcp "github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -130,7 +130,15 @@ func main() {
 			Inspector: &documentationInspector{},
 		})
 		for _, tool := range tools {
-			fmt.Fprintf(&toolsetTools, "- **%s** - %s\n", tool.Tool.Name, tool.Tool.Description)
+			// The target list tool is named per provider at runtime
+			// (context_list for a kubeconfig, cluster_list for ACM);
+			// document the name of the default provider.
+			name, description := tool.Tool.Name, tool.Tool.Description
+			if name == mcp.TargetsListToolName {
+				name = "context_list"
+				description += " Named cluster_list when the server runs against an ACM-style provider."
+			}
+			fmt.Fprintf(&toolsetTools, "- **%s** - %s\n", name, description)
 			for _, propName := range slices.Sorted(maps.Keys(tool.Tool.InputSchema.Properties)) {
 				property := tool.Tool.InputSchema.Properties[propName]
 				fmt.Fprintf(&toolsetTools, "  - `%s` (`%s`)", propName, property.Type)

@@ -19,10 +19,15 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
-			Description: "List all the Kubernetes pods in the current cluster from all namespaces",
+			Description: "List the pods of a namespace, or of the whole cluster when namespace is omitted, with their status, restarts and age. Narrow with labelSelector or fieldSelector; pods_get shows one pod in full.",
+			Examples:    []api.Example{{Summary: "Pods of a namespace", Arguments: map[string]any{"namespace": "payments"}}, {Summary: "Pods that are not running, cluster-wide", Arguments: map[string]any{"fieldSelector": "status.phase!=Running"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace to list pods from. Omit it to list the pods of every namespace",
+					},
 					"labelSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
@@ -42,47 +47,16 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 				OpenWorldHint:   ptr.To(true),
 			},
 		}, RBAC: api.RBACBounded(api.RBACRequirement{
-			Verbs:     []string{"list"},
-			Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+			Verbs:  []string{"list"},
+			Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
+			// The namespace argument is optional and its absence means every
+			// namespace, so the bound is the cluster-wide one.
 			Namespace: &api.RBACNamespace{AllNamespaces: true},
-		}), Handler: podsListInAllNamespaces},
-		{Tool: api.Tool{
-			Name:        "pods_list_in_namespace",
-			Description: "List all the Kubernetes pods in the specified namespace in the current cluster",
-			InputSchema: &jsonschema.Schema{
-				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
-					"namespace": {
-						Type:        "string",
-						Description: "Namespace to list pods from",
-					},
-					"labelSelector": {
-						Type:        "string",
-						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
-						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
-					},
-					"fieldSelector": {
-						Type:        "string",
-						Description: "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-						Pattern:     REGEX_FIELDSELECTOR,
-					},
-				},
-				Required: []string{"namespace"},
-			},
-			Annotations: api.ToolAnnotations{
-				Title:           "Pods: List in Namespace",
-				ReadOnlyHint:    ptr.To(true),
-				DestructiveHint: ptr.To(false),
-				OpenWorldHint:   ptr.To(true),
-			},
-		}, RBAC: api.RBACBounded(api.RBACRequirement{
-			Verbs:     []string{"list"},
-			Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods"}},
-			Namespace: &api.RBACNamespace{Argument: "namespace"},
-		}), Handler: podsListInNamespace},
+		}), Handler: podsList},
 		{Tool: api.Tool{
 			Name:        "pods_get",
-			Description: "Get a Kubernetes Pod in the current or provided namespace with the provided name",
+			Description: "Show one pod in full: its spec, status, conditions and container states. Find it with pods_list; read its output with pods_log.",
+			Examples:    []api.Example{{Summary: "One pod", Arguments: map[string]any{"namespace": "payments", "name": "api-7d9f8b6c4-x2kqz"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -111,7 +85,8 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 		}), Handler: podsGet},
 		{Tool: api.Tool{
 			Name:        "pods_delete",
-			Description: "Delete a Kubernetes Pod in the current or provided namespace with the provided name",
+			Description: "Delete one pod. A pod owned by a Deployment or another controller is recreated; a bare pod is gone.",
+			Examples:    []api.Example{{Summary: "Delete a pod", Arguments: map[string]any{"namespace": "payments", "name": "api-7d9f8b6c4-x2kqz"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -155,24 +130,20 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 		), Handler: podsDelete},
 		{Tool: api.Tool{
 			Name:        "pods_top",
-			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace",
+			Description: "Show the CPU and memory consumption of pods as recorded by the Kubernetes Metrics Server: one pod, the pods of a namespace, or every pod of the cluster when namespace is omitted",
+			Examples:    []api.Example{{Summary: "CPU and memory of every pod"}, {Summary: "Of the pods of one namespace", Arguments: map[string]any{"namespace": "payments"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
-					"all_namespaces": {
-						Type:        "boolean",
-						Description: "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
-						Default:     api.ToRawMessage(true),
-					},
 					"namespace": {
 						Type:        "string",
-						Description: "Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)",
+						Description: "Namespace of the pods. Omit it for the pods of every namespace",
 					},
 					"name": {
 						Type:        "string",
-						Description: "Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)",
+						Description: "Name of one pod in the namespace (Optional, all pods if not provided)",
 					},
-					"label_selector": {
+					"labelSelector": {
 						Type:        "string",
 						Description: "Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)",
 						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
@@ -192,8 +163,8 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 				APIGroup: "metrics.k8s.io",
 				Resource: "pods",
 			}},
-			// Keep the v1alpha1 contract conservative and simple. A future version can
-			// narrow this based on namespace and all_namespaces arguments.
+			// The namespace argument is optional and its absence means every
+			// namespace, so the bound is the cluster-wide one.
 			Namespace: &api.RBACNamespace{AllNamespaces: true},
 		}), Handler: podsTop,
 			TargetCompatibilityFilters: []func() bool{
@@ -202,7 +173,8 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 		},
 		{Tool: api.Tool{
 			Name:        "pods_exec",
-			Description: "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
+			Description: "Run a command inside a container of a pod and return its output, as kubectl exec does. command is the program and its arguments as a list; container picks one when the pod has several.",
+			Examples:    []api.Example{{Summary: "List a directory in a pod", Arguments: map[string]any{"namespace": "payments", "name": "api-7d9f8b6c4-x2kqz", "command": []any{"ls", "-l", "/tmp"}}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -252,7 +224,8 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 		), Handler: podsExec},
 		{Tool: api.Tool{
 			Name:        "pods_log",
-			Description: "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
+			Description: "Read the logs of a pod, or of one of its containers: the last 100 lines by default, and with previous the logs of the container that crashed before the last restart.",
+			Examples:    []api.Example{{Summary: "Last 200 lines of a pod", Arguments: map[string]any{"namespace": "payments", "name": "api-7d9f8b6c4-x2kqz", "tail": 200}}, {Summary: "Why a container crashed", Arguments: map[string]any{"namespace": "payments", "name": "api-7d9f8b6c4-x2kqz", "previous": true}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -306,7 +279,8 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 		), Handler: podsLog},
 		{Tool: api.Tool{
 			Name:        "pods_run",
-			Description: "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
+			Description: "Create a pod from a container image, with a Service (and a Route on OpenShift) for its port when one is given. For anything beyond a quick test, create a Deployment with resources_create_or_update.",
+			Examples:    []api.Example{{Summary: "Run nginx and expose port 80", Arguments: map[string]any{"image": "nginx", "port": 80, "namespace": "default"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -357,35 +331,26 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 	}
 }
 
-func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func podsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
+	ns := p.OptionalString("namespace", "")
 	resourceListOptions := api.ListOptions{
 		AsTable: params.ListOutput.AsTable(),
 	}
 	resourceListOptions.LabelSelector = p.OptionalString("labelSelector", "")
 	resourceListOptions.FieldSelector = p.OptionalString("fieldSelector", "")
 	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods: %w", err)), nil
 	}
-	ret, err := kubernetes.NewCore(params).PodsListInAllNamespaces(params, resourceListOptions)
-	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
+	core := kubernetes.NewCore(params)
+	if ns == "" {
+		ret, err := core.PodsListInAllNamespaces(params, resourceListOptions)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
+		}
+		return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
 	}
-	return api.NewToolCallResult(params.ListOutput.PrintObj(ret)), nil
-}
-
-func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	p := api.WrapParams(params)
-	ns := p.RequiredString("namespace")
-	resourceListOptions := api.ListOptions{
-		AsTable: params.ListOutput.AsTable(),
-	}
-	resourceListOptions.LabelSelector = p.OptionalString("labelSelector", "")
-	resourceListOptions.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace: %w", err)), nil
-	}
-	ret, err := kubernetes.NewCore(params).PodsListInNamespace(params, ns, resourceListOptions)
+	ret, err := core.PodsListInNamespace(params, ns, resourceListOptions)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, err)), nil
 	}
@@ -422,12 +387,13 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
+	namespace := p.OptionalString("namespace", "")
 	podsTopOptions := api.PodsTopOptions{
-		AllNamespaces: p.OptionalBool("all_namespaces", true),
-		Namespace:     p.OptionalString("namespace", ""),
+		AllNamespaces: namespace == "",
+		Namespace:     namespace,
 		Name:          p.OptionalString("name", ""),
 	}
-	podsTopOptions.LabelSelector = p.OptionalString("label_selector", "")
+	podsTopOptions.LabelSelector = p.OptionalString("labelSelector", "")
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", err)), nil
 	}

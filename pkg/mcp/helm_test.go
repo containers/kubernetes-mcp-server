@@ -183,8 +183,8 @@ func (s *HelmSuite) TestHelmList() {
 			s.Equalf("No Helm releases found", toolResult.Content[0].(*mcp.TextContent).Text, "unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
-	s.Run("helm_list(namespace=ns-1, all_namespaces=true) with deployed release in all namespaces", func() {
-		toolResult, err := s.CallTool("helm_list", map[string]interface{}{"namespace": "ns-1", "all_namespaces": true})
+	s.Run("helm_list() with deployed release lists every namespace", func() {
+		toolResult, err := s.CallTool("helm_list", map[string]interface{}{})
 		s.Run("no error", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(toolResult.IsError, "call tool failed")

@@ -31,7 +31,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "resources_list",
-			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
+			Description: "List the objects of any kind by apiVersion and kind, in one namespace or, when namespace is omitted, across the cluster, with their names and status columns. Narrow with labelSelector or fieldSelector. " + commonApiVersion,
+			Examples:    []api.Example{{Summary: "Deployments of a namespace", Arguments: map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "namespace": "payments"}}, {Summary: "Every Ingress in the cluster", Arguments: map[string]any{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -76,7 +77,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 		}), Handler: resourcesList},
 		{Tool: api.Tool{
 			Name:        "resources_get",
-			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			Description: "Show one object of any kind in full, by apiVersion, kind, name and, for a namespaced kind, namespace. " + commonApiVersion,
+			Examples:    []api.Example{{Summary: "One Deployment", Arguments: map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "namespace": "payments", "name": "api"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -117,6 +119,7 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 		{Tool: api.Tool{
 			Name:        "resources_create_or_update",
 			Description: "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n" + commonApiVersion,
+			Examples:    []api.Example{{Summary: "Create a ConfigMap", Arguments: map[string]any{"resource": "apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: settings\\n  namespace: payments\\ndata:\\n  mode: fast\\n"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -139,7 +142,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 		}), Handler: resourcesCreateOrUpdate},
 		{Tool: api.Tool{
 			Name:        "resources_delete",
-			Description: "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
+			Description: "Delete one object of any kind by apiVersion, kind, name and namespace. gracePeriodSeconds shortens or lengthens the time the object gets to shut down; 0 deletes it immediately. " + commonApiVersion,
+			Examples:    []api.Example{{Summary: "Delete a Deployment", Arguments: map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "namespace": "payments", "name": "api"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -183,7 +187,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 		}), Handler: resourcesDelete},
 		{Tool: api.Tool{
 			Name:        "resources_scale",
-			Description: "Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource",
+			Description: "Show the replica count of a Deployment, StatefulSet or ReplicaSet, or set it when replicas is given.",
+			Examples:    []api.Example{{Summary: "Current replicas of a Deployment", Arguments: map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "namespace": "payments", "name": "api"}}, {Summary: "Scale a Deployment to three", Arguments: map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "namespace": "payments", "name": "api", "replicas": 3}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -203,9 +208,9 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 						Type:        "string",
 						Description: "Name of the resource",
 					},
-					"scale": {
+					"replicas": {
 						Type:        "integer",
-						Description: "Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it",
+						Description: "The replica count to set. Omit it to read the current count without changing it.",
 					},
 				},
 				Required: []string{"apiVersion", "kind", "name"},
@@ -399,7 +404,7 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 
 	var desiredScale int64
-	scaleVal, shouldScale := params.GetArguments()["scale"]
+	scaleVal, shouldScale := params.GetArguments()["replicas"]
 	if shouldScale {
 		desiredScale, err = parseScaleValue(scaleVal)
 		if err != nil {

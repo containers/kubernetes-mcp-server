@@ -191,7 +191,7 @@ For a fixed subresource of a GVK-derived resource, use `subresource`:
 }
 ```
 
-For example, a `resources_scale` call with `apiVersion: "apps/v1"` and `kind: "Deployment"` resolves through discovery to the RBAC resource `deployments/scale` in the `apps` API group. The tool always gets the scale and may update it, so its conservative upper bound includes both verbs even when a particular call omits the optional `scale` argument.
+For example, a `resources_scale` call with `apiVersion: "apps/v1"` and `kind: "Deployment"` resolves through discovery to the RBAC resource `deployments/scale` in the `apps` API group. The tool always gets the scale and may update it, so its conservative upper bound includes both verbs even when a particular call omits the optional `replicas` argument.
 
 ```yaml
 apiGroups: ["apps"]

@@ -41,7 +41,7 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 					Description: "Returns whether toolset config was found",
 				},
 				Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-					_, found := params.Config.GetToolsetConfig("kiali")
+					_, found := params.Config.GetToolsetConfig("helm")
 					if found {
 						return api.NewToolCallResult("found", nil), nil
 					}
@@ -61,8 +61,8 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesToolsetConfig() {
 	readOnly := s.Cfg.ReadOnly.Get()
 	cfg, err := config.ReadToml(s.T().Context(), []byte(`
 		toolsets = ["config-provider-test"]
-		[toolset_configs.kiali]
-		url = "http://kiali.example/"
+		[toolset_configs.helm]
+		storage_driver = "configmap"
 	`))
 	s.Require().NoError(err, "Expected to parse config")
 	s.Cfg = cfg

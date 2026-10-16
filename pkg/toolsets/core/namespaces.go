@@ -23,7 +23,8 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "namespaces_list",
-			Description: "List all the Kubernetes namespaces in the current cluster",
+			Description: "List the namespaces of the cluster with their status and age. Narrow with fieldSelector on metadata.name or status.phase.",
+			Examples:    []api.Example{{Summary: "Every namespace"}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -51,7 +52,8 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "projects_list",
-			Description: "List all the OpenShift projects in the current cluster",
+			Description: "List the OpenShift projects: the namespaces as OpenShift presents them, with display names and descriptions. On a cluster without OpenShift, use namespaces_list.",
+			Examples:    []api.Example{{Summary: "Every project"}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 			},

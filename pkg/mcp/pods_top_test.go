@@ -118,9 +118,9 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		s.Regexpf(expectedTotal, textContent, "expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 	})
 
-	s.Run("pods_top(allNamespaces=false) returns pod metrics from configured namespace", func() {
+	s.Run("pods_top(namespace=default) returns pod metrics from that namespace", func() {
 		result, err := s.CallTool("pods_top", map[string]interface{}{
-			"all_namespaces": false,
+			"namespace": "default",
 		})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)
@@ -172,9 +172,9 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 		s.Regexpf(expectedTotal, textContent, "expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
 	})
 
-	s.Run("pods_top[label_selector=app=pod-ns-5-42] returns pod metrics from pods matching selector", func() {
+	s.Run("pods_top[labelSelector=app=pod-ns-5-42] returns pod metrics from pods matching selector", func() {
 		result, err := s.CallTool("pods_top", map[string]interface{}{
-			"label_selector": "app=pod-ns-5-42",
+			"labelSelector": "app=pod-ns-5-42",
 		})
 		s.Require().NotNil(result)
 		s.NoErrorf(err, "call tool failed %v", err)

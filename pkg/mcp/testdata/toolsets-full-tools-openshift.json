@@ -13,7 +13,7 @@
       "readOnlyHint": true,
       "title": "Configuration: View"
     },
-    "description": "Get the current Kubernetes configuration content as a kubeconfig YAML",
+    "description": "Show the kubeconfig the server runs with, as YAML: the current context alone by default, every context with minified false. Credentials in it are returned as they are.\n\nExample: The current context's kubeconfig: {}\n\nExample: The whole kubeconfig: {\"minified\":false}",
     "inputSchema": {
       "properties": {
         "minified": {
@@ -56,7 +56,7 @@
       "readOnlyHint": true,
       "title": "Events: List"
     },
-    "description": "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces",
+    "description": "List the events of a namespace, or of the whole cluster when namespace is omitted: warnings, errors and state changes, each with the object it is about. Narrow with fieldSelector, e.g. type=Warning or involvedObject.name=\u003cpod\u003e.\n\nExample: Warnings in a namespace: {\"fieldSelector\":\"type=Warning\",\"namespace\":\"payments\"}\n\nExample: Events about one pod: {\"fieldSelector\":\"involvedObject.name=api-7d9f8b6c4-x2kqz\",\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
         "fieldSelector": {
@@ -101,7 +101,7 @@
       "readOnlyHint": true,
       "title": "Namespaces: List"
     },
-    "description": "List all the Kubernetes namespaces in the current cluster",
+    "description": "List the namespaces of the cluster with their status and age. Narrow with fieldSelector on metadata.name or status.phase.\n\nExample: Every namespace: {}",
     "inputSchema": {
       "properties": {
         "fieldSelector": {
@@ -159,18 +159,18 @@
       "readOnlyHint": true,
       "title": "Node: Log"
     },
-    "description": "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
+    "description": "Read the system logs of a node through the kubelet: a service such as kubelet, or a log file under /var/log. The last 100 lines by default; tail 0 returns everything.\n\nExample: Kubelet logs of a node: {\"name\":\"worker-1\",\"source\":\"kubelet\"}\n\nExample: A log file on a node: {\"name\":\"worker-1\",\"source\":\"/var/log/kube-proxy.log\",\"tail\":50}",
     "inputSchema": {
       "properties": {
         "name": {
           "description": "Name of the node to get logs from",
           "type": "string"
         },
-        "query": {
-          "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
+        "source": {
+          "description": "A service name ('kubelet', 'kube-proxy') or a log file path on the node ('/var/log/kubelet.log').",
           "type": "string"
         },
-        "tailLines": {
+        "tail": {
           "default": 100,
           "description": "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
           "minimum": 0,
@@ -179,7 +179,7 @@
       },
       "required": [
         "name",
-        "query"
+        "source"
       ],
       "type": "object"
     },
@@ -230,7 +230,7 @@
       "readOnlyHint": true,
       "title": "Node: Stats Summary"
     },
-    "description": "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
+    "description": "Show the kubelet's resource statistics of a node: CPU, memory, filesystem and network at the node, pod and container level, system containers included. nodes_top is the short CPU and memory table.\n\nExample: Resource statistics of a node: {\"name\":\"worker-1\"}",
     "inputSchema": {
       "properties": {
         "name": {
@@ -285,10 +285,10 @@
       "readOnlyHint": true,
       "title": "Nodes: Top"
     },
-    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
+    "description": "Show the CPU and memory consumption of the nodes as recorded by the Metrics Server: every node, one node with name, or the nodes matching labelSelector.\n\nExample: CPU and memory of every node: {}\n\nExample: Of the worker nodes: {\"labelSelector\":\"node-role.kubernetes.io/worker=\"}",
     "inputSchema": {
       "properties": {
-        "label_selector": {
+        "labelSelector": {
           "description": "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
@@ -366,7 +366,7 @@
       "readOnlyHint": false,
       "title": "Pods: Delete"
     },
-    "description": "Delete a Kubernetes Pod in the current or provided namespace with the provided name",
+    "description": "Delete one pod. A pod owned by a Deployment or another controller is recreated; a bare pod is gone.\n\nExample: Delete a pod: {\"name\":\"api-7d9f8b6c4-x2kqz\",\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
         "name": {
@@ -437,7 +437,7 @@
       "readOnlyHint": false,
       "title": "Pods: Exec"
     },
-    "description": "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
+    "description": "Run a command inside a container of a pod and return its output, as kubectl exec does. command is the program and its arguments as a list; container picks one when the pod has several.\n\nExample: List a directory in a pod: {\"command\":[\"ls\",\"-l\",\"/tmp\"],\"name\":\"api-7d9f8b6c4-x2kqz\",\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
         "command": {
@@ -502,7 +502,7 @@
       "readOnlyHint": true,
       "title": "Pods: Get"
     },
-    "description": "Get a Kubernetes Pod in the current or provided namespace with the provided name",
+    "description": "Show one pod in full: its spec, status, conditions and container states. Find it with pods_list; read its output with pods_log.\n\nExample: One pod: {\"name\":\"api-7d9f8b6c4-x2kqz\",\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
         "name": {
@@ -552,56 +552,7 @@
       "readOnlyHint": true,
       "title": "Pods: List"
     },
-    "description": "List all the Kubernetes pods in the current cluster from all namespaces",
-    "inputSchema": {
-      "properties": {
-        "fieldSelector": {
-          "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
-          "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
-          "type": "string"
-        },
-        "labelSelector": {
-          "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
-          "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "pods_list",
-    "title": "Pods: List"
-  },
-  {
-    "_meta": {
-      "io.kubernetes-mcp-server/rbac": {
-        "bounded": {
-          "requirements": [
-            {
-              "namespace": {
-                "argument": "namespace"
-              },
-              "target": {
-                "resource": {
-                  "resource": "pods"
-                }
-              },
-              "verbs": [
-                "list"
-              ]
-            }
-          ]
-        },
-        "version": "v1alpha1"
-      }
-    },
-    "annotations": {
-      "destructiveHint": false,
-      "idempotentHint": false,
-      "openWorldHint": true,
-      "readOnlyHint": true,
-      "title": "Pods: List in Namespace"
-    },
-    "description": "List all the Kubernetes pods in the specified namespace in the current cluster",
+    "description": "List the pods of a namespace, or of the whole cluster when namespace is omitted, with their status, restarts and age. Narrow with labelSelector or fieldSelector; pods_get shows one pod in full.\n\nExample: Pods of a namespace: {\"namespace\":\"payments\"}\n\nExample: Pods that are not running, cluster-wide: {\"fieldSelector\":\"status.phase!=Running\"}",
     "inputSchema": {
       "properties": {
         "fieldSelector": {
@@ -615,17 +566,14 @@
           "type": "string"
         },
         "namespace": {
-          "description": "Namespace to list pods from",
+          "description": "Namespace to list pods from. Omit it to list the pods of every namespace",
           "type": "string"
         }
       },
-      "required": [
-        "namespace"
-      ],
       "type": "object"
     },
-    "name": "pods_list_in_namespace",
-    "title": "Pods: List in Namespace"
+    "name": "pods_list",
+    "title": "Pods: List"
   },
   {
     "_meta": {
@@ -677,7 +625,7 @@
       "readOnlyHint": true,
       "title": "Pods: Log"
     },
-    "description": "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
+    "description": "Read the logs of a pod, or of one of its containers: the last 100 lines by default, and with previous the logs of the container that crashed before the last restart.\n\nExample: Last 200 lines of a pod: {\"name\":\"api-7d9f8b6c4-x2kqz\",\"namespace\":\"payments\",\"tail\":200}\n\nExample: Why a container crashed: {\"name\":\"api-7d9f8b6c4-x2kqz\",\"namespace\":\"payments\",\"previous\":true}",
     "inputSchema": {
       "properties": {
         "container": {
@@ -771,7 +719,7 @@
       "readOnlyHint": false,
       "title": "Pods: Run"
     },
-    "description": "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
+    "description": "Create a pod from a container image, with a Service (and a Route on OpenShift) for its port when one is given. For anything beyond a quick test, create a Deployment with resources_create_or_update.\n\nExample: Run nginx and expose port 80: {\"image\":\"nginx\",\"namespace\":\"default\",\"port\":80}",
     "inputSchema": {
       "properties": {
         "image": {
@@ -831,25 +779,20 @@
       "readOnlyHint": true,
       "title": "Pods: Top"
     },
-    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace",
+    "description": "Show the CPU and memory consumption of pods as recorded by the Kubernetes Metrics Server: one pod, the pods of a namespace, or every pod of the cluster when namespace is omitted\n\nExample: CPU and memory of every pod: {}\n\nExample: Of the pods of one namespace: {\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
-        "all_namespaces": {
-          "default": true,
-          "description": "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
-          "type": "boolean"
-        },
-        "label_selector": {
+        "labelSelector": {
           "description": "Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
         },
         "name": {
-          "description": "Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)",
+          "description": "Name of one pod in the namespace (Optional, all pods if not provided)",
           "type": "string"
         },
         "namespace": {
-          "description": "Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)",
+          "description": "Namespace of the pods. Omit it for the pods of every namespace",
           "type": "string"
         }
       },
@@ -886,7 +829,7 @@
       "readOnlyHint": true,
       "title": "Projects: List"
     },
-    "description": "List all the OpenShift projects in the current cluster",
+    "description": "List the OpenShift projects: the namespaces as OpenShift presents them, with display names and descriptions. On a cluster without OpenShift, use namespaces_list.\n\nExample: Every project: {}",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -922,7 +865,7 @@
       "readOnlyHint": false,
       "title": "Resources: Create or Update"
     },
-    "description": "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
+    "description": "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)\n\nExample: Create a ConfigMap: {\"resource\":\"apiVersion: v1\\\\nkind: ConfigMap\\\\nmetadata:\\\\n  name: settings\\\\n  namespace: payments\\\\ndata:\\\\n  mode: fast\\\\n\"}",
     "inputSchema": {
       "properties": {
         "resource": {
@@ -972,7 +915,7 @@
       "readOnlyHint": false,
       "title": "Resources: Delete"
     },
-    "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
+    "description": "Delete one object of any kind by apiVersion, kind, name and namespace. gracePeriodSeconds shortens or lengthens the time the object gets to shut down; 0 deletes it immediately. (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)\n\nExample: Delete a Deployment: {\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"name\":\"api\",\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -1040,7 +983,7 @@
       "readOnlyHint": true,
       "title": "Resources: Get"
     },
-    "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
+    "description": "Show one object of any kind in full, by apiVersion, kind, name and, for a namespaced kind, namespace. (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)\n\nExample: One Deployment: {\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"name\":\"api\",\"namespace\":\"payments\"}",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -1101,7 +1044,7 @@
       "readOnlyHint": true,
       "title": "Resources: List"
     },
-    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
+    "description": "List the objects of any kind by apiVersion and kind, in one namespace or, when namespace is omitted, across the cluster, with their names and status columns. Narrow with labelSelector or fieldSelector. (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)\n\nExample: Deployments of a namespace: {\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"namespace\":\"payments\"}\n\nExample: Every Ingress in the cluster: {\"apiVersion\":\"networking.k8s.io/v1\",\"kind\":\"Ingress\"}",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -1172,7 +1115,7 @@
       "readOnlyHint": false,
       "title": "Resources: Scale"
     },
-    "description": "Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource",
+    "description": "Show the replica count of a Deployment, StatefulSet or ReplicaSet, or set it when replicas is given.\n\nExample: Current replicas of a Deployment: {\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"name\":\"api\",\"namespace\":\"payments\"}\n\nExample: Scale a Deployment to three: {\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"name\":\"api\",\"namespace\":\"payments\",\"replicas\":3}",
     "inputSchema": {
       "properties": {
         "apiVersion": {
@@ -1191,8 +1134,8 @@
           "description": "Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace",
           "type": "string"
         },
-        "scale": {
-          "description": "Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it",
+        "replicas": {
+          "description": "The replica count to set. Omit it to read the current count without changing it.",
           "type": "integer"
         }
       },

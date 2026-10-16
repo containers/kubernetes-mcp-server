@@ -167,8 +167,8 @@ func ListComponentsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 
 func GetComponentSchemaHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
-	componentType := p.RequiredString("component_type")
-	componentName := p.RequiredString("component_name")
+	componentType := p.RequiredString("componentType")
+	componentName := p.RequiredString("componentName")
 	version := p.OptionalString("version", "")
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get component schema: %w", err)), nil
@@ -183,10 +183,10 @@ func GetComponentSchemaHandler(params api.ToolHandlerParams) (*api.ToolCallResul
 
 	ct := ComponentType(componentType)
 	if !ct.IsValid() {
-		return api.NewToolCallResult("", fmt.Errorf("invalid component_type: %s, must be one of: receiver, processor, exporter, extension, connector", ct)), nil
+		return api.NewToolCallResult("", fmt.Errorf("invalid componentType: %s, must be one of: receiver, processor, exporter, extension, connector", ct)), nil
 	}
 	if componentName == "" {
-		return api.NewToolCallResult("", fmt.Errorf("component_name is required")), nil
+		return api.NewToolCallResult("", fmt.Errorf("componentName is required")), nil
 	}
 
 	version = normalizeVersion(version)
@@ -215,8 +215,8 @@ func GetComponentSchemaHandler(params api.ToolHandlerParams) (*api.ToolCallResul
 
 func ValidateConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
-	componentType := p.RequiredString("component_type")
-	componentName := p.RequiredString("component_name")
+	componentType := p.RequiredString("componentType")
+	componentName := p.RequiredString("componentName")
 	config := p.RequiredString("config")
 	format := p.OptionalString("format", "yaml")
 	version := p.OptionalString("version", "")
@@ -234,10 +234,10 @@ func ValidateConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 
 	ct := ComponentType(componentType)
 	if !ct.IsValid() {
-		return api.NewToolCallResult("", fmt.Errorf("invalid component_type: %s, must be one of: receiver, processor, exporter, extension, connector", ct)), nil
+		return api.NewToolCallResult("", fmt.Errorf("invalid componentType: %s, must be one of: receiver, processor, exporter, extension, connector", ct)), nil
 	}
 	if componentName == "" {
-		return api.NewToolCallResult("", fmt.Errorf("component_name is required")), nil
+		return api.NewToolCallResult("", fmt.Errorf("componentName is required")), nil
 	}
 	if config == "" {
 		return api.NewToolCallResult("", fmt.Errorf("config is required")), nil

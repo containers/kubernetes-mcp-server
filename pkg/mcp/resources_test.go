@@ -927,7 +927,7 @@ func (s *ResourcesSuite) TestResourcesScale() {
 			"kind":       "Deployment",
 			"namespace":  "default",
 			"name":       deploymentName,
-			"scale":      5,
+			"replicas":   5,
 		})
 		s.Run("no error", func() {
 			s.Nilf(err, "call tool failed %v", err)
@@ -1017,7 +1017,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			"kind":       "ReplicationController",
 			"namespace":  "default",
 			"name":       "nonexistent-rc",
-			"scale":      1337,
+			"replicas":   1337,
 		})
 		s.Run("has error", func() {
 			s.Truef(deniedByKind.IsError, "call tool should fail")
@@ -1056,7 +1056,7 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 			"kind":       "StatefulSet",
 			"namespace":  "default",
 			"name":       "nonexistent-statefulset",
-			"scale":      1337,
+			"replicas":   1337,
 		})
 		s.Run("has error", func() {
 			s.Truef(deniedByGroup.IsError, "call tool should fail")

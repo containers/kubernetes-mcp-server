@@ -15,7 +15,7 @@
       "readOnlyHint": false,
       "title": "Helm: Install"
     },
-    "description": "Install (deploy) a Helm chart to create a release in the current or provided namespace",
+    "description": "Install a Helm chart as a release, with values when given, in a namespace or the current one. The release name is generated when omitted.\n\nExample: Install a chart from an OCI registry: {\"chart\":\"oci://ghcr.io/nginxinc/charts/nginx-ingress\",\"name\":\"ingress\",\"namespace\":\"ingress\"}",
     "inputSchema": {
       "properties": {
         "chart": {
@@ -87,15 +87,11 @@
       "readOnlyHint": true,
       "title": "Helm: List"
     },
-    "description": "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
+    "description": "List the Helm releases of a namespace, or of every namespace when namespace is omitted\n\nExample: Every release in the cluster: {}\n\nExample: Releases of a namespace: {\"namespace\":\"ingress\"}",
     "inputSchema": {
       "properties": {
-        "all_namespaces": {
-          "description": "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
-          "type": "boolean"
-        },
         "namespace": {
-          "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
+          "description": "Namespace to list Helm releases from. Omit it for the releases of every namespace",
           "type": "string"
         }
       },
@@ -120,7 +116,7 @@
       "readOnlyHint": false,
       "title": "Helm: Uninstall"
     },
-    "description": "Uninstall a Helm release in the current or provided namespace",
+    "description": "Uninstall a Helm release and the objects it created.\n\nExample: Uninstall a release: {\"name\":\"ingress\",\"namespace\":\"ingress\"}",
     "inputSchema": {
       "properties": {
         "name": {

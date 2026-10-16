@@ -15,15 +15,22 @@
       "readOnlyHint": true,
       "title": "Get OpenTelemetry Collector Component Schema"
     },
-    "description": "Get the JSON schema for an OpenTelemetry Collector component's configuration options.",
+    "description": "Show the JSON schema of one Collector component's configuration: every option with its type and default. Use it before writing or validating a component's config.\n\nExample: Schema of the OTLP receiver: {\"componentName\":\"otlp\",\"componentType\":\"receiver\"}",
     "inputSchema": {
       "properties": {
-        "component_name": {
+        "componentName": {
           "description": "Component name from otelcol_list_components (e.g., 'otlp', 'batch', 'debug')",
           "type": "string"
         },
-        "component_type": {
+        "componentType": {
           "description": "Component type: receiver, processor, exporter, extension, connector",
+          "enum": [
+            "receiver",
+            "processor",
+            "exporter",
+            "extension",
+            "connector"
+          ],
           "type": "string"
         },
         "version": {
@@ -32,8 +39,8 @@
         }
       },
       "required": [
-        "component_type",
-        "component_name"
+        "componentType",
+        "componentName"
       ],
       "type": "object"
     },
@@ -85,7 +92,7 @@
       "readOnlyHint": true,
       "title": "Get Available OpenTelemetry Collector Versions"
     },
-    "description": "List available OpenTelemetry Collector versions and identify the latest.",
+    "description": "List the OpenTelemetry Collector versions whose component schemas are available, and which one is the latest.\n\nExample: Which Collector versions are known: {}",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -133,7 +140,7 @@
       "readOnlyHint": true,
       "title": "List OpenTelemetry Collector Components"
     },
-    "description": "List available OpenTelemetry Collector components (receivers, processors, exporters, extensions, connectors) for a given version.",
+    "description": "List the components of an OpenTelemetry Collector version by name: receivers, processors, exporters, extensions and connectors. Defaults to the latest version.\n\nExample: Components of the latest Collector: {}",
     "inputSchema": {
       "properties": {
         "version": {
@@ -244,15 +251,22 @@
       "readOnlyHint": true,
       "title": "Validate OpenTelemetry Collector Component Configuration"
     },
-    "description": "Validate an OpenTelemetry Collector component configuration against its JSON schema.",
+    "description": "Validate one Collector component's configuration, as YAML or JSON, against its schema and report what is wrong. Use it before applying a Collector config.\n\nExample: Validate a batch processor config: {\"componentName\":\"batch\",\"componentType\":\"processor\",\"config\":\"timeout: 5s\\\\nsend_batch_size: 1024\"}",
     "inputSchema": {
       "properties": {
-        "component_name": {
+        "componentName": {
           "description": "Component name from otelcol_list_components (e.g., 'otlp', 'batch', 'debug')",
           "type": "string"
         },
-        "component_type": {
+        "componentType": {
           "description": "Component type: receiver, processor, exporter, extension, connector",
+          "enum": [
+            "receiver",
+            "processor",
+            "exporter",
+            "extension",
+            "connector"
+          ],
           "type": "string"
         },
         "config": {
@@ -261,6 +275,10 @@
         },
         "format": {
           "description": "Config format: 'yaml' (default) or 'json'",
+          "enum": [
+            "yaml",
+            "json"
+          ],
           "type": "string"
         },
         "version": {
@@ -269,8 +287,8 @@
         }
       },
       "required": [
-        "component_type",
-        "component_name",
+        "componentType",
+        "componentName",
         "config"
       ],
       "type": "object"

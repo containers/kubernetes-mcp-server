@@ -13,7 +13,7 @@
       "readOnlyHint": true,
       "title": "Configuration: View"
     },
-    "description": "Get the current Kubernetes configuration content as a kubeconfig YAML",
+    "description": "Show the kubeconfig the server runs with, as YAML: the current context alone by default, every context with minified false. Credentials in it are returned as they are.\n\nExample: The current context's kubeconfig: {}\n\nExample: The whole kubeconfig: {\"minified\":false}",
     "inputSchema": {
       "properties": {
         "minified": {

@@ -15,7 +15,8 @@ func initEvents() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "events_list",
-			Description: "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces",
+			Description: "List the events of a namespace, or of the whole cluster when namespace is omitted: warnings, errors and state changes, each with the object it is about. Narrow with fieldSelector, e.g. type=Warning or involvedObject.name=<pod>.",
+			Examples:    []api.Example{{Summary: "Warnings in a namespace", Arguments: map[string]any{"namespace": "payments", "fieldSelector": "type=Warning"}}, {Summary: "Events about one pod", Arguments: map[string]any{"namespace": "payments", "fieldSelector": "involvedObject.name=api-7d9f8b6c4-x2kqz"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{

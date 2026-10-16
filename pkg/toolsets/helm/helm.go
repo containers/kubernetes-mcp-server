@@ -14,7 +14,8 @@ func initHelm() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "helm_install",
-			Description: "Install (deploy) a Helm chart to create a release in the current or provided namespace",
+			Description: "Install a Helm chart as a release, with values when given, in a namespace or the current one. The release name is generated when omitted.",
+			Examples:    []api.Example{{Summary: "Install a chart from an OCI registry", Arguments: map[string]any{"chart": "oci://ghcr.io/nginxinc/charts/nginx-ingress", "name": "ingress", "namespace": "ingress"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -47,17 +48,14 @@ func initHelm() []api.ServerTool {
 		}, RBAC: api.RBACUnbounded("Permissions depend on resources contained in the referenced Helm chart"), Handler: helmInstall},
 		{Tool: api.Tool{
 			Name:        "helm_list",
-			Description: "List all the Helm releases in the current or provided namespace (or in all namespaces if specified)",
+			Description: "List the Helm releases of a namespace, or of every namespace when namespace is omitted",
+			Examples:    []api.Example{{Summary: "Every release in the cluster"}, {Summary: "Releases of a namespace", Arguments: map[string]any{"namespace": "ingress"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
 					"namespace": {
 						Type:        "string",
-						Description: "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
-					},
-					"all_namespaces": {
-						Type:        "boolean",
-						Description: "If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)",
+						Description: "Namespace to list Helm releases from. Omit it for the releases of every namespace",
 					},
 				},
 			},
@@ -81,7 +79,8 @@ func initHelm() []api.ServerTool {
 		), Handler: helmList},
 		{Tool: api.Tool{
 			Name:        "helm_uninstall",
-			Description: "Uninstall a Helm release in the current or provided namespace",
+			Description: "Uninstall a Helm release and the objects it created.",
+			Examples:    []api.Example{{Summary: "Uninstall a release", Arguments: map[string]any{"name": "ingress", "namespace": "ingress"}}},
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
@@ -150,8 +149,8 @@ func helmInstall(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 func helmList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
-	allNamespaces := p.OptionalBool("all_namespaces", false)
 	namespace := p.OptionalString("namespace", "")
+	allNamespaces := namespace == ""
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list helm releases: %w", err)), nil
 	}

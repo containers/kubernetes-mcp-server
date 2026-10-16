@@ -95,51 +95,51 @@ func TestGetComponentSchemaHandler(t *testing.T) {
 		{
 			name: "valid receiver",
 			args: map[string]any{
-				"component_type": "receiver",
-				"component_name": "otlp",
-				"version":        "0.144.0",
+				"componentType": "receiver",
+				"componentName": "otlp",
+				"version":       "0.144.0",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid processor",
 			args: map[string]any{
-				"component_type": "processor",
-				"component_name": "batch",
-				"version":        "0.144.0",
+				"componentType": "processor",
+				"componentName": "batch",
+				"version":       "0.144.0",
 			},
 			wantErr: false,
 		},
 		{
 			name: "version with v prefix",
 			args: map[string]any{
-				"component_type": "processor",
-				"component_name": "batch",
-				"version":        "v0.144.0",
+				"componentType": "processor",
+				"componentName": "batch",
+				"version":       "v0.144.0",
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid component type",
 			args: map[string]any{
-				"component_type": "invalid",
-				"component_name": "otlp",
+				"componentType": "invalid",
+				"componentName": "otlp",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing component name",
 			args: map[string]any{
-				"component_type": "receiver",
+				"componentType": "receiver",
 			},
 			wantErr: true,
 		},
 		{
 			name: "nonexistent component",
 			args: map[string]any{
-				"component_type": "receiver",
-				"component_name": "nonexistent_xyz",
-				"version":        "0.144.0",
+				"componentType": "receiver",
+				"componentName": "nonexistent_xyz",
+				"version":       "0.144.0",
 			},
 			wantErr: true,
 		},
@@ -160,9 +160,9 @@ func TestGetComponentSchemaHandler(t *testing.T) {
 
 func TestGetComponentSchemaHandler_SchemaContent(t *testing.T) {
 	result, err := GetComponentSchemaHandler(handlerParams(t, map[string]any{
-		"component_type": "processor",
-		"component_name": "batch",
-		"version":        "0.144.0",
+		"componentType": "processor",
+		"componentName": "batch",
+		"version":       "0.144.0",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,11 +206,11 @@ func TestValidateConfigHandler(t *testing.T) {
 		{
 			name: "valid yaml config",
 			args: map[string]any{
-				"component_type": "processor",
-				"component_name": "batch",
-				"config":         "send_batch_size: 8192\ntimeout: 200ms",
-				"format":         "yaml",
-				"version":        "0.144.0",
+				"componentType": "processor",
+				"componentName": "batch",
+				"config":        "send_batch_size: 8192\ntimeout: 200ms",
+				"format":        "yaml",
+				"version":       "0.144.0",
 			},
 			wantErr:   false,
 			wantValid: true,
@@ -218,11 +218,11 @@ func TestValidateConfigHandler(t *testing.T) {
 		{
 			name: "valid json config",
 			args: map[string]any{
-				"component_type": "processor",
-				"component_name": "batch",
-				"config":         `{"send_batch_size": 8192, "timeout": "200ms"}`,
-				"format":         "json",
-				"version":        "0.144.0",
+				"componentType": "processor",
+				"componentName": "batch",
+				"config":        `{"send_batch_size": 8192, "timeout": "200ms"}`,
+				"format":        "json",
+				"version":       "0.144.0",
 			},
 			wantErr:   false,
 			wantValid: true,
@@ -230,11 +230,11 @@ func TestValidateConfigHandler(t *testing.T) {
 		{
 			name: "invalid config - unknown field",
 			args: map[string]any{
-				"component_type": "processor",
-				"component_name": "batch",
-				"config":         "does_not_exist: 200ms",
-				"format":         "yaml",
-				"version":        "0.144.0",
+				"componentType": "processor",
+				"componentName": "batch",
+				"config":        "does_not_exist: 200ms",
+				"format":        "yaml",
+				"version":       "0.144.0",
 			},
 			wantErr:   false,
 			wantValid: false,
@@ -242,37 +242,37 @@ func TestValidateConfigHandler(t *testing.T) {
 		{
 			name: "invalid format",
 			args: map[string]any{
-				"component_type": "receiver",
-				"component_name": "otlp",
-				"config":         "{}",
-				"format":         "xml",
+				"componentType": "receiver",
+				"componentName": "otlp",
+				"config":        "{}",
+				"format":        "xml",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing config",
 			args: map[string]any{
-				"component_type": "receiver",
-				"component_name": "otlp",
+				"componentType": "receiver",
+				"componentName": "otlp",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing component name",
 			args: map[string]any{
-				"component_type": "receiver",
-				"config":         "{}",
-				"format":         "json",
+				"componentType": "receiver",
+				"config":        "{}",
+				"format":        "json",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid component type",
 			args: map[string]any{
-				"component_type": "invalid",
-				"component_name": "batch",
-				"config":         "{}",
-				"format":         "json",
+				"componentType": "invalid",
+				"componentName": "batch",
+				"config":        "{}",
+				"format":        "json",
 			},
 			wantErr: true,
 		},
