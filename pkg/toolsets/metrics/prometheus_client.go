@@ -75,7 +75,7 @@ func getPromClient(params api.ToolHandlerParams) (prometheus.Loader, error) {
 // buildAPIConfig creates a Prometheus API config using the configured auth mode.
 func buildAPIConfig(params api.ToolHandlerParams, prometheusURL string, insecure bool, authMode auth.AuthMode) (promapi.Config, error) {
 	tls := strings.HasPrefix(prometheusURL, "https://")
-	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), authMode, tls, insecure)
+	rt, err := auth.BuildRoundTripper(params.Context, params.Config, params.RESTConfig(), authMode, tls, insecure)
 	if err != nil {
 		return promapi.Config{}, fmt.Errorf("failed to create round tripper: %w", err)
 	}
