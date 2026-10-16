@@ -17,7 +17,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/otelcol"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -301,14 +300,12 @@ func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 	// Verifies ALL tools have Properties initialized (not just cluster-aware ones)
 	// OpenAI API requires properties field even if empty
 	s.Run("InputSchema has properties for all tools regardless of cluster-awareness", func() {
-		// Register all toolsets including kcp to catch kcp_workspaces_list
 		toolsets.Clear()
 		toolsets.Register(&core.Toolset{})
 		toolsets.Register(&config.Toolset{})
 		toolsets.Register(&helm.Toolset{})
-		toolsets.Register(&kcp.Toolset{})
-		s.Cfg.Toolsets.SetForTest([]string{"core", "config", "helm", "kcp"})
-		// Enable multi-cluster mode to include configuration_contexts_list tool
+		s.Cfg.Toolsets.SetForTest([]string{"core", "config", "helm"})
+		// Enable multi-cluster mode to include the context_list tool
 		kubeconfig := s.Kubeconfig()
 		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()
 		s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))

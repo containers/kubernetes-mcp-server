@@ -41,5 +41,4 @@
 /evals/tasks/tekton/        @ksimon1
 
 # toolset: kcp
-/pkg/toolsets/kcp/          @mjudeikis
 /pkg/kcp/                   @mjudeikis
