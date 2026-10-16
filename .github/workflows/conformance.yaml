@@ -8,6 +8,7 @@ on:
       - 'LICENSE'
       - '**/*.md'
       - 'docs/**'
+  merge_group:
 
 permissions:
   contents: read
