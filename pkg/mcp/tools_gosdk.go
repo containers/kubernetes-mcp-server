@@ -51,7 +51,7 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 
 	goSdkTool := &mcp.Tool{
 		Name:        tool.Tool.Name,
-		Description: tool.Tool.Description,
+		Description: tool.Tool.Describe(),
 		Title:       tool.Tool.Annotations.Title,
 		Meta:        mcp.Meta(meta),
 		Annotations: &mcp.ToolAnnotations{

@@ -37,6 +37,8 @@ Living documentation for implemented and planned features:
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
 | **[Config Option Framework](specs/config.md)** | Unified `Option[T]` config: vectors, precedence, provenance | Implemented |
+| **[Dynamic Tools](specs/dynamic-tools.md)** | Tools and prompts as `Tool`/`Prompt` custom resources served by the `dynamic` toolset | Implemented |
+| **[Tools for Models](specs/tools-for-models.md)** | Design guidance for dynamic tool authors and the engine features that make model-friendly tools the easy path (ToolSet, output budget, shared vocabulary, variants, examples, lints) | Implemented |
 | **[MCP Apps](mcp-apps.md)** | Interactive UI resources associated with MCP tools | Implemented |
 
 ## Advanced Topics

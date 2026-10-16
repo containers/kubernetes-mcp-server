@@ -185,6 +185,14 @@ func (p *kubeConfigClusterProvider) GetDerivedKubernetes(ctx context.Context, ku
 	return m.Derived(ctx)
 }
 
+func (p *kubeConfigClusterProvider) GetServerKubernetes(ctx context.Context, kubeContext string) (*Kubernetes, error) {
+	m, err := p.managerForContext(ctx, kubeContext, false)
+	if err != nil {
+		return nil, err
+	}
+	return m.ServerKubernetes(), nil
+}
+
 func (p *kubeConfigClusterProvider) GetDefaultTarget() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

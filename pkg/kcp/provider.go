@@ -278,6 +278,19 @@ func (p *kcpClusterProvider) GetTargetParameterName() string {
 	return kcpTargetParameterName
 }
 
+func (p *kcpClusterProvider) GetServerKubernetes(ctx context.Context, workspace string) (*kubernetes.Kubernetes, error) {
+	p.mu.RLock()
+	if workspace == "" {
+		workspace = p.defaultWorkspace
+	}
+	p.mu.RUnlock()
+	m, err := p.managerForWorkspace(ctx, workspace, false)
+	if err != nil {
+		return nil, err
+	}
+	return m.ServerKubernetes(), nil
+}
+
 func (p *kcpClusterProvider) GetDerivedKubernetes(ctx context.Context, workspace string) (*kubernetes.Kubernetes, error) {
 	p.mu.RLock()
 	if workspace == "" {

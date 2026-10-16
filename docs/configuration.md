@@ -452,7 +452,7 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `toolsets` | string[] | `["core", "config"]` | List of toolsets to enable. |
+| `toolsets` | string[] | `["core", "config"]` | List of toolsets to enable. A toolset with families (the `dynamic` toolset's `ToolSet` resources) can be enabled per family as `<toolset>/<family>`, e.g. `dynamic/prometheus`; a toolset and one of its own families cannot both be enabled. |
 
 **Available Toolsets:**
 

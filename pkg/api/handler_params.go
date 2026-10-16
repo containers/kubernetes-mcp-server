@@ -16,6 +16,9 @@ type HandlerParams[T any] struct {
 	Request    T
 	ListOutput output.Output
 	Elicitor
+	// Target is the cluster target the call runs against (the provider's
+	// target name; empty for a single-cluster provider).
+	Target string
 }
 
 // GetToolsetConfig returns the parsed configuration for a toolset.

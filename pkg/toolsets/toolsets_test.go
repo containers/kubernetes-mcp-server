@@ -2,6 +2,7 @@ package toolsets
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -24,6 +25,38 @@ func (s *ToolsetsSuite) TearDownTest() {
 	for _, toolset := range s.originalToolsets {
 		Register(toolset)
 	}
+}
+
+// familyToolset is a toolset with families: "<name>/<family>" resolves to a
+// part of it, the way the dynamic toolset exposes its ToolSet resources.
+type familyToolset struct {
+	TestToolset
+}
+
+func (t *familyToolset) Family(name string) api.Toolset {
+	if family, ok := strings.CutPrefix(name, t.name+"/"); ok && family != "" {
+		return &TestToolset{name: name, description: "family " + family}
+	}
+	return nil
+}
+
+func (s *ToolsetsSuite) TestFamilies() {
+	Register(&familyToolset{TestToolset{name: "dynamic", description: "d"}})
+	Register(&TestToolset{name: "core", description: "c"})
+	s.Run("a family name resolves through the owning toolset", func() {
+		family := ToolsetFromString("dynamic/loki")
+		s.Require().NotNil(family)
+		s.Equal("dynamic/loki", family.GetName())
+		s.Nil(ToolsetFromString("core/loki"), "a toolset without families has none")
+		s.Nil(ToolsetFromString("nope/loki"))
+		s.Nil(ToolsetFromString("dynamic/"))
+	})
+	s.Run("validation accepts families and refuses a toolset next to its own family", func() {
+		s.NoError(Validate([]string{"core", "dynamic/loki", "dynamic/tempo"}))
+		s.NoError(Validate([]string{"core", "dynamic"}))
+		s.ErrorContains(Validate([]string{"dynamic", "dynamic/loki"}), "dynamic already includes dynamic/loki")
+		s.ErrorContains(Validate([]string{"core/loki"}), "invalid toolset name: core/loki")
+	})
 }
 
 type TestToolset struct {

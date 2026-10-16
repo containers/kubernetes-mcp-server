@@ -54,6 +54,12 @@ func (p *tokenExchangingProvider) GetDerivedKubernetes(ctx context.Context, targ
 	return p.provider.GetDerivedKubernetes(ctx, target)
 }
 
+// GetServerKubernetes is the underlying provider's: the server's own
+// credentials are never token-exchanged.
+func (p *tokenExchangingProvider) GetServerKubernetes(ctx context.Context, target string) (*Kubernetes, error) {
+	return p.provider.GetServerKubernetes(ctx, target)
+}
+
 func (p *tokenExchangingProvider) config() *config.Config {
 	if p.configProvider == nil {
 		return nil

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -105,7 +106,11 @@ type Server struct {
 	// once at the top of its critical section and read all fields off that
 	// snapshot — otherwise a mid-handler reload could split fields across
 	// two configs.
-	configuration            atomic.Pointer[Configuration]
+	configuration atomic.Pointer[Configuration]
+	// instructions is the text sent to each new session at initialize:
+	// recomputed whenever the toolsets are applied, so a reload or a
+	// ToolSet resource that appears is reflected without a restart.
+	instructions             atomic.Pointer[string]
 	server                   *mcp.Server
 	enabledTools             []string
 	enabledPrompts           []string
@@ -116,6 +121,12 @@ type Server struct {
 	metrics                  *metrics.Metrics // Metrics collection system
 	rateLimitDone            chan struct{}    // Closed to stop the rate limiter reaper goroutine
 	closeOnce                sync.Once
+	// toolsetWatchCtx is the server's lifetime context, the parent of the
+	// api.ToolsetWatcher watches; they are restarted on configuration reload
+	// (which has a request-scoped context of its own) and end with Close.
+	toolsetWatchCtx   context.Context
+	toolsetWatchMu    sync.Mutex
+	toolsetWatchStops []func()
 }
 
 func NewServer(ctx context.Context, configuration Configuration, targetProvider internalk8s.Provider) (*Server, error) {
@@ -144,7 +155,6 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 			},
 			&mcp.ServerOptions{
 				Capabilities: capabilities,
-				Instructions: configuration.ServerInstructions.Get(),
 				Logger:       sdkLogger,
 			}),
 		p:             targetProvider,
@@ -164,6 +174,8 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 	}
 	s.metrics = metricsInstance
 
+	s.instructions.Store(ptr.To(serverInstructions(ctx, &configuration, targetProvider)))
+	s.server.AddReceivingMiddleware(s.instructionsMiddleware)
 	s.server.AddReceivingMiddleware(sessionInjectionMiddleware)
 	s.server.AddReceivingMiddleware(traceContextPropagationMiddleware)
 	s.rateLimitDone = make(chan struct{})
@@ -193,8 +205,40 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 		return nil, err
 	}
 	s.p.WatchTargets(ctx, s.mcpReloader())
+	s.toolsetWatchCtx = ctx
+	s.watchToolsets(s.configuration.Load())
 
 	return s, nil
+}
+
+// watchToolsets (re)starts the optional watchers of the toolsets enabled by
+// cfg whose surface can change at runtime (api.ToolsetWatcher). Watches of a
+// previous configuration are stopped first, so a reload that enables or
+// disables such a toolset is followed.
+func (s *Server) watchToolsets(cfg *Configuration) {
+	s.toolsetWatchMu.Lock()
+	defer s.toolsetWatchMu.Unlock()
+	s.stopToolsetWatchesLocked()
+	for _, toolset := range cfg.Toolsets() {
+		watcher, ok := toolset.(api.ToolsetWatcher)
+		if !ok {
+			continue
+		}
+		s.toolsetWatchStops = append(s.toolsetWatchStops, watcher.WatchToolset(s.toolsetWatchCtx, s.toolsetContext(cfg), s.reapplyToolsets))
+	}
+}
+
+func (s *Server) stopToolsetWatches() {
+	s.toolsetWatchMu.Lock()
+	defer s.toolsetWatchMu.Unlock()
+	s.stopToolsetWatchesLocked()
+}
+
+func (s *Server) stopToolsetWatchesLocked() {
+	for _, stop := range s.toolsetWatchStops {
+		stop()
+	}
+	s.toolsetWatchStops = nil
 }
 
 // reapplyToolsets is the provider's WatchTargets callback (signature
@@ -354,6 +398,9 @@ func (s *Server) applyToolsetsLocked(ctx context.Context, cfg *Configuration) er
 	// the commit phase above; the store makes the new *Configuration
 	// observable to lock-free readers in one indivisible step.
 	s.configuration.Store(cfg)
+	// The instructions follow the applied toolsets: the next session to
+	// initialize sees the families enabled now.
+	s.instructions.Store(ptr.To(serverInstructions(ctx, cfg, s.p)))
 	// Update the enabledX bookkeeping under mu. Readers of these fields
 	// (GetEnabledX) only read enabledX, never combined with cfg, so there
 	// is no need to keep the cfg store and the enabledX writes inside the
@@ -386,12 +433,22 @@ func convertItems[T, M, H any](
 	kind string,
 ) ([]convertedItem[M, H], error) {
 	out := make([]convertedItem[M, H], 0, len(items))
+	// The SDK registers by name and silently keeps the last item added, so
+	// two toolsets exposing the same name would leave one of them replaced
+	// without a trace. Refuse the reload instead; the previous configuration
+	// stays installed.
+	seen := make(map[string]bool, len(items))
 	for _, item := range items {
+		name := getName(item)
+		if seen[name] {
+			return nil, fmt.Errorf("duplicate %s name %q: two enabled toolsets expose it", kind, name)
+		}
+		seen[name] = true
 		m, h, err := convert(item)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert %s %s: %w", kind, getName(item), err)
+			return nil, fmt.Errorf("failed to convert %s %s: %w", kind, name, err)
 		}
-		out = append(out, convertedItem[M, H]{name: getName(item), item: m, handler: h})
+		out = append(out, convertedItem[M, H]{name: name, item: m, handler: h})
 	}
 	return out, nil
 }
@@ -454,9 +511,57 @@ func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration)
 }
 
 func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
+	return toolsetContextFor(s.p, cfg)
+}
+
+func toolsetContextFor(provider internalk8s.Provider, cfg *Configuration) api.ToolsetContext {
 	return api.ToolsetContext{
-		Inspector:                         internalk8s.NewClusterInspector(s.p),
+		// Toolsets are applied with no caller present (startup, reload, watch):
+		// discovery and resource listing use the server's own credentials.
+		Inspector:                         internalk8s.NewServerClusterInspector(provider),
 		TargetCompatibilityFiltersEnabled: cfg.EnableTargetCompatibilityToolFilters.Get(),
+		ReadOnly:                          cfg.ReadOnly.Get(),
+		ServerClients: func(ctx context.Context, target string) (api.KubernetesClient, error) {
+			return provider.GetServerKubernetes(ctx, target)
+		},
+		DefaultTarget: provider.GetDefaultTarget(),
+	}
+}
+
+// serverInstructions assembles the MCP server instructions: the configured
+// text, then what every enabled toolset contributes (api.ToolsetInstructions).
+// The SDK sends the instructions it was constructed with; instructionsMiddleware
+// replaces them in every initialize result with the current ones, computed
+// here each time the toolsets are applied.
+func serverInstructions(ctx context.Context, cfg *Configuration, provider internalk8s.Provider) string {
+	instructions := strings.TrimSpace(cfg.ServerInstructions.Get())
+	toolsetContext := toolsetContextFor(provider, cfg)
+	for _, toolset := range cfg.Toolsets() {
+		contributor, ok := toolset.(api.ToolsetInstructions)
+		if !ok {
+			continue
+		}
+		if text := strings.TrimSpace(contributor.GetInstructions(ctx, toolsetContext)); text != "" {
+			instructions = strings.TrimSpace(instructions + "\n\n" + text)
+		}
+	}
+	return instructions
+}
+
+// instructionsMiddleware answers initialize with the current instructions:
+// the SDK keeps the options it was constructed with by value, so this is
+// where a session learns about toolsets enabled or ToolSets created since.
+func (s *Server) instructionsMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		result, err := next(ctx, method, req)
+		if method == "initialize" && err == nil {
+			if initialized, ok := result.(*mcp.InitializeResult); ok {
+				if current := s.instructions.Load(); current != nil {
+					initialized.Instructions = *current
+				}
+			}
+		}
+		return result, err
 	}
 }
 
@@ -698,6 +803,8 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 			}
 			return fmt.Errorf("failed to reload toolsets: %w", err)
 		}
+		// The watched toolsets follow the installed configuration.
+		s.watchToolsets(s.configuration.Load())
 		return nil
 	}); err != nil {
 		return err
@@ -710,6 +817,7 @@ func (s *Server) ReloadConfiguration(ctx context.Context, newConfig *config.Conf
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		close(s.rateLimitDone)
+		s.stopToolsetWatches()
 		if s.p != nil {
 			s.p.Close()
 		}

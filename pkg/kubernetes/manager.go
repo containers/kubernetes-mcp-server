@@ -179,6 +179,17 @@ func (m *Manager) Config() *config.Config {
 	return m.config.Load()
 }
 
+// ServerKubernetes returns the client built from the target's own
+// credentials (the kubeconfig context or the in-cluster service account),
+// never from a caller's token: what the server uses on its own behalf, such
+// as listing Tool resources or discovery when toolsets are applied.
+func (m *Manager) ServerKubernetes() *Kubernetes {
+	if m == nil {
+		return nil
+	}
+	return m.kubernetes
+}
+
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	authorization, ok := ctx.Value(OAuthAuthorizationHeader).(string)
 	hasToken := ok && strings.HasPrefix(authorization, "Bearer ")

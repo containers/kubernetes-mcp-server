@@ -30,6 +30,9 @@ type NoRBAC struct {
 // BoundedRBAC declares a finite set of Kubernetes authorization requirements.
 type BoundedRBAC struct {
 	Requirements []RBACRequirement `json:"requirements"`
+	// Reason optionally describes what the tool does beyond the Kubernetes
+	// API, for example an authenticated request to an external URL.
+	Reason string `json:"reason,omitempty"`
 }
 
 // UnboundedRBAC declares that authorization requirements cannot be determined

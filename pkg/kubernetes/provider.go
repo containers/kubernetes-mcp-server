@@ -63,6 +63,13 @@ type Provider interface {
 	api.TargetProvider
 	// GetDerivedKubernetes returns a Kubernetes client for the specified target
 	GetDerivedKubernetes(ctx context.Context, target string) (*Kubernetes, error)
+	// GetServerKubernetes returns the client of the target's own credentials
+	// (kubeconfig context or in-cluster service account), never a caller's:
+	// for what the server does on its own behalf, such as listing Tool
+	// resources and discovery when toolsets are applied. Unlike
+	// GetDerivedKubernetes it does not depend on a request context and is
+	// not refused by require_oauth.
+	GetServerKubernetes(ctx context.Context, target string) (*Kubernetes, error)
 	// WatchTargets sets up a watcher for changes in the cluster targets and
 	// invokes reload when changes are detected.
 	WatchTargets(ctx context.Context, reload McpReloader)

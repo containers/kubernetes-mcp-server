@@ -106,6 +106,18 @@ func (p *singleClusterProvider) GetDerivedKubernetes(ctx context.Context, target
 	return p.manager.Derived(ctx)
 }
 
+func (p *singleClusterProvider) GetServerKubernetes(_ context.Context, target string) (*Kubernetes, error) {
+	if target != "" {
+		return nil, fmt.Errorf("unable to get manager for other context/cluster with %s strategy: %w", p.strategy, ErrUnknownTarget)
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.manager == nil {
+		return nil, errors.New("kubernetes manager is not initialized")
+	}
+	return p.manager.ServerKubernetes(), nil
+}
+
 func (p *singleClusterProvider) GetDefaultTarget() string {
 	return ""
 }

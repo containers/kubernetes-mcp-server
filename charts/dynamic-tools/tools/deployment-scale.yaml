@@ -1,0 +1,39 @@
+# A subresource patch whose body is built from the arguments with CEL.
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: deployment-scale
+spec:
+  examples:
+    - summary: "Scale a Deployment to three"
+      arguments: {"namespace": "payments", "name": "api", "replicas": 3}
+  title: "Deployment: Scale"
+  description: Scale a Deployment to the given number of replicas.
+  destructive: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      namespace:
+        type: string
+        description: Namespace of the Deployment
+      name:
+        type: string
+        description: Name of the Deployment
+      replicas:
+        type: integer
+        minimum: 0
+        description: Desired number of replicas
+    required: [name, replicas]
+  kubernetes:
+    verb: patch
+    apiVersion: apps/v1
+    kind: Deployment
+    subresource: scale
+    namespace:
+      argument: namespace
+    name:
+      argument: name
+    body:
+      expression: "{'spec': {'replicas': int(args.replicas)}}"
+  output: "{'name': response.metadata.name, 'replicas': response.spec.replicas}"

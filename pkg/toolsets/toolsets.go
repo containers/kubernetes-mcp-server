@@ -38,15 +38,23 @@ func ToolsetFromString(name string) api.Toolset {
 
 func Validate(toolsets []string) error {
 	var unknown []string
+	enabled := map[string]bool{}
 	for _, toolset := range toolsets {
 		if ToolsetFromString(toolset) == nil {
 			unknown = append(unknown, toolset)
 		}
+		enabled[strings.TrimSpace(toolset)] = true
 	}
-	if len(unknown) == 0 {
-		return nil
+	if len(unknown) > 0 {
+		return fmt.Errorf("invalid toolset name: %s, valid names are: %s (or <name>/<family> for a toolset with families)", strings.Join(unknown, ", "), strings.Join(ToolsetNames(), ", "))
 	}
-	return fmt.Errorf("invalid toolset name: %s, valid names are: %s", strings.Join(unknown, ", "), strings.Join(ToolsetNames(), ", "))
+	// A toolset and one of its families would expose the family twice.
+	for name := range enabled {
+		if owner, _, ok := strings.Cut(name, "/"); ok && enabled[owner] {
+			return fmt.Errorf("toolset %s already includes %s: enable one or the other", owner, name)
+		}
+	}
+	return nil
 }
 
 type toolsetRegistry struct {
@@ -62,7 +70,16 @@ func (r *toolsetRegistry) register(toolset api.Toolset) {
 }
 
 func (r *toolsetRegistry) get(name string) api.Toolset {
-	return r.toolsets[name]
+	if toolset, ok := r.toolsets[name]; ok {
+		return toolset
+	}
+	// "<toolset>/<family>" resolves to a part of a toolset that supports it.
+	if owner, _, ok := strings.Cut(name, "/"); ok {
+		if families, ok := r.toolsets[owner].(api.ToolsetFamilies); ok {
+			return families.Family(name)
+		}
+	}
+	return nil
 }
 
 func (r *toolsetRegistry) all() []api.Toolset {

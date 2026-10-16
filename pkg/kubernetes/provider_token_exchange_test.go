@@ -65,6 +65,9 @@ func (fakeDerivedProvider) Close()                                 {}
 func (fakeDerivedProvider) GetDerivedKubernetes(context.Context, string) (*Kubernetes, error) {
 	return &Kubernetes{}, nil
 }
+func (fakeDerivedProvider) GetServerKubernetes(context.Context, string) (*Kubernetes, error) {
+	return &Kubernetes{}, nil
+}
 func applyExchange(cfg *config.Config, clientID, clientSecret, audience string, scopes []string) {
 	cfg.TokenExchange.Strategy.SetForTest(tokenexchange.StrategyRFC8693)
 	cfg.TokenExchange.Audience.SetForTest(audience)

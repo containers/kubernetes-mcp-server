@@ -80,6 +80,10 @@ func EnvTest() *envtest.Environment {
 				},
 			},
 			CRDs: []*apiextensionsv1spec.CustomResourceDefinition{
+				// kubernetes-mcp-server dynamic tools
+				WithStatus(CRD("tools.kubernetes-mcp-server.io", "v1alpha1", "tools", "Tool", "tool", false)),
+				WithStatus(CRD("tools.kubernetes-mcp-server.io", "v1alpha1", "prompts", "Prompt", "prompt", false)),
+				WithStatus(CRD("tools.kubernetes-mcp-server.io", "v1alpha1", "toolsets", "ToolSet", "toolset", false)),
 				// OpenShift
 				CRD("project.openshift.io", "v1", "projects", "Project", "project", false),
 				CRD("route.openshift.io", "v1", "routes", "Route", "route", true),
@@ -180,6 +184,14 @@ func StopEnvTest() error {
 }
 
 // CRD creates a CustomResourceDefinition for testing.
+// WithStatus gives a CRD the status subresource, as the shipped Tool, Prompt
+// and ToolSet CRDs have: the server writes their status, and a Create no
+// longer stores an inline status.
+func WithStatus(crd *apiextensionsv1spec.CustomResourceDefinition) *apiextensionsv1spec.CustomResourceDefinition {
+	crd.Spec.Versions[0].Subresources = &apiextensionsv1spec.CustomResourceSubresources{Status: &apiextensionsv1spec.CustomResourceSubresourceStatus{}}
+	return crd
+}
+
 func CRD(group, version, plural, kind, singular string, namespaced bool) *apiextensionsv1spec.CustomResourceDefinition {
 	scope := apiextensionsv1spec.ClusterScoped
 	if namespaced {

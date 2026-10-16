@@ -25,6 +25,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/otelcol"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/traces"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -164,6 +165,27 @@ func (s *ToolsetsSuite) TestMetricsToolsPresentWithFilteringEnabled() {
 		s.True(found["pods_top"], "Expected pods_top to be present when metrics API is available")
 		s.True(found["nodes_top"], "Expected nodes_top to be present when metrics API is available")
 	})
+}
+
+func (s *ToolsetsSuite) TestDuplicateToolNamesAcrossToolsetsAreRejected() {
+	// The SDK keeps the last tool registered under a name; two toolsets
+	// exposing the same name would silently replace one with the other.
+	toolsets.Clear()
+	for _, name := range []string{"dup-a", "dup-b"} {
+		toolsets.Register(&configProviderToolset{name: name, tools: []api.ServerTool{{
+			Tool: api.Tool{Name: "shared_tool", Description: "from " + name, InputSchema: &jsonschema.Schema{Type: "object"}},
+			Handler: func(api.ToolHandlerParams) (*api.ToolCallResult, error) {
+				return api.NewToolCallResult("ok", nil), nil
+			},
+		}}})
+	}
+	s.Cfg.Toolsets.SetForTest([]string{"dup-a", "dup-b"})
+	provider, err := kubernetes.NewProvider(s.T().Context(), s.Cfg)
+	s.Require().NoError(err)
+	defer provider.Close()
+	_, err = NewServer(s.T().Context(), Configuration{Config: s.Cfg}, provider)
+	s.Require().Error(err, "a server with two tools named shared_tool must not start")
+	s.ErrorContains(err, `duplicate tool name "shared_tool"`)
 }
 
 func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {

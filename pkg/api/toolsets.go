@@ -13,7 +13,7 @@ import (
 )
 
 // ToolContent represents a single content block in a multi-content tool result.
-// Used by tools that return both text and images (e.g., vm_console_screenshot).
+// Used by tools that return both text and images (e.g., vm_screenshot).
 type ToolContent struct {
 	Data     []byte
 	MIMEType string
@@ -109,6 +109,18 @@ func (s *ServerTool) IsTargetListProvider() bool {
 type ToolsetContext struct {
 	Inspector                         ClusterInspector
 	TargetCompatibilityFiltersEnabled bool
+	// ReadOnly reports the server's read_only setting. Tools are filtered by
+	// their annotations; prompts carry none, so a toolset whose prompts can
+	// change cluster state must withhold them itself.
+	ReadOnly bool
+	// ServerClients returns the client of a target's own credentials (never
+	// a caller's), for the few tools that are declared to act as the server:
+	// a dynamic ToolSet with identity: server. Nil when the server does not
+	// offer it.
+	ServerClients func(ctx context.Context, target string) (KubernetesClient, error)
+	// DefaultTarget is the provider's default target: where resources that
+	// define the server's surface are read from and written back to.
+	DefaultTarget string
 }
 
 type Toolset interface {
@@ -129,6 +141,33 @@ type Toolset interface {
 	// GetResourceTemplates returns the resource templates provided by this toolset.
 	// Returns nil if the toolset doesn't provide any resource templates.
 	GetResourceTemplates(ctx context.Context, toolsetContext ToolsetContext) []ServerResourceTemplate
+}
+
+// ToolsetWatcher is an optional interface a Toolset implements when the set
+// of capabilities it exposes can change at runtime (for example tools defined
+// by cluster resources). The server calls WatchToolset once for each enabled
+// toolset that implements it; onChange re-applies the installed configuration
+// the same way a cluster-state change does. The returned stop function ends
+// the watch and is called when the server closes.
+type ToolsetWatcher interface {
+	WatchToolset(ctx context.Context, toolsetContext ToolsetContext, onChange func() error) (stop func())
+}
+
+// ToolsetFamilies is an optional interface a Toolset implements when it can
+// be enabled piecemeal: "<name>/<family>" in the toolsets configuration
+// resolves to Family("<name>/<family>"), a Toolset exposing that part only
+// (the dynamic toolset's ToolSet resources). Family returns nil for a name
+// it does not own.
+type ToolsetFamilies interface {
+	Family(name string) Toolset
+}
+
+// ToolsetInstructions is an optional interface a Toolset implements to
+// contribute to the MCP server instructions: guidance for the model about
+// the toolset as a whole, said once rather than in every tool description.
+// It is read when the server starts.
+type ToolsetInstructions interface {
+	GetInstructions(ctx context.Context, toolsetContext ToolsetContext) string
 }
 
 type ToolCallRequest interface {
@@ -158,7 +197,7 @@ func NewToolCallResult(content string, err error) *ToolCallResult {
 }
 
 // NewToolCallResultContentBlocks creates a ToolCallResult from content blocks (text and/or
-// images). Use this for multi-content tools like vm_console_screenshot.
+// images). Use this for multi-content tools like vm_screenshot.
 //
 // It takes no structured/error parameters, unlike its siblings below: set
 // ToolCallResult.StructuredContent or .Error directly on the result if a caller needs them
@@ -341,6 +380,8 @@ type Tool struct {
 	// Meta contains additional metadata for the tool (e.g., MCP Apps UI resource URI).
 	// Example: map[string]any{"ui": map[string]any{"resourceUri": "ui://server/app.html"}}
 	Meta map[string]any `json:"_meta,omitempty"`
+	// Examples are example calls, rendered into the description by Describe.
+	Examples []Example `json:"examples,omitempty"`
 	// A JSON Schema object defining the expected parameters for the tool.
 	InputSchema *jsonschema.Schema
 	// A JSON Schema object defining the structure of the tool's output

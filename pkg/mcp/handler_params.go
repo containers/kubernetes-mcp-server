@@ -18,5 +18,6 @@ func newHandlerParams[T any](s *Server, ctx context.Context, cfg *Configuration,
 		Request:          request,
 		ListOutput:       cfg.ListOutput(),
 		Elicitor:         &sessionElicitor{},
+		Target:           cluster,
 	}, nil
 }
