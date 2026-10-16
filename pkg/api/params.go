@@ -29,11 +29,13 @@ func ParseInt64(value interface{}) (int64, error) {
 
 // RequiredString extracts a required string parameter from tool arguments.
 // Returns the string value and nil error on success.
-// Returns an error if the parameter is missing or not a string.
+// Returns an error if the parameter is missing or not a string. A JSON null is
+// treated as a missing parameter, so it reports "required" rather than a type
+// mismatch.
 func RequiredString(params ToolHandlerParams, key string) (string, error) {
 	args := params.GetArguments()
 	val, ok := args[key]
-	if !ok {
+	if !ok || val == nil {
 		return "", fmt.Errorf("%s parameter required", key)
 	}
 	str, ok := val.(string)
@@ -74,11 +76,11 @@ func OptionalBool(params ToolHandlerParams, key string, defaultVal bool) bool {
 }
 
 // optionalString is the type-strict variant that powers Params.OptionalString.
-// Missing key returns defaultVal with no error; a present-but-wrong-type value
-// returns an error.
+// A missing key or a JSON null returns defaultVal with no error; a
+// present-but-wrong-type value returns an error.
 func optionalString(params ToolHandlerParams, key, defaultVal string) (string, error) {
 	val, ok := params.GetArguments()[key]
-	if !ok {
+	if !ok || val == nil {
 		return defaultVal, nil
 	}
 	str, ok := val.(string)
@@ -89,11 +91,11 @@ func optionalString(params ToolHandlerParams, key, defaultVal string) (string, e
 }
 
 // optionalBool is the type-strict variant that powers Params.OptionalBool.
-// Missing key returns defaultVal with no error; a present-but-wrong-type value
-// returns an error.
+// A missing key or a JSON null returns defaultVal with no error; a
+// present-but-wrong-type value returns an error.
 func optionalBool(params ToolHandlerParams, key string, defaultVal bool) (bool, error) {
 	val, ok := params.GetArguments()[key]
-	if !ok {
+	if !ok || val == nil {
 		return defaultVal, nil
 	}
 	b, ok := val.(bool)
@@ -150,9 +152,9 @@ func (p *Params) RequiredString(key string) string {
 	return v
 }
 
-// OptionalString extracts an optional string. Missing key returns defaultVal
-// with no sticky error; a present-but-wrong-type value records a sticky error
-// and returns defaultVal.
+// OptionalString extracts an optional string. A missing key or a JSON null
+// returns defaultVal with no sticky error; a present-but-wrong-type value
+// records a sticky error and returns defaultVal.
 func (p *Params) OptionalString(key, defaultVal string) string {
 	if p.err != nil {
 		return defaultVal
@@ -165,9 +167,9 @@ func (p *Params) OptionalString(key, defaultVal string) string {
 	return v
 }
 
-// OptionalBool extracts an optional bool. Missing key returns defaultVal with
-// no sticky error; a present-but-wrong-type value records a sticky error and
-// returns defaultVal.
+// OptionalBool extracts an optional bool. A missing key or a JSON null returns
+// defaultVal with no sticky error; a present-but-wrong-type value records a
+// sticky error and returns defaultVal.
 func (p *Params) OptionalBool(key string, defaultVal bool) bool {
 	if p.err != nil {
 		return defaultVal
@@ -180,9 +182,9 @@ func (p *Params) OptionalBool(key string, defaultVal bool) bool {
 	return v
 }
 
-// OptionalInt64 extracts an optional int64 parameter. Missing key returns
-// defaultVal with no sticky error; a present-but-wrong-type value records a
-// sticky error and returns defaultVal.
+// OptionalInt64 extracts an optional int64 parameter. A missing key or a JSON
+// null returns defaultVal with no sticky error; a present-but-wrong-type value
+// records a sticky error and returns defaultVal.
 func (p *Params) OptionalInt64(key string, defaultVal int64) int64 {
 	if p.err != nil {
 		return defaultVal

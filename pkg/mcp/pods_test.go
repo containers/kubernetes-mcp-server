@@ -324,6 +324,11 @@ func (s *PodsSuite) TestPodsGet() {
 		s.Truef(toolResult.IsError, "call tool should fail")
 		s.Equalf("failed to get pod: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
+	s.Run("pods_get with null name returns required error", func() {
+		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{"name": nil})
+		s.Truef(toolResult.IsError, "call tool should fail")
+		s.Equalf("failed to get pod: name parameter required", toolResult.Content[0].(*mcp.TextContent).Text, "invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
 	s.Run("pods_get(name=not-found) with not found name", func() {
 		capture := s.StartCapturingLogNotifications()
 		toolResult, _ := s.CallTool("pods_get", map[string]interface{}{"name": "not-found"})
@@ -576,6 +581,17 @@ func (s *PodsSuite) TestPodsLog() {
 		})
 		s.Nilf(err, "call tool failed %v", err)
 		s.Falsef(podsLogNilNamespace.IsError, "call tool failed")
+	})
+	s.Run("pods_log(name=a-pod-in-default) with null optional arguments, uses defaults", func() {
+		podsLogNullArgs, err := s.CallTool("pods_log", map[string]interface{}{
+			"name":      "a-pod-in-default",
+			"namespace": nil,
+			"container": nil,
+			"previous":  nil,
+			"tail":      nil,
+		})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(podsLogNullArgs.IsError, "call tool failed: %v", podsLogNullArgs.Content)
 	})
 	s.Run("pods_log(name=a-pod-in-ns-1, namespace=ns-1)", func() {
 		podsLogInNamespace, err := s.CallTool("pods_log", map[string]interface{}{
