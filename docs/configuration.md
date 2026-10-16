@@ -324,10 +324,9 @@ Lowering it does not change a call already running.
 A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length.
 A collector that keeps several backend reads stops before the next read once that budget is exhausted.
 
-A running call keeps its slot until the handler returns.
-Lowering `max_in_flight` does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap.
-Raising it, or setting `0`, takes effect on the next acquire.
-A call that started while the limit was `0` does not take a slot if the limit is raised before that call returns.
+A running call keeps its slot until the handler returns, including a call that started while the limit was `0`.
+Lowering `max_in_flight`, or raising it from `0`, does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap.
+Raising a positive limit, or setting `0`, takes effect on the next acquire.
 
 **Example:**
 ```toml

@@ -347,8 +347,11 @@ func inFlightLimitedMethod(method string) bool {
 // inFlightMiddleware caps how many tools/call, prompts/get, and resources/read
 // handlers run at once in this process. The three methods share one pool.
 // limitFn is read on every acquire so a reload takes effect on the next call.
-// A limit <= 0 disables the cap. Lowering the limit does not cancel handlers
-// that already hold a slot; they release when they return, including on panic.
+// A limit <= 0 disables rejection. Limited calls still occupy a slot until
+// they return, including calls that started while the cap was disabled, so
+// raising the limit from 0 counts them. Lowering the limit does not cancel
+// handlers that already hold a slot; they release when they return, including
+// on panic.
 func inFlightMiddleware(limitFn func() int) mcp.Middleware {
 	var (
 		mu       sync.Mutex
@@ -363,11 +366,7 @@ func inFlightMiddleware(limitFn func() int) mcp.Middleware {
 
 			mu.Lock()
 			limit := limitFn()
-			if limit <= 0 {
-				mu.Unlock()
-				return next(ctx, method, req)
-			}
-			if inFlight >= limit {
+			if limit > 0 && inFlight >= limit {
 				mu.Unlock()
 				return nil, &jsonrpc.Error{Code: CodeInFlightLimitExceeded, Message: "max_in_flight limit exceeded"}
 			}

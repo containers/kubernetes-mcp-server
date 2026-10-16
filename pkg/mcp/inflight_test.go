@@ -124,6 +124,39 @@ func (s *InFlightMiddlewareSuite) TestGlobalSlotExhaustion() {
 			s.NoError(err)
 		}
 	})
+
+	s.Run("calls started while disabled occupy slots after the limit is raised", func() {
+		var limit atomic.Int32
+		block := make(chan struct{})
+		entered := make(chan struct{}, 2)
+		handler := inFlightMiddleware(func() int { return int(limit.Load()) })(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+			entered <- struct{}{}
+			<-block
+			return nil, nil
+		})
+		req := &mcp.ServerRequest[*mcp.CallToolParamsRaw]{Params: &mcp.CallToolParamsRaw{}}
+
+		errCh := make(chan error, 2)
+		go func() {
+			_, err := handler(context.Background(), "tools/call", req)
+			errCh <- err
+		}()
+		waitEntered(s.T(), entered)
+
+		limit.Store(2)
+		go func() {
+			_, err := handler(context.Background(), "prompts/get", req)
+			errCh <- err
+		}()
+		waitEntered(s.T(), entered)
+
+		_, err := handler(context.Background(), "resources/read", req)
+		s.requireInFlightError(err)
+
+		close(block)
+		s.NoError(<-errCh)
+		s.NoError(<-errCh)
+	})
 }
 
 func (s *InFlightMiddlewareSuite) requireInFlightError(err error) {
