@@ -24,9 +24,7 @@
 *                           @manusa @Cali0707
 
 # toolset: kiali
-/pkg/toolsets/kiali/        @aljesusg @josunect
-/pkg/kiali/                 @aljesusg @josunect
-/pkg/mcp/kiali*             @aljesusg @josunect
+/charts/dynamic-tools/kiali-mcp-tools/    @aljesusg @josunect
 /build/kiali.mk            @aljesusg @josunect
 /evals/tasks/kiali/         @aljesusg @josunect
 /docs/KIALI.md              @aljesusg @josunect

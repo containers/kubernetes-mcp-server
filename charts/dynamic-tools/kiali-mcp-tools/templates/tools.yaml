@@ -1,0 +1,529 @@
+# Tool resources of the Kiali chart: front-ends to the Kiali server's /api/chat/mcp endpoints, in the house style of docs/specs/tools-for-models.md.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-mesh
+spec:
+  toolset: kiali
+  title: 'Kiali: Mesh'
+  description: >-
+    Report the health of the Istio service mesh: the control plane (istiod) on every cluster, the data plane namespaces (ambient included), the observability stack Kiali talks to, and the Istio and Kiali versions. Start here for a mesh-wide question or before drilling into one workload.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+  examples:
+    - summary: "Is the mesh healthy"
+      arguments: {}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/get_mesh_status
+    body:
+      expression: >-
+        {'mcp_mode': 'true'}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-clusters
+spec:
+  toolset: kiali
+  title: 'Kiali: Clusters'
+  description: >-
+    List the clusters of the mesh Kiali can reach, marking the home cluster where Kiali runs. Call it when the mesh spans clusters and a meshCluster must be chosen for another Kiali tool.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+  examples:
+    - summary: "Which clusters are in the mesh"
+      arguments: {}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/list_clusters
+    body:
+      expression: >-
+        {'mcp_mode': 'true'}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-graph
+spec:
+  toolset: kiali
+  title: 'Kiali: Graph'
+  description: >-
+    Map the traffic between the services of one or more namespaces: the edges with their request rates, response times and mTLS status, at app, versioned app, service or workload granularity. Use it to find dependencies and where latency or errors enter.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: ["namespaces"]
+    properties:
+      namespaces:
+        type: string
+        description: >-
+          Comma-separated namespaces to map, e.g. 'bookinfo' or 'bookinfo,default'.
+      graphType:
+        type: string
+        enum: ["app", "versionedApp", "service", "workload"]
+        default: versionedApp
+        description: >-
+          Granularity: app aggregates by app label, versionedApp separates versions, service shows services, workload shows pods and deployments.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Service graph of the bookinfo namespace"
+      arguments: {"namespaces": "bookinfo", "graphType": "service"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/get_mesh_traffic_graph
+    body:
+      expression: >-
+        merge(merge({'mcp_mode': 'true', 'namespaces': args.namespaces}, has(args.graphType) ? {'graphType': args.graphType} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-resources
+spec:
+  toolset: kiali
+  title: 'Kiali: Resources'
+  description: >-
+    List the applications, services, workloads, namespaces or Argo CD applications Kiali knows, with their health, or, with name, the details of one. Use it to find what to look at before asking for metrics, traces or logs.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: ["resourceType"]
+    properties:
+      resourceType:
+        type: string
+        enum: ["app", "argoapp", "namespace", "service", "workload"]
+        description: >-
+          What to list: app (grouped by the app label), argoapp (Argo CD Application CRDs, when installed), namespace, service or workload.
+      name:
+        type: string
+        description: >-
+          One resource to describe in depth. Omit it to list every resource of the type.
+      namespaces:
+        type: string
+        description: >-
+          Comma-separated namespaces to query, e.g. 'bookinfo,default'. Omit it for every accessible namespace.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Workloads of a namespace"
+      arguments: {"resourceType": "workload", "namespaces": "bookinfo"}
+    - summary: "One service in depth"
+      arguments: {"resourceType": "service", "namespaces": "bookinfo", "name": "reviews"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/list_or_get_resources
+    body:
+      expression: >-
+        merge(merge(merge({'mcp_mode': 'true', 'resourceType': args.resourceType}, has(args.name) ? {'resourceName': args.name} : {}), has(args.namespaces) ? {'namespaces': args.namespaces} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-istio-config
+spec:
+  toolset: kiali
+  title: 'Kiali: Istio Config'
+  description: >-
+    Read Istio, Gateway API and Inference API configuration. Without name it lists every object, grouped by namespace and group/version/kind into valid and invalid names, in one call; with name it returns the full YAML of one object. Narrow a listing with namespace, or with service to the objects that affect one service.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    dependentRequired:
+      name: [namespace, group, kind]
+    properties:
+      namespace:
+        type: string
+        description: >-
+          Namespace of the objects. Required with name; omit it to list every namespace.
+      group:
+        type: string
+        enum: ["networking.istio.io", "security.istio.io", "gateway.networking.k8s.io", "inference.networking.k8s.io"]
+        description: >-
+          API group of the object. Required with name; omit it when listing to include every group.
+      kind:
+        type: string
+        enum: ["VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication", "HTTPRoute", "GRPCRoute", "ReferenceGrant", "TCPRoute", "TLSRoute", "InferencePool"]
+        description: >-
+          Kind of the object. Required with name; omit it when listing to include every kind.
+      name:
+        type: string
+        description: >-
+          Name of one object to get. Omit it to list.
+      service:
+        type: string
+        description: >-
+          When listing, only the VirtualServices, DestinationRules and Gateways that affect this service.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Every Istio object of a namespace"
+      arguments: {"namespace": "bookinfo"}
+    - summary: "One VirtualService"
+      arguments: {"namespace": "bookinfo", "group": "networking.istio.io", "kind": "VirtualService", "name": "reviews"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/manage_istio_config_read
+    body:
+      expression: >-
+        merge(merge(merge(merge(merge(merge({'mcp_mode': 'true', 'action': has(args.name) && args.name != '' ? 'get' : 'list', 'version': 'v1'}, has(args.namespace) ? {'namespace': args.namespace} : {}), has(args.group) ? {'group': args.group} : {}), has(args.kind) ? {'kind': args.kind} : {}), has(args.name) ? {'object': args.name} : {}), has(args.service) ? {'serviceName': args.service} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-istio-config-write
+spec:
+  toolset: kiali
+  title: 'Kiali: Istio Config Write'
+  description: >-
+    Create, patch or delete one Istio, Gateway API or Inference API object through Kiali. For create, data may be partial (the spec alone) and is merged onto a valid template; for patch, arrays such as servers or http are replaced whole, so give every element wanted. Read with kiali_istio_config first.
+  idempotent: true
+  destructive: true
+  inputSchema:
+    type: object
+    required: ["action", "namespace", "group", "kind", "name"]
+    properties:
+      action:
+        type: string
+        enum: ["create", "patch", "delete"]
+        description: >-
+          What to do with the object.
+      namespace:
+        type: string
+        description: >-
+          Namespace of the object.
+      group:
+        type: string
+        enum: ["networking.istio.io", "security.istio.io", "gateway.networking.k8s.io", "inference.networking.k8s.io"]
+        description: >-
+          API group of the object.
+      kind:
+        type: string
+        enum: ["VirtualService", "DestinationRule", "Gateway", "ServiceEntry", "Sidecar", "WorkloadEntry", "WorkloadGroup", "EnvoyFilter", "AuthorizationPolicy", "PeerAuthentication", "RequestAuthentication", "HTTPRoute", "GRPCRoute", "ReferenceGrant", "TCPRoute", "TLSRoute", "InferencePool"]
+        description: >-
+          Kind of the object.
+      name:
+        type: string
+        description: >-
+          Name of the object.
+      data:
+        type: string
+        description: >-
+          The object as YAML or JSON. Required for create and patch.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Delete a DestinationRule"
+      arguments: {"action": "delete", "namespace": "bookinfo", "group": "networking.istio.io", "kind": "DestinationRule", "name": "reviews"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/manage_istio_config
+    body:
+      expression: >-
+        merge(merge({'mcp_mode': 'true', 'action': args.action, 'version': 'v1', 'namespace': args.namespace, 'group': args.group, 'kind': args.kind, 'object': args.name}, has(args.data) ? {'data': args.data} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-traces
+spec:
+  toolset: kiali
+  title: 'Kiali: Traces'
+  description: >-
+    List recent distributed traces of a service: a summary (count, average duration) and one line per trace with its id, duration, span count, root operation, slowest service and whether it has errors. Follow a trace with kiali_trace. Defaults to the last 10 minutes and 10 traces.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: ["namespace", "service"]
+    properties:
+      namespace:
+        type: string
+        description: >-
+          Namespace of the service.
+      service:
+        type: string
+        description: >-
+          Name of the service.
+      errorOnly:
+        type: boolean
+        default: false
+        description: >-
+          Only traces that contain an error.
+      limit:
+        type: integer
+        default: 10
+        description: >-
+          Maximum number of traces.
+      duration:
+        type: string
+        default: 10m
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Recent error traces of a service"
+      arguments: {"namespace": "bookinfo", "service": "productpage", "errorOnly": true, "limit": 5, "duration": "30m"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/list_traces
+    body:
+      expression: >-
+        merge(merge(merge(merge({'mcp_mode': 'true', 'namespace': args.namespace, 'serviceName': args.service}, has(args.errorOnly) ? {'errorOnly': args.errorOnly} : {}), has(args.limit) ? {'limit': int(args.limit)} : {}), has(args.duration) ? {'lookbackSeconds': seconds(args.duration)} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-trace
+spec:
+  toolset: kiali
+  title: 'Kiali: Trace'
+  description: >-
+    Show one distributed trace as a call hierarchy: the tree of services with the duration, status and nested calls of each span. Use it after kiali_traces to see where the time or the error of one trace went.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: ["traceId"]
+    properties:
+      traceId:
+        type: string
+        description: >-
+          Id of the trace, as listed by kiali_traces.
+  examples:
+    - summary: "One trace by id"
+      arguments: {"traceId": "26dad4a0e2b0dd9a440dd5ff203a24a4"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/get_trace_details
+    body:
+      expression: >-
+        {'mcp_mode': 'true', 'traceId': args.traceId}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-pod-usage
+spec:
+  toolset: kiali
+  title: 'Kiali: Pod Usage'
+  description: >-
+    Compare the current CPU and memory usage of a pod (from Prometheus) with the requests and limits of its spec, as a short text summary. Give a pod, or a workload to pick one of its pods. Answers whether a workload is using more than it asked for.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: ["namespace"]
+    properties:
+      namespace:
+        type: string
+        description: >-
+          Namespace of the pod.
+      pod:
+        type: string
+        description: >-
+          Name of the pod. Omit it when workload is given.
+      workload:
+        type: string
+        description: >-
+          Name of a workload (Deployment, StatefulSet, ...); one of its pods is used. Falls back to treating the value as a pod name.
+      time:
+        type: string
+      duration:
+        type: string
+        default: 10m
+        description: >-
+          Window the CPU rate is computed over, e.g. '5m', '1h'.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "CPU and memory of a workload's pod over 10 minutes"
+      arguments: {"namespace": "bookinfo", "workload": "productpage-v1", "duration": "10m"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/get_pod_performance
+    body:
+      expression: >-
+        merge(merge(merge(merge(merge({'mcp_mode': 'true', 'namespace': args.namespace}, has(args.pod) ? {'podName': args.pod} : {}), has(args.workload) ? {'workloadName': args.workload} : {}), has(args.time) ? {'queryTime': string(timestamp(time(args.time)))} : {}), has(args.duration) ? {'timeRange': args.duration} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-logs
+spec:
+  toolset: kiali
+  title: 'Kiali: Logs'
+  description: >-
+    Read the logs of a pod, or of a workload resolved to one of its running pods, through Kiali. Narrow with container and severity; tail bounds the lines (default 50, at most 200). Returns plain text; the line count is reported with it.
+  readOnly: true
+  inputSchema:
+    type: object
+    required: ["namespace", "name"]
+    properties:
+      namespace:
+        type: string
+        description: >-
+          Namespace of the pod.
+      name:
+        type: string
+        description: >-
+          Name of the pod. A name that is not a pod is treated as a workload and one of its running pods is used.
+      container:
+        type: string
+        description: >-
+          Only this container.
+      workload:
+        type: string
+        description: >-
+          Workload to resolve a pod from when name is not found.
+      previous:
+        type: boolean
+        description: >-
+          The logs of the previous, terminated container.
+      severity:
+        type: string
+        description: >-
+          Only lines of these severities, e.g. 'ERROR' or 'ERROR,WARN' (filtered client-side).
+      tail:
+        type: integer
+        default: 50
+        maximum: 200
+        description: >-
+          Lines to return from the end of the log.
+      format:
+        type: string
+        enum: ["codeblock", "plain"]
+        default: codeblock
+        description: >-
+          codeblock wraps the logs in a fenced block; plain returns the raw text.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Last 100 error lines of a workload"
+      arguments: {"namespace": "bookinfo", "name": "productpage-v1", "severity": "ERROR", "tail": 100}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/get_logs
+    body:
+      expression: >-
+        merge(merge(merge(merge(merge(merge(merge({'mcp_mode': 'true', 'namespace': args.namespace, 'name': args.name}, has(args.container) ? {'container': args.container} : {}), has(args.workload) ? {'workload': args.workload} : {}), has(args.previous) ? {'previous': args.previous} : {}), has(args.severity) ? {'severity': args.severity} : {}), has(args.tail) ? {'tail': int(args.tail)} : {}), has(args.format) ? {'format': args.format} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali-metrics
+spec:
+  toolset: kiali
+  title: 'Kiali: Metrics'
+  description: >-
+    Summarize the Istio metrics of a service, workload or app: latency quantiles, request rates and trends, throughput and payload sizes, as compact JSON. Group with byLabels and pick the direction and reporter to answer who talks to whom and how fast.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: ["resourceType", "namespace", "name"]
+    properties:
+      resourceType:
+        type: string
+        enum: ["service", "workload", "app"]
+        description: >-
+          What the name refers to.
+      namespace:
+        type: string
+        description: >-
+          Namespace of the resource.
+      name:
+        type: string
+        description: >-
+          Name of the service, workload or app.
+      direction:
+        type: string
+        enum: ["inbound", "outbound"]
+        default: outbound
+        description: >-
+          Traffic direction.
+      reporter:
+        type: string
+        default: source
+        description: >-
+          Comma-separated reporters: source, destination, waypoint, or both for no reporter filter, e.g. 'source,waypoint'.
+      byLabels:
+        type: string
+        description: >-
+          Comma-separated labels to group by, e.g. 'source_workload,destination_service'.
+      quantiles:
+        type: string
+        default: 0.5,0.95,0.99,0.999
+        description: >-
+          Comma-separated quantiles of the histogram metrics.
+      rateInterval:
+        type: string
+        default: 10m
+        description: >-
+          Rate interval of the counters, e.g. '1m', '5m'.
+      requestProtocol:
+        type: string
+        description: >-
+          Only this protocol: http, grpc or tcp.
+      step:
+        type: string
+        default: 15
+        description: >-
+          Seconds between data points.
+      meshCluster:
+        type: string
+        description: >-
+          Mesh cluster to query, as listed by kiali_clusters. Omit it for Kiali's home cluster.
+  examples:
+    - summary: "Inbound request rate of a service by source workload"
+      arguments: {"resourceType": "service", "namespace": "bookinfo", "name": "reviews", "direction": "inbound", "byLabels": "source_workload"}
+  http:
+    {{- include "kiali.http" . | nindent 4 }}
+    path: /api/chat/mcp/get_metrics
+    body:
+      expression: >-
+        merge(merge(merge(merge(merge(merge(merge(merge({'mcp_mode': 'true', 'resourceType': args.resourceType, 'namespace': args.namespace, 'resourceName': args.name}, has(args.direction) ? {'direction': args.direction} : {}), has(args.reporter) ? {'reporter': args.reporter} : {}), has(args.byLabels) ? {'byLabels': args.byLabels} : {}), has(args.quantiles) ? {'quantiles': args.quantiles} : {}), has(args.rateInterval) ? {'rateInterval': args.rateInterval} : {}), has(args.requestProtocol) ? {'requestProtocol': args.requestProtocol} : {}), has(args.step) ? {'step': args.step} : {}), has(args.meshCluster) ? {'clusterName': args.meshCluster} : {})

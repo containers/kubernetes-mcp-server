@@ -1,0 +1,20 @@
+# The ToolSet resource of the kiali-mcp-tools chart: the family operators enable as
+# "dynamic/kiali", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kiali
+spec:
+  description: Istio service mesh observability through the Kiali API
+  prefix: kiali
+  instructions: |
+    Kiali tools read the Istio service mesh through the Kiali server. Start
+    with kiali_mesh for health and versions, or kiali_clusters when the mesh
+    spans clusters and a meshCluster must be chosen. Find what to look at
+    with kiali_resources (apps, services, workloads and their health) before
+    asking for the metrics, traces or logs of one of them; kiali_graph shows
+    who talks to whom. kiali_istio_config lists or gets Istio and Gateway
+    API objects; kiali_istio_config_write changes them.

@@ -1,48 +1,29 @@
-## Kiali integration
+# Kiali
 
-This server can expose Kiali tools so assistants can query mesh information (e.g., mesh status/graph).
+The Kiali tools are delivered
+as `Tool` and `Prompt` custom resources by the `kiali-mcp-tools` Helm chart in
+[`charts/dynamic-tools/kiali-mcp-tools`](../charts/dynamic-tools/kiali-mcp-tools),
+picked up by the `dynamic` toolset at runtime. See
+[`docs/specs/dynamic-tools.md`](specs/dynamic-tools.md) for the model.
 
-### Enable the Kiali toolset
+Tools and prompts for Istio service-mesh observability: mesh status, the traffic graph, metrics, traces, logs and Istio configuration. The chart needs the Kiali API URL (`url`) and, for self-signed certificates, `certificateAuthority` or `insecureSkipTLSVerify`.
 
-Enable the Kiali tools via the server TOML configuration file.
+```bash
+# Install the Tool and Prompt CRDs once per cluster
+kubectl apply -f charts/dynamic-tools/crd.yaml
 
-Config (TOML):
+# Install the Kiali tools (cluster-scoped resources)
+helm upgrade --install kiali-mcp-tools charts/dynamic-tools/kiali-mcp-tools \
+  --set url=https://...   # http-backed charts only
 
-```toml
-toolsets = ["core", "kiali"]
-
-[toolset_configs.kiali]
-url = "https://kiali.example" # Endpoint/route to reach Kiali console
-# insecure = true  # optional: allow insecure TLS (not recommended in production)
-# certificate_authority = "/path/to/ca.crt"  # File path to CA certificate
-# When url is https and insecure is false, certificate_authority is required.
+# Enable the dynamic toolset in the server configuration
+toolsets = ["core", "config", "dynamic"]
 ```
 
-When the `kiali` toolset is enabled, a Kiali toolset configuration is required via `[toolset_configs.kiali]`. If missing or invalid, the server will refuse to start.
-
-### How authentication works
-
-- The server uses your existing Kubernetes credentials (from kubeconfig or in-cluster) to set a bearer token for Kiali calls.
-- If you pass an HTTP Authorization header to the MCP HTTP endpoint, that is not required for Kiali; Kiali calls use the server's configured token.
-- Kiali enforces access with that token (namespace get/list and, for writes and logs, resource RBAC). Tools advertise this as [RBAC metadata](tool-rbac-metadata.md):
-  - **Bounded** for tools whose Kubernetes checks are derivable from arguments or a finite kind enum (logs, resource details, Istio config read/write, metrics/traces namespace gate, traffic graph). On OpenShift, resource/graph declarations also include `deploymentconfigs` and `routes` from the operator's viewer role.
-  - **Unbounded** for mesh-wide status and mesh cluster listing, where Kiali aggregates control-plane and observability backends that cannot be expressed as a finite Kubernetes requirement set.
-
-  Binding the caller's identity to the operator-provided `kiali-viewer` (read) or `kiali` (read/write) ClusterRole remains the practical way to grant the full surface those tools may need.
-
-### Multi-cluster support
-
-Kiali can manage multiple Kubernetes clusters within an Istio service mesh. Most Kiali tools accept an optional `meshCluster` parameter to target a specific mesh cluster. When omitted, Kiali defaults to its home cluster (where Kiali is deployed).
-
-Use `<toolset>_list_mesh_clusters` (e.g. `kiali_list_mesh_clusters`) to discover available mesh cluster names before calling other tools. The `name` field from that response is the only valid value for `meshCluster`.
-
-Kiali tools and prompts are not cluster-aware: the MCP server does not inject a `context` parameter on them. Use `meshCluster` to select mesh scope. Core Kubernetes tools still use `context` when multi-cluster is enabled.
-
-### Troubleshooting
-
-- Missing Kiali configuration when `kiali` toolset is enabled → set `[toolset_configs.kiali].url` in the config TOML.
-- Invalid URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL.
-- TLS certificate validation:
-  - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file.
-  - For non-production environments you can set `[toolset_configs.kiali].insecure = true` to skip certificate verification.
-
+The server lists Tool and Prompt resources with its own identity, so its
+ServiceAccount needs `get`, `list` and `watch` on `tools`, `prompts` and
+`toolsets` (and, to report each resource's status, `update` on `tools/status`,
+`prompts/status` and `toolsets/status`) in
+the `tools.kubernetes-mcp-server.io` API group; the server Helm chart's
+`rbac.dynamicTools: true` renders that ClusterRole. Tool calls run with the
+caller's identity, as every built-in tool does.
