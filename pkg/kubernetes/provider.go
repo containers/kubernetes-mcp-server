@@ -170,3 +170,16 @@ func resolveStrategy(cfg *config.Config) string {
 
 	return config.ClusterProviderKubeConfig
 }
+
+// TargetInfo describes one target a provider can run tools against: its
+// name, and the API server it points at when the provider knows it.
+type TargetInfo struct {
+	Name   string
+	Server string
+}
+
+// TargetDescriber is implemented by providers that know more about their
+// targets than their names; the target list tool uses it when present.
+type TargetDescriber interface {
+	DescribeTargets(ctx context.Context) ([]TargetInfo, error)
+}

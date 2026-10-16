@@ -54,8 +54,8 @@ func (s *TargetParameterPromptMutatorSuite) TestClusterAwarePrompt() {
 	})
 	s.Run("adds correct description", func() {
 		desc := prompt.Prompt.Arguments[1].Description
-		s.Contains(desc, "Optional parameter selecting which context to run the prompt in")
-		s.Contains(desc, "Defaults to default-cluster if not set")
+		s.Contains(desc, "The context to run against, as listed by context_list")
+		s.Contains(desc, "Defaults to default-cluster.")
 	})
 	s.Run("preserves existing arguments", func() {
 		s.Equal("namespace", prompt.Prompt.Arguments[0].Name)

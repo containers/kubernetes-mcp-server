@@ -59,27 +59,10 @@ func (s *ToolFilterSuite) TestShouldIncludeTargetListTool() {
 			tool := api.ServerTool{Tool: api.Tool{Name: "test"}, TargetListProvider: ptr.To(true)}
 			s.False(filter(tool))
 		})
-		s.Run("with multiple clusters", func() {
-			s.Run("and tool is configuration_contexts_list and targetName is not context: returns false", func() {
-				filter := ShouldIncludeTargetListTool("not_context", true)
-				tool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}, TargetListProvider: ptr.To(true)}
-				s.False(filter(tool))
-			})
-			s.Run("and tool is configuration_contexts_list and targetName is context: returns true", func() {
-				filter := ShouldIncludeTargetListTool("context", true)
-				tool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}, TargetListProvider: ptr.To(true)}
-				s.True(filter(tool))
-			})
-			s.Run("and tool is mutated targets_list and targetName is context: returns false", func() {
-				filter := ShouldIncludeTargetListTool("context", true)
-				tool := api.ServerTool{Tool: api.Tool{Name: "context_list"}, TargetListProvider: ptr.To(true)}
-				s.False(filter(tool))
-			})
-			s.Run("and tool is mutated targets_list and targetName is not context: returns true", func() {
-				filter := ShouldIncludeTargetListTool("cluster", true)
-				tool := api.ServerTool{Tool: api.Tool{Name: "cluster_list"}, TargetListProvider: ptr.To(true)}
-				s.True(filter(tool))
-			})
+		s.Run("with multiple clusters: returns true", func() {
+			filter := ShouldIncludeTargetListTool("cluster", true)
+			tool := api.ServerTool{Tool: api.Tool{Name: "cluster_list"}, TargetListProvider: ptr.To(true)}
+			s.True(filter(tool))
 		})
 	})
 }
@@ -97,7 +80,7 @@ func (s *ToolFilterSuite) TestShouldIncludeConfigurationViewTool() {
 		s.True(ShouldIncludeConfigurationViewTool(false, nil)(tool))
 	})
 	s.Run("includes other tools over HTTP", func() {
-		otherTool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}}
+		otherTool := api.ServerTool{Tool: api.Tool{Name: "pods_list"}}
 		s.True(ShouldIncludeConfigurationViewTool(true, nil)(otherTool))
 	})
 }

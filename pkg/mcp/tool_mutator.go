@@ -8,6 +8,8 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -53,16 +55,10 @@ func WithTargetParameter(defaultCluster, targetParameterName string, isMultiTarg
 }
 
 func createTargetProperty(defaultCluster, targetName string) *jsonschema.Schema {
-	baseSchema := &jsonschema.Schema{
-		Type: "string",
-		Description: fmt.Sprintf(
-			"Optional parameter selecting which %s to run the tool in. Defaults to %s if not set",
-			targetName,
-			defaultCluster,
-		),
+	return &jsonschema.Schema{
+		Type:        "string",
+		Description: fmt.Sprintf("The %s to run against, as listed by %s_list. Defaults to %s.", targetName, targetName, defaultCluster),
 	}
-
-	return baseSchema
 }
 
 // targetLister is a minimal interface for listing available targets.
@@ -71,58 +67,76 @@ type targetLister interface {
 	GetTargets(ctx context.Context) ([]string, error)
 }
 
-// WithTargetListTool mutates the generic "targets_list" tool to have the correct name,
-// description, and handler based on the provider's target parameter name.
-// For example, with ACM provider (targetParameterName="cluster"), it becomes "cluster_list".
+// TargetEntry is one target in the result of the <target>_list tool.
+//
+// This is part of the tool's public wire contract: the JSON field tags are
+// observed by MCP clients and must not be renamed without a coordinated
+// migration. See docs/specs/structured-output.md.
+type TargetEntry struct {
+	Name    string `json:"name"`
+	Server  string `json:"server,omitempty"`
+	Default bool   `json:"default"`
+}
+
+// TargetsListResult is the structured-content payload of the <target>_list
+// tool: the default target by name, and every target in lexicographic
+// order. Part of the tool's public wire contract (docs/specs/structured-output.md).
+type TargetsListResult struct {
+	Default string        `json:"default"`
+	Targets []TargetEntry `json:"targets"`
+}
+
+// WithTargetListTool shapes the generic "targets_list" tool for the
+// provider: named <target>_list (context_list for a kubeconfig, cluster_list
+// for ACM), described in the provider's terms, and answered from the
+// provider's targets.
 func WithTargetListTool(defaultTarget, targetParameterName string, p targetLister) ToolMutator {
 	return func(tool api.ServerTool) api.ServerTool {
 		if tool.Tool.Name != TargetsListToolName {
 			return tool
 		}
-
-		// Rename tool based on target parameter name
-		tool.Tool.Name = fmt.Sprintf("%s_list", targetParameterName)
-		tool.Tool.Description = fmt.Sprintf("List all available %ss that can be targeted by tools", targetParameterName)
-		tool.Tool.Annotations.Title = fmt.Sprintf("%s List", capitalizeFirst(targetParameterName))
-
-		// Set the handler with captured targets
+		tool.Tool.Name = targetParameterName + "_list"
+		tool.Tool.Description = fmt.Sprintf("List the %ss this server can run tools against, and which one is the default. "+
+			"Pass a %s name as the %s argument of any tool to run it there.", targetParameterName, targetParameterName, targetParameterName)
+		tool.Tool.Annotations.Title = capitalizeFirst(targetParameterName) + ": List"
+		tool.Tool.Examples = []api.Example{{Summary: fmt.Sprintf("Which %ss are available", targetParameterName)}}
 		tool.Handler = createTargetListHandler(p, targetParameterName, defaultTarget)
-
 		return tool
 	}
 }
 
 func createTargetListHandler(p targetLister, targetParameterName, defaultTarget string) api.ToolHandlerFunc {
 	return func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-		targets, err := p.GetTargets(params.Context)
-		if err != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to find any targets: %w", err)), nil
+		var targets []kubernetes.TargetInfo
+		var err error
+		if describer, ok := p.(kubernetes.TargetDescriber); ok {
+			targets, err = describer.DescribeTargets(params.Context)
+		} else {
+			var names []string
+			names, err = p.GetTargets(params.Context)
+			for _, name := range names {
+				targets = append(targets, kubernetes.TargetInfo{Name: name})
+			}
 		}
-
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to list %ss: %w", targetParameterName, err)), nil
+		}
 		if len(targets) == 0 {
+			// Structured content is intentionally omitted (nil) on this branch:
+			// docs/specs/structured-output.md "Empty / nil results".
 			return api.NewToolCallResult(fmt.Sprintf("No %ss available", targetParameterName), nil), nil
 		}
-
-		// Sort targets for consistent output
-		sortedTargets := make([]string, len(targets))
-		copy(sortedTargets, targets)
-		sort.Strings(sortedTargets)
-
-		result := fmt.Sprintf("Available %ss (%d total, default: %s):\n\n", targetParameterName, len(sortedTargets), defaultTarget)
-		result += fmt.Sprintf("Format: [*] %s_NAME\n", strings.ToUpper(targetParameterName))
-		result += fmt.Sprintf(" (* indicates the default %s used in tools if %s is not set)\n\n", targetParameterName, targetParameterName)
-		result += fmt.Sprintf("%ss:\n---------\n", capitalizeFirst(targetParameterName))
-		for _, target := range sortedTargets {
-			marker := " "
-			if target == defaultTarget {
-				marker = "*"
-			}
-			result += fmt.Sprintf("%s %s\n", marker, target)
+		// Lexicographic order is the documented contract (docs/specs/structured-output.md).
+		sort.Slice(targets, func(i, j int) bool { return targets[i].Name < targets[j].Name })
+		result := TargetsListResult{Default: defaultTarget, Targets: make([]TargetEntry, 0, len(targets))}
+		for _, target := range targets {
+			result.Targets = append(result.Targets, TargetEntry{Name: target.Name, Server: target.Server, Default: target.Name == defaultTarget})
 		}
-		result += "---------\n\n"
-		result += fmt.Sprintf("To use a specific %s with any tool, set the '%s' parameter in the tool call arguments", targetParameterName, targetParameterName)
-
-		return api.NewToolCallResult(result, nil), nil
+		text, err := output.MarshalYaml(result)
+		if err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to list %ss: %w", targetParameterName, err)), nil
+		}
+		return api.NewToolCallResultFull(text, result, nil), nil
 	}
 }
 

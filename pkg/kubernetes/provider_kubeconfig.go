@@ -162,6 +162,32 @@ func (p *kubeConfigClusterProvider) GetTargets(_ context.Context) ([]string, err
 	return p.getTargetsUnsync()
 }
 
+// DescribeTargets lists the kubeconfig contexts with the server each one
+// points at.
+func (p *kubeConfigClusterProvider) DescribeTargets(_ context.Context) ([]TargetInfo, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	names, err := p.getTargetsUnsync()
+	if err != nil {
+		return nil, err
+	}
+	servers := map[string]string{}
+	if m := p.managers[p.defaultContext]; m != nil && m.ServerKubernetes() != nil {
+		if raw, err := m.ServerKubernetes().ToRawKubeConfigLoader().RawConfig(); err == nil {
+			for name, kubeContext := range raw.Contexts {
+				if cluster, ok := raw.Clusters[kubeContext.Cluster]; ok {
+					servers[name] = cluster.Server
+				}
+			}
+		}
+	}
+	targets := make([]TargetInfo, 0, len(names))
+	for _, name := range names {
+		targets = append(targets, TargetInfo{Name: name, Server: servers[name]})
+	}
+	return targets, nil
+}
+
 func (p *kubeConfigClusterProvider) GetTargetParameterName() string {
 	return KubeConfigTargetParameterName
 }

@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,7 +28,7 @@ func (s *ConfigurationSuite) SetupTest() {
 	s.T().Cleanup(mockServer.Close)
 	kubeconfig := mockServer.Kubeconfig()
 	for i := 0; i < 11; i++ {
-		// Add multiple fake contexts to force configuration_contexts_list tool to appear
+		// Add multiple fake contexts to force the context_list tool to appear
 		// and test minification in configuration_view tool. cluster-10 is included
 		// so TestContextsList can assert the lexicographic ordering contract
 		// (cluster-10 sorts before cluster-2).
@@ -43,46 +44,41 @@ func (s *ConfigurationSuite) SetupTest() {
 
 func (s *ConfigurationSuite) TestContextsList() {
 	s.InitMcpClient()
-	s.Run("configuration_contexts_list", func() {
-		toolResult, err := s.CallTool("configuration_contexts_list", map[string]interface{}{})
+	s.Run("context_list", func() {
+		toolResult, err := s.CallTool("context_list", map[string]interface{}{})
 		s.Run("returns contexts", func() {
 			s.Nilf(err, "call tool failed %v", err)
 		})
 		s.Require().NotNil(toolResult, "Expected tool result from call")
 		s.Lenf(toolResult.Content, 1, "invalid tool result content length %v", len(toolResult.Content))
-		s.Run("contains context count", func() {
-			s.Regexpf(`^Available Kubernetes contexts \(12 total`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool count result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.Run("names the default and every context with its server", func() {
+			s.Regexp(`(?m)^default: fake-context$`, text)
+			s.Equal(12, strings.Count(text, "  name: "))
+			s.Regexp(`(?m)^  name: fake-context\n  server: http://127\.0\.0\.1:\d+$`, text)
 		})
-		s.Run("contains default context name", func() {
-			s.Regexpf(`^Available Kubernetes contexts \(\d+ total, default: fake-context\)`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
-			s.Regexpf(`(?m)^\*fake-context -> http:\/\/127\.0\.0\.1:\d*$`, toolResult.Content[0].(*mcp.TextContent).Text, "invalid tool context default result content %v", toolResult.Content[0].(*mcp.TextContent).Text)
-		})
-		s.Run("returns structured contexts", func() {
+		s.Run("returns structured targets", func() {
 			structured, ok := toolResult.StructuredContent.(map[string]interface{})
-			s.Require().True(ok, "expected structured context result")
-			s.Equal("fake-context", structured["defaultContext"])
-			items, ok := structured["contexts"].([]interface{})
-			s.Require().True(ok, "expected contexts array")
+			s.Require().True(ok, "expected structured result")
+			s.Equal("fake-context", structured["default"])
+			items, ok := structured["targets"].([]interface{})
+			s.Require().True(ok, "expected targets array")
 			s.Len(items, 12)
 			first, ok := items[0].(map[string]interface{})
-			s.Require().True(ok, "expected context entry object")
+			s.Require().True(ok, "expected target entry object")
 			s.Equal("cluster-0", first["name"])
 			s.Equal(false, first["default"])
-			s.Equal("unknown", first["server"], "cluster-0 has no server, expected the unknown placeholder")
+			s.Nil(first["server"], "cluster-0 has no server and the key is omitted")
 			// Lock lexicographic ordering: cluster-10 sorts between cluster-1
-			// and cluster-2, so items[2] must be "cluster-10". This catches
-			// off-by-one or duplicate-skip bugs in the sort/append loop that a
-			// length-only assertion would miss.
+			// and cluster-2, so items[2] must be "cluster-10".
 			middle, ok := items[2].(map[string]interface{})
-			s.Require().True(ok, "expected context entry object")
-			s.Equal("cluster-10", middle["name"], "expected lexicographic ordering: items[2] should be cluster-10 (cluster-10 < cluster-2 lexicographically)")
+			s.Require().True(ok, "expected target entry object")
+			s.Equal("cluster-10", middle["name"], "expected lexicographic ordering: items[2] should be cluster-10")
 			last, ok := items[11].(map[string]interface{})
-			s.Require().True(ok, "expected context entry object")
+			s.Require().True(ok, "expected target entry object")
 			s.Equal("fake-context", last["name"])
 			s.Equal(true, last["default"])
-			lastServer, ok := last["server"].(string)
-			s.Require().True(ok, "expected server string")
-			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d+$`, lastServer, "expected real server URL for fake-context, got %v", lastServer)
+			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d+$`, last["server"], "expected the server URL of fake-context")
 		})
 	})
 }

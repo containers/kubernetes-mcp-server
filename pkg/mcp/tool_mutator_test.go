@@ -191,7 +191,7 @@ func TestCreateClusterProperty(t *testing.T) {
 
 			assert.Equal(t, "string", property.Type)
 			assert.Contains(t, property.Description, tt.defaultCluster)
-			assert.Contains(t, property.Description, "Defaults to "+tt.defaultCluster+" if not set")
+			assert.Contains(t, property.Description, "Defaults to "+tt.defaultCluster+".")
 		})
 	}
 }
@@ -222,8 +222,8 @@ func (s *TargetParameterToolMutatorSuite) TestClusterAwareTool() {
 	})
 	s.Run("adds correct description", func() {
 		desc := tool.Tool.InputSchema.Properties["cluster"].Description
-		s.Contains(desc, "Optional parameter selecting which cluster to run the tool in", "Expected description to mention cluster selection")
-		s.Contains(desc, "Defaults to default-cluster if not set", "Expected description to mention default cluster")
+		s.Contains(desc, "The cluster to run against, as listed by cluster_list", "Expected description to say where the names come from")
+		s.Contains(desc, "Defaults to default-cluster.", "Expected description to mention default cluster")
 	})
 }
 
@@ -263,10 +263,10 @@ func (s *TargetListToolMutatorSuite) TestMutatesTargetsListTool() {
 	})
 	s.Run("updates description", func() {
 		s.Contains(result.Tool.Description, "cluster")
-		s.Contains(result.Tool.Description, "List all available")
+		s.Contains(result.Tool.Description, "List the clusters this server can run tools against")
 	})
 	s.Run("updates title annotation", func() {
-		s.Equal("Cluster List", result.Tool.Annotations.Title)
+		s.Equal("Cluster: List", result.Tool.Annotations.Title)
 	})
 	s.Run("sets handler", func() {
 		s.NotNil(result.Handler)
@@ -301,7 +301,7 @@ func (s *TargetListToolMutatorSuite) TestHandlerWithGetTargetsError() {
 	callResult, err := result.Handler(api.ToolHandlerParams{Context: context.Background()})
 	s.NoError(err)
 	s.Require().NotNil(callResult.Error)
-	s.Contains(callResult.Error.Error(), "failed to find any targets")
+	s.Contains(callResult.Error.Error(), "failed to list clusters")
 	s.Contains(callResult.Error.Error(), "unauthorized")
 }
 

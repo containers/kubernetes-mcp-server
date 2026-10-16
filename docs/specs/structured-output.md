@@ -91,20 +91,20 @@ required.
 Tools whose payload is neither a Kubernetes object nor a list of them should
 declare a small typed Go struct and pass it through `NewToolCallResultFull`
 alongside whatever human-readable framing they already produce. The
-`configuration_contexts_list` tool
-([`pkg/toolsets/config/configuration.go`](../../pkg/toolsets/config/configuration.go))
-is the reference example:
+`<target>_list` tool (`context_list`, `cluster_list`;
+[`pkg/mcp/tool_mutator.go`](../../pkg/mcp/tool_mutator.go)) is the
+reference example:
 
 ```go
-type ContextInfo struct {
+type TargetEntry struct {
     Name    string `json:"name"`
-    Server  string `json:"server"`
+    Server  string `json:"server,omitempty"`
     Default bool   `json:"default"`
 }
 
-type ContextsListResult struct {
-    DefaultContext string        `json:"defaultContext"`
-    Contexts       []ContextInfo `json:"contexts"`
+type TargetsListResult struct {
+    Default string        `json:"default"`
+    Targets []TargetEntry `json:"targets"`
 }
 ```
 
@@ -142,21 +142,24 @@ ecosystem's general JSON style. Keys should be descriptive nouns; reserve
 abbreviations for cases that are already industry-standard (`url`, `uid`,
 `id`).
 
-`configuration_contexts_list` sets the precedent:
+`context_list` sets the precedent:
 
 ```json
 {
-  "defaultContext": "fake-context",
-  "contexts": [
-    { "name": "cluster-0", "server": "unknown", "default": false }
+  "default": "fake-context",
+  "targets": [
+    { "name": "cluster-0", "default": false },
+    { "name": "fake-context", "server": "https://127.0.0.1:6443", "default": true }
   ]
 }
 ```
 
-The container key is the resource's plural name (`contexts`); the marker for
-the "default / current / focused" entry is a `default` bool on the entry
-itself plus a `defaultContext` top-level scalar pointing at it by name, so
-clients can resolve the default without re-scanning the list.
+The container key is the plural noun (`targets`); the marker for the
+"default / current / focused" entry is a `default` bool on the entry itself
+plus a `default` top-level scalar pointing at it by name, so clients can
+resolve the default without re-scanning the list. A field the emitter does
+not know (`server` for a provider that only has names) is omitted, not
+filled with a placeholder.
 
 ## `outputSchema` stance
 
@@ -189,8 +192,8 @@ clients may depend on the field names. To keep the contract visible to future
 maintainers:
 
 - Define the structured payload as a named, exported Go type whose `json:`
-  tags are the wire keys. `ContextInfo` and `ContextsListResult` in
-  `pkg/toolsets/config/configuration.go` are the reference.
+  tags are the wire keys. `TargetEntry` and `TargetsListResult` in
+  `pkg/mcp/tool_mutator.go` are the reference.
 - Add a doc comment on the type stating that it is part of the tool's wire
   contract, so reviewers know not to rename `json:` tags casually.
 - Cover the structured shape in tests: assert the top-level keys, assert the

@@ -18,13 +18,9 @@ func WithPromptTargetParameter(defaultTarget, targetParameterName string, isMult
 
 		if isMultiTarget {
 			prompt.Prompt.Arguments = append(prompt.Prompt.Arguments, config.PromptArgument{
-				Name: targetParameterName,
-				Description: fmt.Sprintf(
-					"Optional parameter selecting which %s to run the prompt in. Defaults to %s if not set",
-					targetParameterName,
-					defaultTarget,
-				),
-				Required: false,
+				Name:        targetParameterName,
+				Description: fmt.Sprintf("The %s to run against, as listed by %s_list. Defaults to %s.", targetParameterName, targetParameterName, defaultTarget),
+				Required:    false,
 			})
 		}
 
