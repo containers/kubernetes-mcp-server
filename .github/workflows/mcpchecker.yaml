@@ -265,7 +265,8 @@ jobs:
             {"suite":"config-multicluster","eval-config":"evals/core-eval-testing/builtin-openai/eval-config-multicluster.yaml","toolsets":"core,config","mcp-config-dir":"dev/config/mcp-configs","baseline-result":"openai-agent-config-multicluster-latest.json","job-display-name":"Run Config Multicluster Evaluation"},
             {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
             {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
-            {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"}
+            {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"},
+            {"suite":"obs","eval-config":"evals/core-eval-testing/builtin-openai/eval-obs.yaml","toolsets":"observability/metrics,observability/traces,observability/logs,observability/otelcol"}
           ]}
           EOFM
           )
