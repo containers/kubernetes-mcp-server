@@ -1,0 +1,441 @@
+# Tool resources of the KubeVirt chart. Originally exported from the in-tree kubevirt toolset; maintained by hand since.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-clone
+spec:
+  toolset: kubevirt
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  description: >-
+    Clone a VirtualMachine into a new one with another name, through a VirtualMachineClone. The source is left as it is.
+  destructive: true
+  idempotent: true
+  inputSchema:
+    properties:
+      name:
+        description: The name of the source virtual machine to clone
+        type: string
+      namespace:
+        description: The namespace of the source virtual machine
+        type: string
+      newName:
+        type: string
+        description: >-
+          Name of the new VirtualMachine.
+    required:
+    - namespace
+    - name
+    - newName
+    type: object
+  kubernetes:
+    apiVersion: clone.kubevirt.io/v1beta1
+    body:
+      expression: '{''apiVersion'': ''clone.kubevirt.io/v1beta1'', ''kind'': ''VirtualMachineClone'',
+        ''metadata'': {''generateName'': args.name + ''-clone-''}, ''spec'': {''source'':
+        {''apiGroup'': ''kubevirt.io'', ''kind'': ''VirtualMachine'', ''name'': args.name},
+        ''target'': {''apiGroup'': ''kubevirt.io'', ''kind'': ''VirtualMachine'',
+        ''name'': args.newName}}}'
+    kind: VirtualMachineClone
+    namespace:
+      argument: namespace
+    verb: create
+  examples:
+    - summary: "Clone a VM under a new name"
+      arguments: {"namespace": "vms", "name": "fedora", "newName": "fedora-copy"}
+  title: 'Virtual Machine: Clone'
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-screenshot
+spec:
+  toolset: kubevirt
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  description: 'Capture a screenshot of the graphical (VNC) console of a VirtualMachine
+    on KubeVirt as a PNG image. Use this to see what is currently displayed on the
+    VM''s screen (for example firmware, a bootloader, or a login prompt). Read-only:
+    it never sends input to the guest.'
+  idempotent: true
+  inputSchema:
+    properties:
+      name:
+        description: The name of the virtual machine
+        type: string
+      namespace:
+        description: The namespace of the virtual machine
+        type: string
+    required:
+    - namespace
+    - name
+    type: object
+  examples:
+    - summary: "What the console of a VM shows"
+      arguments: {"namespace": "vms", "name": "fedora"}
+  output: '''Screenshot of VirtualMachineInstance '' + args.namespace + ''/'' + args.name
+    + '' ('' + steps.screenshot.mimeType + '', '' + string(steps.screenshot.size)
+    + '' bytes)'''
+  readOnly: true
+  steps:
+  - kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachineInstance
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: vmi
+  - fail: '!(has(steps.vmi.status) && has(steps.vmi.status.phase) && steps.vmi.status.phase
+      == ''Running'') ? "VirtualMachineInstance ''" + args.name + "'' is in phase
+      ''" + (has(steps.vmi.status) && has(steps.vmi.status.phase) ? steps.vmi.status.phase
+      : ''Unknown'') + "'', not Running" : (has(steps.vmi.spec) && has(steps.vmi.spec.domain)
+      && has(steps.vmi.spec.domain.devices) && has(steps.vmi.spec.domain.devices.autoattachGraphicsDevice)
+      && steps.vmi.spec.domain.devices.autoattachGraphicsDevice == false ? "VirtualMachineInstance
+      ''" + args.name + "'' has no graphical console (autoattachGraphicsDevice is
+      false)" : '''')'
+    name: eligible
+  - kubernetes:
+      apiVersion: subresources.kubevirt.io/v1
+      mimeType: image/png
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      query:
+        moveCursor: "true"
+      resource: virtualmachineinstances
+      response: binary
+      subresource: vnc/screenshot
+      verb: get
+    name: screenshot
+  title: 'Virtual Machine: Console Screenshot'
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-guest
+spec:
+  toolset: kubevirt
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  title: 'Virtual Machine: Guest'
+  readOnly: true
+  idempotent: true
+  description: >-
+    What the QEMU guest agent of a running VirtualMachine reports: the operating
+    system, the filesystems, the logged-in users, the network interfaces and
+    their IPs, or all four at once. The guest agent must be installed and
+    running inside the VM.
+  inputSchema:
+    type: object
+    required: [namespace, name]
+    properties:
+      namespace:
+        type: string
+        description: The namespace of the virtual machine
+      name:
+        type: string
+        description: The name of the virtual machine
+  examples:
+    - summary: "Network interfaces of a running VM"
+      arguments: {"namespace": "vms", "name": "fedora", "info": "network"}
+    - summary: "Everything the guest agent knows"
+      arguments: {"namespace": "vms", "name": "fedora"}
+  variants:
+    argument: info
+    description: Which information to retrieve.
+    default: all
+    options:
+      os:
+        description: operating system details
+        kubernetes: {verb: get, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: guestosinfo, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'guestOSInfo': response}"
+      filesystem:
+        description: disks and filesystems
+        kubernetes: {verb: get, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: filesystemlist, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'filesystems': response}"
+      users:
+        description: logged-in users
+        kubernetes: {verb: get, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: userlist, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'users': response}"
+      network:
+        description: network interfaces and IPs
+        kubernetes: {verb: get, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: interfacelist, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'networkInterfaces': response}"
+      all:
+        description: all of the above; a query the agent fails is reported next to the others
+        steps:
+          - name: all
+            forEach: "['guestosinfo', 'filesystemlist', 'userlist', 'interfacelist']"
+            ignoreError: true
+            kubernetes: {verb: get, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: {expression: item}, namespace: {argument: namespace}, name: {argument: name}}
+        output: >-
+          steps.all.all(r, has(r.error))
+          ? {'error': 'guest agent is not responding - all queries failed - ensure QEMU guest agent is installed and running in the VM'}
+          : merge(merge((has(steps.all[0].error) ? {'guestOSInfoError': steps.all[0].error} : {'guestOSInfo': steps.all[0]}),
+                        (has(steps.all[1].error) ? {'filesystemsError': steps.all[1].error} : {'filesystems': steps.all[1]})),
+                  merge((has(steps.all[2].error) ? {'usersError': steps.all[2].error} : {'users': steps.all[2]}),
+                        (has(steps.all[3].error) ? {'networkInterfacesError': steps.all[3].error} : {'networkInterfaces': steps.all[3]})))
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-lifecycle
+spec:
+  toolset: kubevirt
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  description: >-
+    Change the running state of a KubeVirt VirtualMachine: start or stop it
+    (its runStrategy), restart it, or pause and unpause the running instance in
+    place. Returns a one-line message and the VirtualMachine as it is afterwards.
+  destructive: true
+  inputSchema:
+    type: object
+    required: [namespace, name]
+    properties:
+      namespace:
+        type: string
+        description: Namespace of the VirtualMachine.
+      name:
+        type: string
+        description: Name of the VirtualMachine.
+  examples:
+    - summary: "Restart a VM"
+      arguments: {"namespace": "vms", "name": "fedora", "action": "restart"}
+    - summary: "Suspend a VM in place"
+      arguments: {"namespace": "vms", "name": "fedora", "action": "pause"}
+  title: 'Virtual Machine: Lifecycle'
+  variants:
+    argument: action
+    description: What to do with the VirtualMachine.
+    options:
+      start:
+        description: run it (runStrategy Always); a no-op if it already runs
+        steps:
+          - name: vm
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+          - name: start
+            when: "!(has(steps.vm.spec.runStrategy) && steps.vm.spec.runStrategy == 'Always')"
+            kubernetes: {verb: patch, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}, body: {value: {spec: {runStrategy: Always}}}}
+          - name: final
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+        output: >-
+          {'message': steps.start == null ? 'VirtualMachine \'' + args.name + '\' in namespace \'' + args.namespace + '\' is already running' : 'VirtualMachine started successfully', 'vm': steps.final}
+      stop:
+        description: halt it (runStrategy Halted); a no-op if it is already stopped
+        steps:
+          - name: vm
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+          - name: stop
+            when: "!(has(steps.vm.spec.runStrategy) && steps.vm.spec.runStrategy == 'Halted')"
+            kubernetes: {verb: patch, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}, body: {value: {spec: {runStrategy: Halted}}}}
+          - name: final
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+        output: >-
+          {'message': steps.stop == null ? 'VirtualMachine \'' + args.name + '\' in namespace \'' + args.namespace + '\' is already stopped' : 'VirtualMachine stopped successfully', 'vm': steps.final}
+      restart:
+        description: stop it, then start it again
+        steps:
+          - name: halt
+            kubernetes: {verb: patch, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}, body: {value: {spec: {runStrategy: Halted}}}}
+          - name: resume
+            kubernetes: {verb: patch, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}, body: {value: {spec: {runStrategy: Always}}}}
+          - name: final
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'message': 'VirtualMachine restarted successfully', 'vm': steps.final}"
+      pause:
+        description: suspend the running instance in place (it must be running)
+        steps:
+          - name: pause
+            kubernetes: {verb: update, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: pause, namespace: {argument: namespace}, name: {argument: name}}
+          - name: final
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'message': 'VirtualMachine paused successfully', 'vm': steps.final}"
+      unpause:
+        description: resume a paused instance
+        steps:
+          - name: unpause
+            kubernetes: {verb: update, apiVersion: subresources.kubevirt.io/v1, resource: virtualmachineinstances, subresource: unpause, namespace: {argument: namespace}, name: {argument: name}}
+          - name: final
+            kubernetes: {verb: get, apiVersion: kubevirt.io/v1, kind: VirtualMachine, namespace: {argument: namespace}, name: {argument: name}}
+        output: "{'message': 'VirtualMachine unpaused successfully', 'vm': steps.final}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-create-from-template
+spec:
+  toolset: kubevirt
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  description: >-
+    Create a VirtualMachine from a VirtualMachineTemplate in the same namespace. The template is processed server-side: required parameters must be given, optional ones take their defaults, and generated ones (passwords) are generated. Use the vm-create prompt instead when the template is not known.
+  destructive: true
+  inputSchema:
+    properties:
+      namespace:
+        description: The namespace of the VirtualMachineTemplate and the resulting
+          VirtualMachine (must be the same)
+        type: string
+      parameters:
+        additionalProperties:
+          type: string
+        description: Parameter values to substitute in the template. Keys are parameter
+          names (e.g. VM_NAME), values are strings. Required parameters must be provided;
+          optional parameters use their defaults if omitted; parameters with generate/from
+          will be auto-generated if not provided.
+        type: object
+      template:
+        type: string
+        description: >-
+          Name of the VirtualMachineTemplate, in the same namespace.
+    required:
+    - namespace
+    - template
+    type: object
+  kubernetes:
+    apiVersion: subresources.template.kubevirt.io/v1beta1
+    body:
+      expression: '{''apiVersion'': ''subresources.template.kubevirt.io/v1beta1'',
+        ''kind'': ''CreateOptions'', ''parameters'': has(args.parameters) ? args.parameters
+        : {}}'
+    name:
+      argument: template
+    namespace:
+      argument: namespace
+    resource: virtualmachinetemplates
+    subresource: create
+    verb: create
+  examples:
+    - summary: "Create a VM from a template with a name"
+      arguments: {"namespace": "vms", "template": "fedora-server-small", "parameters": {"VM_NAME": "fedora-1"}}
+  title: 'Virtual Machine: Create from Template'
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-troubleshoot
+spec:
+  toolset: kubevirt
+  requires: [{apiVersion: kubevirt.io/v1, kind: VirtualMachine}]
+  description: >-
+    Diagnose why a VirtualMachine is not starting, stuck provisioning, crash-looping or failing to migrate. Gathers the VM, its instance, volumes, DataVolumes and PVCs, cloud-init, the virt-launcher pod, its logs and events, then checks for the usual causes (missing StorageClass, bad PVC spec, a cloud-init that halts, nodeSelector migration blockers, failed migrations, crash loops). Returns the detected issues with suggested fixes first, then the raw data. Fix with vm_lifecycle or resources_create_or_update.
+  idempotent: true
+  inputSchema:
+    properties:
+      name:
+        description: The name of the VirtualMachine to troubleshoot
+        type: string
+      namespace:
+        description: The namespace of the VirtualMachine to troubleshoot
+        type: string
+    required:
+    - namespace
+    - name
+    type: object
+  examples:
+    - summary: "Why a VM is not running"
+      arguments: {"namespace": "vms", "name": "fedora"}
+  output: '{''virtualMachine'': has(steps.vm.error) ? steps.vm : {''runStrategy'':
+    has(steps.vm.spec.runStrategy) ? steps.vm.spec.runStrategy : '''', ''status'':
+    has(steps.vm.status) ? steps.vm.status : {}, ''volumes'': (has(steps.vm.spec)
+    && has(steps.vm.spec.template) && has(steps.vm.spec.template.spec) && has(steps.vm.spec.template.spec.volumes)
+    ? steps.vm.spec.template.spec.volumes : []).map(v, v.transformMapEntry(k, val,
+    k.startsWith(''cloudInit'') ? {k: ''<redacted>''} : {k: val}))}, ''virtualMachineInstance'':
+    has(steps.vmi.error) ? steps.vmi : {''status'': has(steps.vmi.status) ? steps.vmi.status
+    : {}}, ''virtLauncherPods'': steps.pods.items.map(p, {''name'': p.metadata.name,
+    ''phase'': has(p.status) && has(p.status.phase) ? p.status.phase : '''', ''conditions'':
+    has(p.status) && has(p.status.conditions) ? p.status.conditions : [], ''containerStatuses'':
+    has(p.status) && has(p.status.containerStatuses) ? p.status.containerStatuses
+    : []}), ''events'': steps.events.map(e, has(e.error) ? [] : e.items.map(ev, {''type'':
+    ev.type, ''reason'': has(ev.reason) ? ev.reason : '''', ''message'': has(ev.message)
+    ? ev.message : '''', ''object'': ev.involvedObject.kind + ''/'' + ev.involvedObject.name})).flatten(),
+    ''dataVolumes'': steps.datavolumes.map(dv, has(dv.error) ? dv : {''name'': dv.metadata.name,
+    ''phase'': has(dv.status) && has(dv.status.phase) ? dv.status.phase : '''', ''progress'':
+    has(dv.status) && has(dv.status.progress) ? dv.status.progress : ''''}), ''virtLauncherPodLogs'':
+    range(size(steps.pods.items)).map(i, {''pod'': steps.pods.items[i].metadata.name,
+    ''logs'': type(steps.logs[i]) == string ? steps.logs[i] : steps.logs[i].error})}'
+  readOnly: true
+  steps:
+  - ignoreError: true
+    kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: vm
+  - ignoreError: true
+    kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachineInstance
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: vmi
+  - kubernetes:
+      apiVersion: v1
+      kind: Pod
+      namespace:
+        argument: namespace
+      query:
+        labelSelector: kubevirt.io=virt-launcher,vm.kubevirt.io/name={name}
+      verb: list
+    name: pods
+  - forEach: '[args.name] + steps.pods.items.map(p, p.metadata.name)'
+    ignoreError: true
+    kubernetes:
+      apiVersion: v1
+      kind: Event
+      namespace:
+        argument: namespace
+      query:
+        fieldSelector:
+          expression: '''involvedObject.name='' + item'
+      verb: list
+    name: events
+  - forEach: '(has(steps.vm.spec) && has(steps.vm.spec.template) && has(steps.vm.spec.template.spec)
+      && has(steps.vm.spec.template.spec.volumes) ? steps.vm.spec.template.spec.volumes
+      : []).filter(v, has(v.dataVolume)).map(v, v.dataVolume.name)'
+    ignoreError: true
+    kubernetes:
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      name:
+        expression: item
+      namespace:
+        argument: namespace
+      verb: get
+    name: datavolumes
+  - forEach: steps.pods.items
+    ignoreError: true
+    kubernetes:
+      apiVersion: v1
+      kind: Pod
+      name:
+        expression: item.metadata.name
+      namespace:
+        argument: namespace
+      query:
+        tailLines: "100"
+      redact: true
+      response: text
+      subresource: log
+      verb: get
+    name: logs
+  title: 'Virtual Machine: Troubleshoot'

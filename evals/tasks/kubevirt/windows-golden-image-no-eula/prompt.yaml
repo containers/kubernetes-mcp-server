@@ -4,13 +4,13 @@ metadata:
   labels:
     suite: kubevirt
     project: kubevirt
-    requires: kubevirt,tekton
+    requires: dynamic
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"
   name: "windows-golden-image-no-eula"
   difficulty: medium
-  description: "Test the windows-golden-image prompt output and EULA handling"
+  description: "Test the vm-windows-golden-image prompt output and EULA handling"
 spec:
   requires:
     - extension: kubernetes
@@ -62,7 +62,7 @@ spec:
         ignoreNotFound: true
   prompt:
     inline: |-
-      Use the windows-golden-image prompt to create a Windows 11 golden image.
+      Use the vm-windows-golden-image prompt to create a Windows 11 golden image.
 
       Use this ISO URL: https://example.com/windows11.iso
 

@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-get-status"
   difficulty: easy
   description: "Retrieve and interpret the HyperConverged CR status and conditions"

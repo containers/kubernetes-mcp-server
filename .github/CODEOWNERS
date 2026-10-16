@@ -30,9 +30,7 @@
 /docs/KIALI.md              @aljesusg @josunect
 
 # toolset: kubevirt
-/pkg/toolsets/kubevirt/     @ksimon1 @lyarwood
-/pkg/kubevirt/              @ksimon1 @lyarwood
-/pkg/mcp/kubevirt*          @ksimon1 @lyarwood
+/charts/dynamic-tools/kubevirt-mcp-tools/ @ksimon1 @lyarwood
 /build/kubevirt.mk          @ksimon1 @lyarwood
 /evals/tasks/kubevirt/      @ksimon1 @lyarwood
 /docs/kubevirt.md           @ksimon1 @lyarwood

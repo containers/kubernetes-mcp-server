@@ -1,0 +1,572 @@
+# Prompt resources of the KubeVirt chart. Originally exported from the in-tree kubevirt toolset; maintained by hand since.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-troubleshoot
+spec:
+  toolset: kubevirt
+  arguments:
+  - description: The namespace of the VirtualMachine to troubleshoot
+    name: namespace
+    required: true
+  - description: The name of the VirtualMachine to troubleshoot
+    name: name
+    required: true
+  description: Generate a step-by-step troubleshooting guide for diagnosing KubeVirt
+    VirtualMachine issues
+  messages:
+  - role: user
+    text: |
+      # KubeVirt VirtualMachine Troubleshooting Guide
+
+      ## VM: ${args.name} (namespace: ${args.namespace})
+
+      Use this guide to diagnose issues with the KubeVirt VirtualMachine. The relevant resource data has been collected below.
+
+      ---
+
+      ## Step 1: VirtualMachine Status
+
+      Check the VirtualMachine status:
+      - printableStatus (should be "Running")
+      - ready (should be true)
+      - conditions for any errors
+
+      ${has(steps.vm.error) ? '*Error fetching VirtualMachine: ' + steps.vm.error + '*' : '```yaml\n' + yaml(has(steps.vm.status) ? steps.vm.status : {}) + '```'}
+
+      ---
+
+      ## Step 2: VirtualMachineInstance Status
+
+      Check the VirtualMachineInstance status:
+      - phase (should be "Running")
+      - conditions for "Ready" condition
+
+      ${has(steps.vmi.error) ? '*Error fetching VirtualMachineInstance: ' + steps.vmi.error + '*' : '```yaml\n' + yaml(has(steps.vmi.status) ? steps.vmi.status : {}) + '```'}
+
+      ---
+
+      ## Step 3: VM Volumes
+
+      Review the VM volumes for any configuration issues (cloud-init bodies are redacted):
+
+      ${has(steps.vm.error) ? '*VirtualMachine unavailable, no volumes to review*' : '```yaml\n' + yaml((has(steps.vm.spec) && has(steps.vm.spec.template) && has(steps.vm.spec.template.spec) && has(steps.vm.spec.template.spec.volumes) ? steps.vm.spec.template.spec.volumes : []).map(v, v.transformMapEntry(k, val, k.startsWith('cloudInit') ? {k: '<redacted>'} : {k: val}))) + '```'}
+
+      **Common volume types to check:**
+      - **containerDisk**: Verify the image URL is accessible and the image exists
+      - **cloudInitNoCloud / cloudInitConfigDrive**: Check userData and networkData for syntax errors
+      - **configMap**: Verify the referenced ConfigMap exists in the namespace
+      - **secret**: Verify the referenced Secret exists in the namespace
+      - **serviceAccount**: Check if the ServiceAccount exists and has proper permissions
+      - **emptyDisk**: Usually no issues, but check if capacity is specified correctly
+      - **hostDisk**: Verify the path exists on the host node and has correct permissions
+      - **downwardMetrics**: Usually no configuration issues
+      - **dataVolume**: Check that the DataVolume exists and status.phase is "Succeeded"
+      - **persistentVolumeClaim**: Check that the PVC exists and status.phase is "Bound"
+
+      ---
+
+      ## Step 4: virt-launcher Pod
+
+      Check the virt-launcher pod:
+      - Pod should be "Running" with all containers ready
+      - Check for container restart counts
+      - Review pod conditions for issues
+
+      ${size(steps.pods.items) == 0 ? '*No virt-launcher pod found*' : '```yaml\n' + yaml(steps.pods.items.map(p, {'name': p.metadata.name, 'phase': has(p.status) && has(p.status.phase) ? p.status.phase : '', 'conditions': has(p.status) && has(p.status.conditions) ? p.status.conditions : [], 'containerStatuses': has(p.status) && has(p.status.containerStatuses) ? p.status.containerStatuses : []})) + '```'}
+
+      ---
+
+      ## Step 5: virt-launcher Pod Logs
+
+      Review the logs from the virt-launcher pod containers (secrets are redacted):
+      - Look for error messages or stack traces
+      - Check for VM boot issues or QEMU errors
+
+      ${size(steps.pods.items) == 0 ? '*No virt-launcher pod found*' : range(size(steps.pods.items)).map(i, '### ' + steps.pods.items[i].metadata.name + '\n```\n' + (type(steps.logs[i]) == string ? steps.logs[i] : 'error fetching logs: ' + steps.logs[i].error) + '\n```').join('\n')}
+
+      ---
+
+      ## Step 6: Events
+
+      Review events related to the VM and its components:
+      - Look for Warning events
+      - Check for scheduling, storage, or network issues
+
+      ${has(steps.events.error) ? '*Error listing events: ' + steps.events.error + '*' : (size(steps.events.items) == 0 ? '*No events found*' : '```yaml\n' + yaml(steps.events.items.map(e, {'type': e.type, 'reason': has(e.reason) ? e.reason : '', 'message': has(e.message) ? e.message : '', 'lastTimestamp': has(e.lastTimestamp) ? e.lastTimestamp : ''})) + '```')}
+
+      ---
+
+      ## Troubleshooting Analysis
+
+      Based on the data above, analyze:
+      1. **VM State**: Is the VM in the expected state (Running/Stopped)?
+      2. **VMI State**: Does the VMI exist and is it Running?
+      3. **Volumes**: Are all referenced volumes (DataVolumes, PVCs, ConfigMaps, Secrets, container images) available?
+      4. **Pod Health**: Is the virt-launcher pod running without restarts?
+      5. **Events**: Are there any Warning events indicating problems?
+
+      ---
+
+      ## Fix the Issue
+
+      If you identified a problem, attempt to fix it:
+      1. **Missing Resources**: Create missing ConfigMaps, Secrets, or PVCs referenced by the VM
+      2. **Storage Issues**: Check DataVolume import status, fix storage class or access mode issues
+      3. **Image Pull Errors**: Verify container disk image URLs are correct and accessible
+      4. **Configuration Errors**: Fix any syntax errors in cloud-init userData or other configurations
+      5. **Resource Constraints**: Adjust VM resource requests if the pod cannot be scheduled
+      6. **Restart VM**: If the VM is stuck, try stopping and starting it again
+
+      Use the available Kubernetes tools to apply fixes (create resources, update configurations, restart VM).
+
+      ---
+
+      ## Report Findings
+
+      After completing troubleshooting and attempting fixes, report:
+      - **Status:** Running/Stopped/Failed/Provisioning
+      - **Root Cause:** Description or "None found"
+      - **Action Taken:** What was done to fix the issue (or "None" if no fix was needed/possible)
+      - **Result:** Whether the fix was successful or further action is needed
+  - role: assistant
+    text: I'll analyze the collected data to diagnose the VirtualMachine issues systematically.
+  steps:
+  - ignoreError: true
+    kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: vm
+  - ignoreError: true
+    kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachineInstance
+      name:
+        argument: name
+      namespace:
+        argument: namespace
+      verb: get
+    name: vmi
+  - kubernetes:
+      apiVersion: v1
+      kind: Pod
+      namespace:
+        argument: namespace
+      query:
+        labelSelector: kubevirt.io=virt-launcher,vm.kubevirt.io/name={name}
+      verb: list
+    name: pods
+  - forEach: steps.pods.items
+    ignoreError: true
+    kubernetes:
+      apiVersion: v1
+      kind: Pod
+      name:
+        expression: item.metadata.name
+      namespace:
+        argument: namespace
+      query:
+        tailLines: "100"
+      redact: true
+      response: text
+      subresource: log
+      verb: get
+    name: logs
+  - ignoreError: true
+    kubernetes:
+      apiVersion: v1
+      kind: Event
+      namespace:
+        argument: namespace
+      query:
+        fieldSelector: involvedObject.name={name}
+      verb: list
+    name: events
+  title: KubeVirt VirtualMachine Troubleshoot
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-windows-golden-image
+spec:
+  toolset: kubevirt
+  arguments:
+  - description: Microsoft Windows ISO download URL (must be https://)
+    name: winImageDownloadURL
+    required: true
+  - description: Target namespace for the PipelineRun
+    name: namespace
+  - description: 'Windows version: 10, 11, 2k22 (default), or 2k25'
+    name: windowsVersion
+  - description: 'Pipeline version (default: latest). Use specific version like 0.25.0
+      if needed'
+    name: pipelineVersion
+  description: Guides creation of a Windows golden image via the KubeVirt windows-efi-installer
+    Tekton pipeline
+  messages:
+  - role: user
+    text: |
+      # KubeVirt Windows Golden Image Creator
+
+      The user has accepted the Microsoft EULA.
+
+      ## PipelineRun YAML
+
+      The following PipelineRun will:
+      1. Download the Windows ISO from the provided URL
+      2. Modify it for EFI automated installation
+      3. Create a VM and install Windows
+      4. Produce a bootable DataSource/DataVolume as a golden image
+
+      ```yaml
+      ${yaml(steps.pipelinerun)}```
+
+      ## Next steps
+
+      1. Create the PipelineRun above with `resources_create_or_update` in namespace `${has(args.namespace) && args.namespace != '' ? args.namespace : 'the current namespace'}`.
+      2. Follow its progress with `tekton_logs` (kind pipelinerun) and run it again with `tekton_restart` if it fails.
+      3. When it succeeds, the golden image is available as the `${steps.defaults.baseDvName}` DataSource for new VirtualMachines.
+    when: steps.eula.action == 'accept'
+  - role: user
+    text: |
+      # KubeVirt Windows Golden Image Creator
+
+      ## EULA Notice
+
+      **IMPORTANT:** By setting the `acceptEula` parameter to `"true"` in the PipelineRun below, you agree to the Microsoft Software License Terms for the Windows operating system.
+
+      Before proceeding, you **MUST** ask the user whether they accept the Microsoft End User License Agreement (EULA).
+
+      ---
+
+      ## PipelineRun YAML
+
+      ```yaml
+      ${yaml(steps.pipelinerun)}```
+
+      Only after the user explicitly accepts the EULA: set `acceptEula` to `"true"` and create the PipelineRun with `resources_create_or_update`. Then follow its progress with `tekton_logs` (kind pipelinerun).
+    when: steps.eula.action == 'unsupported'
+  - role: assistant
+    text: The Microsoft EULA was not accepted. The Windows golden image creation has
+      been cancelled.
+    when: steps.eula.action in ['decline', 'cancel']
+  steps:
+  - fail: '!has(args.winImageDownloadURL) || !args.winImageDownloadURL.startsWith(''https://'')
+      || args.winImageDownloadURL.contains(''@'') ? ''winImageDownloadURL must be
+      an https:// URL without embedded credentials'' : (has(args.pipelineVersion)
+      && args.pipelineVersion != '''' && !args.pipelineVersion.matches(''^\\d+\\.\\d+\\.\\d+$'')
+      ? ''invalid pipelineVersion: must be in format X.Y.Z (e.g. 0.25.0)'' : '''')'
+    name: check
+  - expression: 'has(args.windowsVersion) && args.windowsVersion != '''' ? args.windowsVersion
+      : ''2k22'''
+    name: version
+  - fail: '!(steps.version in [''10'', ''11'', ''2k22'', ''2k25'']) ? ''unsupported
+      Windows version '' + steps.version + '': must be one of 10, 11, 2k22, 2k25''
+      : '''''
+    name: supported
+  - expression: '{''10'': {''preferenceName'': ''windows.10.virtio'', ''autounattendConfigMapName'':
+      ''windows10-efi-autounattend'', ''baseDvName'': ''win10'', ''isoDvName'': ''win10'',
+      ''generateName'': ''windows10-installer-run-''}, ''11'': {''preferenceName'':
+      ''windows.11.virtio'', ''autounattendConfigMapName'': ''windows11-autounattend'',
+      ''baseDvName'': ''win11'', ''isoDvName'': ''win11'', ''generateName'': ''windows11-installer-run-''},
+      ''2k22'': {''preferenceName'': ''windows.2k22.virtio'', ''autounattendConfigMapName'':
+      ''windows2k22-autounattend'', ''baseDvName'': ''win2k22'', ''isoDvName'': ''win2k22'',
+      ''generateName'': ''windows2k22-installer-run-''}, ''2k25'': {''preferenceName'':
+      ''windows.2k25.virtio'', ''autounattendConfigMapName'': ''windows2k25-autounattend'',
+      ''baseDvName'': ''win2k25'', ''isoDvName'': ''win2k25'', ''generateName'': ''windows2k25-installer-run-''}}[steps.version]'
+    name: defaults
+  - elicit:
+      message: 'Microsoft EULA Notice: By proceeding, you agree to the Microsoft Software
+        License Terms for the Windows operating system. Do you accept the Microsoft
+        End User License Agreement (EULA)?'
+    name: eula
+  - expression: '{''apiVersion'': ''tekton.dev/v1'', ''kind'': ''PipelineRun'', ''metadata'':
+      merge({''generateName'': steps.defaults.generateName}, has(args.namespace) &&
+      args.namespace != '''' ? {''namespace'': args.namespace} : {}), ''spec'': {''params'':
+      [{''name'': ''winImageDownloadURL'', ''value'': args.winImageDownloadURL}, {''name'':
+      ''acceptEula'', ''value'': steps.eula.action == ''accept'' ? ''true'' : ''false''},
+      {''name'': ''preferenceName'', ''value'': steps.defaults.preferenceName}, {''name'':
+      ''autounattendConfigMapName'', ''value'': steps.defaults.autounattendConfigMapName},
+      {''name'': ''baseDvName'', ''value'': steps.defaults.baseDvName}, {''name'':
+      ''isoDVName'', ''value'': steps.defaults.isoDvName}], ''pipelineRef'': {''resolver'':
+      ''hub'', ''params'': [{''name'': ''catalog'', ''value'': ''kubevirt-tekton-pipelines''},
+      {''name'': ''type'', ''value'': ''artifact''}, {''name'': ''kind'', ''value'':
+      ''pipeline''}, {''name'': ''name'', ''value'': ''windows-efi-installer''}] +
+      (has(args.pipelineVersion) && args.pipelineVersion != '''' ? [{''name'': ''version'',
+      ''value'': args.pipelineVersion}] : [])}, ''taskRunTemplate'': {''podTemplate'':
+      {''securityContext'': {''runAsUser'': 107, ''fsGroup'': 107}}}}}'
+    name: pipelinerun
+  title: KubeVirt Windows Golden Image Creator
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-hco-status
+spec:
+  toolset: kubevirt
+  description: Generate a status report for the HyperConverged Cluster Operator (HCO)
+    managing KubeVirt and related components
+  messages:
+  - role: user
+    text: |
+      # KubeVirt HyperConverged Cluster Operator Status Report
+
+      ## HCO: ${steps.hco.metadata.name} (namespace: ${steps.hco.metadata.namespace})
+
+      Use this report to understand the current state of the HyperConverged Cluster Operator and all components it manages.
+
+      ---
+
+      ## Step 1: HCO Conditions and Versions
+
+      Check the HCO conditions:
+      - **Available** should be True — the operator and all components are running
+      - **Progressing** should be False — no reconciliation in progress
+      - **Degraded** should be False — no component failures
+      - **TaintedConfiguration** indicates manual modifications to managed CRs via jsonpatch annotations
+      - **Upgradeable** indicates whether the operator can be safely upgraded
+
+      ```yaml
+      ${yaml({'conditions': has(steps.hco.status) && has(steps.hco.status.conditions) ? steps.hco.status.conditions : [], 'versions': has(steps.hco.status) && has(steps.hco.status.versions) ? steps.hco.status.versions : []})}```
+
+      ---
+
+      ## Step 2: HCO Configuration
+
+      Review the active configuration including feature gates and virtualization settings:
+
+      ```yaml
+      ${yaml(has(steps.hco.spec) ? steps.hco.spec : {})}```
+
+      ---
+
+      ## Step 3: Managed Component Status
+
+      HCO manages several components. Each should have its own CR with conditions:
+
+      ### KubeVirt
+      ${has(steps.kubevirts.error) ? '*Error: ' + steps.kubevirts.error + '*' : '```yaml\n' + yaml(steps.kubevirts.items.map(c, {'name': c.metadata.name, 'conditions': has(c.status) && has(c.status.conditions) ? c.status.conditions : [], 'observedKubeVirtVersion': has(c.status) && has(c.status.observedKubeVirtVersion) ? c.status.observedKubeVirtVersion : ''})) + '```'}
+
+      ### CDI
+      ${has(steps.cdis.error) ? '*Error: ' + steps.cdis.error + '*' : '```yaml\n' + yaml(steps.cdis.items.map(c, {'name': c.metadata.name, 'conditions': has(c.status) && has(c.status.conditions) ? c.status.conditions : []})) + '```'}
+
+      ### NetworkAddonsConfig
+      ${has(steps.nacs.error) ? '*Error: ' + steps.nacs.error + '*' : '```yaml\n' + yaml(steps.nacs.items.map(c, {'name': c.metadata.name, 'conditions': has(c.status) && has(c.status.conditions) ? c.status.conditions : []})) + '```'}
+
+      ---
+
+      ## Step 4: Events
+
+      Review events in the HCO namespace for warnings or errors:
+
+      ${has(steps.events.error) ? '*Error listing events: ' + steps.events.error + '*' : (size(steps.events.items) == 0 ? '*No events found*' : '```yaml\n' + yaml(steps.events.items.filter(e, e.type == 'Warning').map(e, {'reason': has(e.reason) ? e.reason : '', 'message': has(e.message) ? e.message : '', 'object': e.involvedObject.kind + '/' + e.involvedObject.name, 'lastTimestamp': has(e.lastTimestamp) ? e.lastTimestamp : ''})) + '```')}
+
+      ---
+
+      ## Analysis
+
+      Based on the data above, determine:
+      1. **Overall Health**: Are all HCO conditions healthy (Available=True, Degraded=False)?
+      2. **Component Health**: Are all managed components (KubeVirt, CDI, Network Addons) available?
+      3. **Configuration**: Are there any non-default feature gates or virtualization settings?
+      4. **Warnings**: Are there any Warning events or TaintedConfiguration conditions?
+      5. **Versions**: What versions are installed for each component?
+  - role: assistant
+    text: I'll analyze the HyperConverged Cluster Operator status report to assess
+      the overall health and configuration.
+  steps:
+  - kubernetes:
+      apiVersion: hco.kubevirt.io/v1
+      kind: HyperConverged
+      namespace:
+        all: true
+      verb: list
+    name: hcos
+  - fail: 'size(steps.hcos.items) == 0 ? ''no HyperConverged resource found in the
+      cluster'' : '''''
+    name: present
+  - expression: steps.hcos.items[0]
+    name: hco
+  - ignoreError: true
+    kubernetes:
+      apiVersion: kubevirt.io/v1
+      kind: KubeVirt
+      namespace:
+        expression: steps.hco.metadata.namespace
+      verb: list
+    name: kubevirts
+  - ignoreError: true
+    kubernetes:
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: CDI
+      verb: list
+    name: cdis
+  - ignoreError: true
+    kubernetes:
+      apiVersion: networkaddonsoperator.network.kubevirt.io/v1
+      kind: NetworkAddonsConfig
+      verb: list
+    name: nacs
+  - ignoreError: true
+    kubernetes:
+      apiVersion: v1
+      kind: Event
+      namespace:
+        expression: steps.hco.metadata.namespace
+      verb: list
+    name: events
+  title: KubeVirt HyperConverged Status
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: vm-create
+spec:
+  toolset: kubevirt
+  arguments:
+  - description: Namespace for the new VirtualMachine
+    name: namespace
+    required: true
+  - description: Name of the new VirtualMachine
+    name: name
+    required: true
+  - description: Workload or OS to run (e.g. fedora, rhel9, windows)
+    name: workload
+  - description: 'Rough size: small, medium or large'
+    name: size
+  - description: 'Performance family: general, compute or memory'
+    name: performance
+  - description: Explicit instancetype name
+    name: instancetype
+  - description: Explicit preference name
+    name: preference
+  - description: Start the VM after creation (true/false)
+    name: autostart
+  description: Gather the DataSources, instancetypes, preferences and templates available
+    for a new VirtualMachine so the right ones can be chosen for the requested workload,
+    then create it. Replaces the vm_create tool's built-in matching heuristics.
+  messages:
+  - role: user
+    text: |
+      # Create the KubeVirt VirtualMachine ${args.namespace}/${args.name}
+
+      Requested: workload `${has(args.workload) ? args.workload : 'not specified'}`, size `${has(args.size) ? args.size : 'not specified'}`, performance `${has(args.performance) ? args.performance : 'not specified'}`${has(args.instancetype) && args.instancetype != '' ? ', instancetype `' + args.instancetype + '`' : ''}${has(args.preference) && args.preference != '' ? ', preference `' + args.preference + '`' : ''}.
+
+      The candidates available in the cluster are listed below. Choose the best match for the request, then create the VM.
+
+      ## VirtualMachineTemplates in ${args.namespace}
+
+      ${has(steps.templates.error) ? '*Templates unavailable: ' + steps.templates.error + '*' : (size(steps.templates.items) == 0 ? '*No VirtualMachineTemplates in this namespace*' : '```yaml\n' + yaml(steps.templates.items.map(t, {'name': t.metadata.name, 'description': has(t.metadata.annotations) && 'description' in t.metadata.annotations ? t.metadata.annotations['description'] : '', 'parameters': has(t.spec) && has(t.spec.parameters) ? t.spec.parameters.map(p, p.name) : []})) + '```')}
+
+      ## DataSources (boot images)
+
+      ${has(steps.datasources.error) ? '*DataSources unavailable: ' + steps.datasources.error + '*' : (size(steps.datasources.items) == 0 ? '*No DataSources found*' : '```yaml\n' + yaml(steps.datasources.items.map(d, {'namespace': d.metadata.namespace, 'name': d.metadata.name, 'labels': has(d.metadata.labels) ? d.metadata.labels : {}})) + '```')}
+
+      ## Preferences
+
+      ${'```yaml\n' + yaml({'cluster': has(steps.clusterPreferences.error) ? [] : steps.clusterPreferences.items.map(p, p.metadata.name), 'namespaced': has(steps.preferences.error) ? [] : steps.preferences.items.map(p, p.metadata.name)}) + '```'}
+
+      ## Instancetypes
+
+      ${'```yaml\n' + yaml({'cluster': has(steps.clusterInstancetypes.error) ? [] : steps.clusterInstancetypes.items.map(i, {'name': i.metadata.name, 'class': has(i.metadata.labels) && 'instancetype.kubevirt.io/class' in i.metadata.labels ? i.metadata.labels['instancetype.kubevirt.io/class'] : '', 'cpu': has(i.spec) && has(i.spec.cpu) ? i.spec.cpu : {}, 'memory': has(i.spec) && has(i.spec.memory) ? i.spec.memory : {}}), 'namespaced': has(steps.instancetypes.error) ? [] : steps.instancetypes.items.map(i, i.metadata.name)}) + '```'}
+
+      ## How to proceed
+
+      1. If a VirtualMachineTemplate matches the workload, prefer `vm_create_from_template` with that template and the requested name and parameters.
+      2. Otherwise pick the DataSource whose name matches the workload, the preference named after the same OS, and an instancetype whose class and size fit the request (`u1` general purpose, `cx1` compute, `m1` memory; `small`/`medium`/`large`), then create this VirtualMachine with `resources_create_or_update`:
+
+      ```yaml
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: ${args.name}
+        namespace: ${args.namespace}
+      spec:
+        runStrategy: ${has(args.autostart) && args.autostart == 'true' ? 'Always' : 'Halted'}
+        instancetype:
+          name: <chosen instancetype>
+        preference:
+          name: <chosen preference>
+        dataVolumeTemplates:
+          - metadata:
+              name: ${args.name}-root
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: <chosen DataSource name>
+                namespace: <chosen DataSource namespace>
+              storage: {}
+        template:
+          spec:
+            domain:
+              devices: {}
+            volumes:
+              - name: root
+                dataVolume:
+                  name: ${args.name}-root
+      ```
+
+      Report which candidates were chosen and why.
+  - role: assistant
+    text: I'll pick the best matching template, boot image, instancetype and preference
+      and create the VirtualMachine.
+  steps:
+  - ignoreError: true
+    kubernetes:
+      apiVersion: template.kubevirt.io/v1beta1
+      kind: VirtualMachineTemplate
+      namespace:
+        argument: namespace
+      verb: list
+    name: templates
+  - ignoreError: true
+    kubernetes:
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataSource
+      namespace:
+        all: true
+      verb: list
+    name: datasources
+  - ignoreError: true
+    kubernetes:
+      apiVersion: instancetype.kubevirt.io/v1beta1
+      kind: VirtualMachineClusterPreference
+      verb: list
+    name: clusterPreferences
+  - ignoreError: true
+    kubernetes:
+      apiVersion: instancetype.kubevirt.io/v1beta1
+      kind: VirtualMachinePreference
+      namespace:
+        argument: namespace
+      verb: list
+    name: preferences
+  - ignoreError: true
+    kubernetes:
+      apiVersion: instancetype.kubevirt.io/v1beta1
+      kind: VirtualMachineClusterInstancetype
+      verb: list
+    name: clusterInstancetypes
+  - ignoreError: true
+    kubernetes:
+      apiVersion: instancetype.kubevirt.io/v1beta1
+      kind: VirtualMachineInstancetype
+      namespace:
+        argument: namespace
+      verb: list
+    name: instancetypes
+  title: 'Virtual Machine: Create'

@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "hco-get-live-migration-config"
   difficulty: medium
   description: "Retrieve and explain the live migration configuration from HCO"

@@ -1,6 +1,6 @@
 # Windows Golden Image Evaluation Tests
 
-Two evaluation tasks for the `windows-golden-image` prompt.
+Two evaluation tasks for the `vm-windows-golden-image` prompt.
 
 ## Tasks
 

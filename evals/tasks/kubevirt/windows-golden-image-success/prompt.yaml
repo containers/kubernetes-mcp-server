@@ -4,13 +4,13 @@ metadata:
   labels:
     suite: kubevirt
     project: kubevirt
-    requires: kubevirt,tekton
+    requires: dynamic
   annotations:
     project-name: "KubeVirt"
     project-url: "https://kubevirt.io"
   name: "windows-golden-image-success"
   difficulty: hard
-  description: "Use the windows-golden-image prompt to generate a Windows golden image creation guide"
+  description: "Use the vm-windows-golden-image prompt to generate a Windows golden image creation guide"
 spec:
   requires:
     - extension: kubernetes
@@ -72,7 +72,7 @@ spec:
         ignoreNotFound: true
   prompt:
     inline: |-
-      Use the windows-golden-image prompt to create a Windows Server 2022 golden image.
+      Use the vm-windows-golden-image prompt to create a Windows Server 2022 golden image.
       Use this ISO URL:
       https://example.com/windows-server-2022.iso
 

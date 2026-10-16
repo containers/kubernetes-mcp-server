@@ -3,7 +3,7 @@ apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
     suite: kubevirt
-    requires: kubevirt
+    requires: dynamic
   name: "troubleshoot-vm-cloudinit-shutdown"
   difficulty: medium
   description: "Diagnose a VM crashlooping due to a shutdown command in cloud-init"

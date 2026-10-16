@@ -1,0 +1,22 @@
+# The ToolSet resource of the kubevirt-mcp-tools chart: the family operators enable as
+# "dynamic/kubevirt", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: kubevirt
+spec:
+  description: KubeVirt virtual machine management and troubleshooting
+  prefix: vm
+  requires:
+    - {apiVersion: kubevirt.io/v1, kind: VirtualMachine}
+  instructions: |
+    KubeVirt tools manage VirtualMachines. Create a VM from a template with
+    vm_create_from_template, or use the vm-create prompt to see the
+    DataSources, instance types and preferences available before choosing;
+    control a running VM with vm_lifecycle. For a VM that does not start or
+    is unreachable, vm_troubleshoot (or the vm-troubleshoot prompt) gathers
+    the VM, its instance, pods, events and logs in one call; vm_guest
+    needs the guest agent, and vm_screenshot shows the console.

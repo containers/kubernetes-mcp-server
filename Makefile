@@ -138,6 +138,7 @@ local-env-setup-kubevirt: ## Setup complete local development environment with M
 	@echo "========================================="
 	$(MAKE) minikube-create-cluster
 	$(MAKE) kubevirt-install
+	$(MAKE) dynamic-tools-install DYNAMIC_TOOLS_CHARTS=kubevirt-mcp-tools
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -145,22 +146,23 @@ local-env-setup-kubevirt: ## Setup complete local development environment with M
 	@echo "========================================="
 	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME)"
+	@echo "  ./$(BINARY_NAME) --toolsets core,config,dynamic --config-dir $(DYNAMIC_TOOLS_CONFIG_DIR)"
 	@echo ""
 	@echo "Or run with MCP inspector:"
-	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --toolsets core,config,dynamic --config-dir $(DYNAMIC_TOOLS_CONFIG_DIR)"
 	@echo ""
 	@echo "KubeVirt is now available!"
 	@echo "Check status with: make kubevirt-status"
 
 .PHONY: local-env-setup-hco
-local-env-setup-hco: ## Setup complete local development environment with Kind cluster and HCO
+local-env-setup-hco: ## Setup complete local development environment with Minikube cluster and HCO
 	@echo "========================================="
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "            with HCO"
 	@echo "========================================="
-	$(MAKE) kind-create-cluster
+	$(MAKE) minikube-create-cluster
 	$(MAKE) hco-install
+	$(MAKE) dynamic-tools-install DYNAMIC_TOOLS_CHARTS=kubevirt-mcp-tools
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -168,10 +170,10 @@ local-env-setup-hco: ## Setup complete local development environment with Kind c
 	@echo "========================================="
 	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME)"
+	@echo "  ./$(BINARY_NAME) --toolsets core,config,dynamic --config-dir $(DYNAMIC_TOOLS_CONFIG_DIR)"
 	@echo ""
 	@echo "Or run with MCP inspector:"
-	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --toolsets core,config,dynamic --config-dir $(DYNAMIC_TOOLS_CONFIG_DIR)"
 	@echo ""
 	@echo "HCO is now available!"
 	@echo "Check status with: make hco-status"
