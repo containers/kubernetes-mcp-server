@@ -7,8 +7,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/obs/tools"
 )
 
 // componentTypeList returns a comma-separated list of valid component types for documentation.
@@ -22,10 +20,10 @@ func componentTypeList() string {
 }
 
 var (
-	listComponentsOutputSchema     = tools.MustSchema[ListComponentsOutput]()
-	getComponentSchemaOutputSchema = tools.MustSchema[GetComponentSchemaOutput]()
-	validateConfigOutputSchema     = tools.MustSchema[ValidateConfigOutput]()
-	getVersionsOutputSchema        = tools.MustSchema[GetVersionsOutput]()
+	listComponentsOutputSchema     = MustSchema[ListComponentsOutput]()
+	getComponentSchemaOutputSchema = MustSchema[GetComponentSchemaOutput]()
+	validateConfigOutputSchema     = MustSchema[ValidateConfigOutput]()
+	getVersionsOutputSchema        = MustSchema[GetVersionsOutput]()
 
 	openTelemetryCollectorGVK = schema.GroupVersionKind{
 		Group:   "opentelemetry.io",
@@ -182,4 +180,13 @@ func initGetVersions(p api.ClusterInspector) api.ServerTool {
 			hasOpenTelemetryCollectorCRD(p),
 		},
 	}
+}
+
+// MustSchema returns the JSON Schema for type T, panicking on error.
+func MustSchema[T any]() *jsonschema.Schema {
+	s, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }

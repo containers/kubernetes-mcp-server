@@ -1,0 +1,204 @@
+# Tool resources of the Loki chart. Converted by hand from the in-tree observability/logs toolset.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: loki-instances
+spec:
+  toolset: loki
+  examples:
+    - summary: "Which Loki instances are there"
+      arguments: {}
+  title: 'Loki: Instances'
+  description: >-
+    List the LokiStack instances of the cluster with their status and gateway URL. Call it first: every other Loki tool takes the lokiNamespace and lokiName it returns, and the tenant to query.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+  steps:
+    - name: stacks
+      kubernetes:
+        verb: list
+        apiVersion: loki.grafana.com/v1
+        kind: LokiStack
+        namespace: {all: true}
+{{- if .Values.useRoute }}
+    - name: routes
+      forEach: steps.stacks.items
+      ignoreError: true
+      kubernetes:
+        verb: list
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        namespace: {expression: item.metadata.namespace}
+{{- end }}
+  output: >-
+    {'instances': range(size(steps.stacks.items)).map(i, {
+      'lokiNamespace': steps.stacks.items[i].metadata.namespace,
+      'lokiName': steps.stacks.items[i].metadata.name,
+      'status': {{ include "loki.status" "steps.stacks.items[i]" }},
+      'url': {{ include "loki.gatewayURL" (dict "stack" "steps.stacks.items[i]" "routes" (ternary "(has(steps.routes[i].items) ? steps.routes[i].items : [])" "[]" .Values.useRoute)) }}
+    })}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: loki-labels
+spec:
+  toolset: loki
+  examples:
+    - summary: "Label names of the last hour"
+      arguments: {"lokiNamespace": "openshift-logging", "lokiName": "logging-loki", "tenant": "application", "start": "NOW-1h", "end": "NOW"}
+    - summary: "Values of the pod label"
+      arguments: {"lokiNamespace": "openshift-logging", "lokiName": "logging-loki", "tenant": "application", "label": "kubernetes_pod_name"}
+  title: 'Loki: Labels'
+  description: >-
+    List the label names Loki knows for a time range, or, with label, the values
+    of that one label. Use it before writing a LogQL query: names first, then the
+    values of the labels you want to match on. Defaults to the last 15 minutes.
+  readOnly: true
+  idempotent: true
+  limit:
+    default: 200
+    max: 2000
+  inputSchema:
+    type: object
+    properties:
+      lokiNamespace:
+        type: string
+        description: >-
+          Namespace of the LokiStack, as listed by loki_instances.
+      lokiName:
+        type: string
+        description: >-
+          Name of the LokiStack, as listed by loki_instances.
+      tenant:
+        type: string
+        description: Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/<tenant>` path; use `network` for openshift-network.
+      label:
+        type: string
+        description: A label name (for example namespace, pod, container) to list the values of. Omit it to list the label names.
+      start:
+        type: string
+      end:
+        type: string
+  steps:
+    - name: check
+      fail: >-
+        ((has(args.start) && args.start != '') != (has(args.end) && args.end != '')) ? 'both start and end must be provided together'
+        : {{ include "loki.tenantCheck" . }}
+    - name: range
+      expression: >-
+        (has(args.start) && args.start != '')
+        ? {'start': time(args.start), 'end': time(args.end)}
+        : {'start': int(now) - 900, 'end': int(now)}
+    - name: order
+      fail: "steps.range.start > steps.range.end ? 'start must be before or equal to end' : ''"
+    {{- include "loki.resolve" . | nindent 4 }}
+    - name: labels
+      http:
+        {{- include "loki.http" . | nindent 8 }}
+        method: GET
+        path:
+          expression: >-
+            {{ include "loki.tenantPath" . }} + ((has(args.label) && args.label != '') ? '/loki/api/v1/label/' + args.label + '/values' : '/loki/api/v1/labels')
+        query:
+          start: {expression: "{{ include "loki.nanos" "steps.range.start" }}"}
+          end: {expression: "{{ include "loki.nanos" "steps.range.end" }}"}
+    - name: status
+      fail: "(!has(steps.labels.status) || steps.labels.status != 'success') ? 'loki labels request failed: ' + (has(steps.labels.error) ? string(steps.labels.error) : '') : ''"
+  output: >-
+    (has(args.label) && args.label != '')
+    ? {'label': args.label, 'values': has(steps.labels.data) ? steps.labels.data : []}
+    : {'labels': has(steps.labels.data) ? steps.labels.data : []}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: loki-query
+spec:
+  toolset: loki
+  examples:
+    - summary: "Error lines of a namespace in the last 15 minutes"
+      arguments: {"lokiNamespace": "openshift-logging", "lokiName": "logging-loki", "tenant": "application", "query": "{kubernetes_namespace_name=\"payments\"} |= \"error\"", "duration": "15m", "limit": 50}
+  title: 'Loki: Query'
+  description: >-
+    Run a LogQL query and return the matching streams with their log lines. Start with precise label matchers (from loki_labels), a short window and a small limit, and widen only when needed. Defaults to the last 15 minutes and 100 lines, newest first.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [query]
+    properties:
+      lokiNamespace:
+        type: string
+        description: >-
+          Namespace of the LokiStack, as listed by loki_instances.
+      lokiName:
+        type: string
+        description: >-
+          Name of the LokiStack, as listed by loki_instances.
+      tenant:
+        type: string
+        description: Loki tenant ID (X-Scope-OrgID). For LokiStack gateway modes (e.g. openshift-network) this selects the `/api/logs/v1/<tenant>` path; use `network` for openshift-network.
+      query:
+        type: string
+        description: LogQL query string.
+      start:
+        type: string
+      end:
+        type: string
+      duration:
+        type: string
+        pattern: ^\d+[smhdwy]$
+      limit:
+        type: integer
+        description: >-
+          Maximum number of log lines (default 100, at most 1000).
+      direction:
+        type: string
+        description: >-
+          Order of the lines: backward returns the newest first.
+        enum: [backward, forward]
+        default: backward
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.query) && args.query != '') ? 'query parameter is required and must be a string'
+        : ((has(args.start) && args.start != '') != (has(args.end) && args.end != '')) ? 'both start and end must be provided together'
+        : (has(args.duration) && args.duration != '' && seconds(args.duration) <= 0) ? 'duration must be positive'
+        : (has(args.direction) && args.direction != '' && args.direction != 'backward' && args.direction != 'forward') ? 'direction must be either backward or forward'
+        : {{ include "loki.tenantCheck" . }}
+    - name: range
+      expression: >-
+        (has(args.start) && args.start != '')
+        ? {'start': time(args.start), 'end': time(args.end)}
+        : {'start': int(now) - ((has(args.duration) && args.duration != '') ? seconds(args.duration) : 900), 'end': int(now)}
+    - name: order
+      fail: "steps.range.start > steps.range.end ? 'start must be before or equal to end' : ''"
+    {{- include "loki.resolve" . | nindent 4 }}
+    - name: result
+      http:
+        {{- include "loki.http" . | nindent 8 }}
+        method: GET
+        path:
+          expression: >-
+            {{ include "loki.tenantPath" . }} + '/loki/api/v1/query_range'
+        query:
+          query: {argument: query}
+          start: {expression: "{{ include "loki.nanos" "steps.range.start" }}"}
+          end: {expression: "{{ include "loki.nanos" "steps.range.end" }}"}
+          direction: {expression: "(has(args.direction) && args.direction != '') ? args.direction : 'backward'"}
+          limit: {expression: "(!has(args.limit) || int(args.limit) <= 0) ? 100 : (int(args.limit) > 1000 ? 1000 : int(args.limit))"}
+    - name: status
+      fail: "(!has(steps.result.status) || steps.result.status != 'success') ? 'loki query_range request failed: ' + (has(steps.result.error) ? string(steps.result.error) : '') : ''"
+  output: >-
+    {'resultType': steps.result.data.resultType,
+     'streams': steps.result.data.result.map(r, {'labels': r.stream, 'entries': r.values.filter(v, size(v) >= 2).map(v, {'timestamp': v[0], 'line': v[1]})})}

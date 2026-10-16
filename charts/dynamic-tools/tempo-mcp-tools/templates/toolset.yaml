@@ -1,0 +1,37 @@
+# The ToolSet resource of the tempo-mcp-tools chart: the family operators enable as
+# "dynamic/tempo", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: tempo
+spec:
+  identity: {{ .Values.identity | default "caller" | quote }}
+  description: Tempo distributed tracing through TempoStack and TempoMonolithic instances (observability/traces)
+  prefix: tempo
+  requires:
+    - {apiVersion: tempo.grafana.com/v1alpha1, kind: TempoStack}
+  instructions: |
+    Tempo tools search and read distributed traces. Call tempo_instances
+    first: its tempoNamespace, tempoName and tenant values are required by
+    every other Tempo tool. Do not query across several instances or tenants
+    unless asked; when the instance or tenant is not given, ask which one.
+    Discover attribute names and values with tempo_tags before writing a
+    TraceQL query. For "slow" requests, establish a latency baseline with a
+    tempo_search without a duration filter before choosing a threshold,
+    unless the user gave one.
+
+    TraceQL for tempo_search: a query is filters joined by && inside curly
+    braces, e.g. { resource.service.name="frontend" && duration>2s }. Prefix
+    attributes with their scope: resource.service.name,
+    resource.k8s.namespace.name, resource.k8s.deployment.name (also
+    statefulset, daemonset, replicaset, pod, container, job, cronjob, node,
+    cluster), span.http.response.status_code (a number, no quotes),
+    span.http.request.method, span.url.full; the intrinsics name, duration
+    (100ms, 2s, 5m) and status take no prefix. status values are keywords:
+    status=error, never status="error". Operators: =, !=, >, <, >=, <=.
+    Older instrumentation may use span.http.status_code. When the user names
+    a Kubernetes resource, filter on the matching resource.k8s.* attribute,
+    not on resource.service.name. It is not SQL, PromQL or Lucene.

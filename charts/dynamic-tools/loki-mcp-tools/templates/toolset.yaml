@@ -1,0 +1,22 @@
+# The ToolSet resource of the loki-mcp-tools chart: the family operators enable as
+# "dynamic/loki", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: loki
+spec:
+  identity: {{ .Values.identity | default "caller" | quote }}
+  description: Loki log queries through LokiStack instances (observability/logs)
+  prefix: loki
+  requires:
+    - {apiVersion: loki.grafana.com/v1, kind: LokiStack}
+  instructions: |
+    Loki tools query logs through the LokiStack instances of the cluster.
+    Start with loki_instances and pass its lokiNamespace and lokiName to the
+    other tools. Discover label names and then their values with
+    loki_labels before writing a LogQL query, then loki_query with precise
+    label matchers, a short time window and a small limit first; broad
+    queries without matchers are expensive and noisy.

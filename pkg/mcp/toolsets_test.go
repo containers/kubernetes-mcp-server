@@ -18,10 +18,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/logs"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/otelcol"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/traces"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
@@ -255,10 +252,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
-		&logs.Toolset{},
-		&metrics.Toolset{},
 		&otelcol.Toolset{},
-		&traces.Toolset{},
 	}
 	for _, testCase := range testCases {
 		s.Run("Toolset "+testCase.GetName(), func() {

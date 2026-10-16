@@ -1,0 +1,23 @@
+# The ToolSet resource of the prometheus-mcp-tools chart: the family operators enable as
+# "dynamic/prometheus", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prometheus
+spec:
+  identity: {{ .Values.identity | default "caller" | quote }}
+  description: Prometheus and Alertmanager queries (observability/metrics)
+  prefix: prom
+  instructions: |
+    Prometheus tools query metrics and Alertmanager alerts. When the question
+    is about something being wrong right now, start with prom_alerts: alert
+    labels carry the exact namespaces, pods and jobs to query next. Before
+    any PromQL query, find the exact metric name with prom_metrics (names
+    differ between clusters; always give a specific match, never a blanket
+    one), then prom_labels for the dimensions to filter on and their values.
+    Use prom_query for the current value, and give it a duration or start and
+    end for a trend; prom_chart draws the same range as a chart, as the last
+    step.

@@ -10,7 +10,6 @@ import (
 	serverconfig "github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/os-observability/redhat-opentelemetry-collector/configschemas"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/obs/toolcfg"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 )
 
@@ -83,7 +82,7 @@ func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) 
 
 // getConfig retrieves the otelcol toolset configuration from params.
 func getConfig(params api.ToolHandlerParams) *Config {
-	if cfg, ok := toolcfg.From(params, ToolsetName); ok {
+	if cfg, ok := From(params, ToolsetName); ok {
 		if otelcolCfg, ok := cfg.(*Config); ok {
 			return otelcolCfg
 		}

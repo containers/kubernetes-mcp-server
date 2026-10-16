@@ -1,0 +1,9 @@
+apiVersion: v2
+name: tempo-mcp-tools
+description: >-
+  The kubernetes-mcp-server observability/traces (Tempo) toolset delivered as
+  Tool custom resources, versioned and released independently of the server.
+type: application
+version: 0.1.0
+appVersion: "2.8"
+keywords: [tempo, tempostack, tracing, traceql, observability, mcp, kubernetes-mcp-server]

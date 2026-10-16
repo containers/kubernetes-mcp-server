@@ -1,0 +1,399 @@
+# Tool resources of the Prometheus chart. Converted by hand from the in-tree observability/metrics toolset.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-metrics
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Metric names about pods"
+      arguments: {"match": "kube_pod_.*"}
+  limit:
+    default: 200
+    max: 2000
+    field: metrics
+    narrowWith: [match]
+  title: 'Prometheus: Metrics'
+  description: >-
+    List the metric names Prometheus has that match a regular expression. Call it before any query: metric names differ between clusters, and a query on a name that does not exist returns nothing. Match a substring with wildcards ('.*tsdb.*'), a prefix with 'kube_pod.*'; a blanket '.*' lists everything and is refused.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [match]
+    properties:
+      match:
+        type: string
+        description: >-
+          Regular expression the metric names must match, e.g. 'kube_pod.*', '.*memory.*', 'node_.*'. Not a blanket '.*' or '.+'.
+  steps:
+    - name: check
+      fail: >-
+        !has(args.match) ? 'match parameter is required and must be a string'
+        : (args.match.contains('"') || args.match.contains('}')) ? 'invalid match "' + args.match + '": contains disallowed characters'
+        : ''
+    - name: names
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/label/__name__/values
+        queryExpression: >-
+          {'match[]': (args.match == '.*' || args.match == '.+' || args.match == '') ? dyn(null) : dyn(['{__name__=~"' + args.match + '"}']),
+           'start': int(now) - 3600, 'end': int(now)}
+  output: "{'metrics': steps.names.data}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-query
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Pods not ready right now"
+      arguments: {"query": "sum(kube_pod_status_ready{condition=\"false\"})"}
+    - summary: "CPU of a deployment over the last hour"
+      arguments: {"query": "sum(rate(container_cpu_usage_seconds_total{pod=~\"api-.*\"}[5m]))", "duration": "1h", "step": "1m"}
+  title: 'Prometheus: Query'
+  description: |-
+    Run a PromQL query. Without a time range it is an instant query and returns the current value of every matching series ("how many pods are pending?", "what is the error rate now?").
+    With duration, or start and end, it is a range query and returns one summary per series (count, first, last, min, max, avg, delta) at step resolution ("what was CPU usage over the last hour?", "were there restarts in the last 5 minutes?").
+    Use metric names returned by prom_metrics; names differ between clusters.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [query]
+    properties:
+      query:
+        type: string
+        description: PromQL query, using metric names returned by prom_metrics.
+      time:
+        type: string
+        description: Evaluation time of an instant query, in the same forms as start. Defaults to now.
+      start:
+        type: string
+      end:
+        type: string
+      duration:
+        type: string
+        pattern: ^\d+[smhdwy]$
+      step:
+        type: string
+        description: "Resolution of a range query (e.g. '15s', '1m', '1h'). Defaults to a sixtieth of the range, at least 15s."
+        pattern: ^\d+(ms|[smhdwy])$
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.query) && args.query != '') ? 'query parameter is required and must be a string'
+        : ((has(args.start) && args.start != '') != (has(args.end) && args.end != '')) ? 'both start and end must be provided together'
+        : (has(args.step) && args.step != '' && !args.step.matches('^[0-9]+(ms|[smhdwy])$')) ? 'invalid step format: expected <number><unit> with unit ms, s, m, h, d, w or y'
+        : (has(args.duration) && args.duration != '' && !args.duration.matches('^[0-9]+[smhdwy]$')) ? 'invalid duration format: expected <number><unit> with unit s, m, h, d, w or y'
+        : ''
+    - name: range
+      expression: >-
+        (has(args.start) && args.start != '')
+        ? {'start': time(args.start), 'end': time(args.end)}
+        : (has(args.duration) && args.duration != '')
+          ? {'start': int(now) - seconds(args.duration), 'end': int(now)}
+          : (has(args.step) && args.step != '')
+            ? {'start': int(now) - 3600, 'end': int(now)}
+            : {}
+    - name: step
+      expression: >-
+        !has(steps.range.start) ? ''
+        : (has(args.step) && args.step != '') ? args.step
+        : string(math.greatest(15, (steps.range.end - steps.range.start) / 60)) + 's'
+    - name: instant
+      when: "!has(steps.range.start)"
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/query
+        query:
+          query: {argument: query}
+          time: {expression: "(has(args.time) && args.time != '') ? time(args.time) : int(now)"}
+    - name: result
+      when: has(steps.range.start)
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/query_range
+        query:
+          query: {argument: query}
+          step: {expression: steps.step}
+          start: {expression: steps.range.start}
+          end: {expression: steps.range.end}
+    - name: series
+      when: has(steps.range.start)
+      expression: >-
+        (has(steps.result.data) && has(steps.result.data.resultType) && steps.result.data.resultType == 'matrix')
+        ? steps.result.data.result.map(s, {'metric': s.metric, 'values': s.values, 'finite': s.values.map(v, double(v[1])).filter(x, math.isFinite(x))})
+        : []
+    - name: summary
+      when: has(steps.range.start)
+      expression: >-
+        {{ include "prom.seriesSummary" "steps.series" }}
+  output: >-
+    !has(steps.range.start)
+    ? {'resultType': steps.instant.data.resultType,
+       'result': steps.instant.data.resultType == 'vector' ? steps.instant.data.result : [],
+       'warnings': has(steps.instant.warnings) ? steps.instant.warnings : []}
+    : {{ include "prom.rangeQueryOutput" . }}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-chart
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Chart of the 5xx rate by pod over the last hour"
+      arguments: {"query": "sum(rate(http_requests_total{code=~\"5..\"}[5m])) by (pod)", "step": "1m", "duration": "1h", "title": "5xx rate by pod"}
+  title: 'Prometheus: Chart'
+  description: >-
+    Draw a range query as an interactive time-series chart in clients that render one, instead of returning the data. Use it last, when the user wants to see a graph, after the numbers were established with prom_query; title and description label the chart.
+  readOnly: true
+  idempotent: true
+  meta:
+    olsUi:
+      id: mcp-obs/show-timeseries
+  inputSchema:
+    type: object
+    required: [query, step]
+    properties:
+      {{- include "prom.rangeQueryArgs" . | nindent 6 }}
+      title:
+        type: string
+        description: Human-readable chart title describing what the query shows (e.g., 'API Error Rate Over Last Hour'). Displayed above the chart when provided.
+      description:
+        type: string
+        description: Explanation of the chart's meaning or context (e.g., 'Shows the rate of HTTP 5xx errors per second, broken down by pod'). Displayed below the title when provided.
+  steps:
+    {{- include "prom.rangeQuerySteps" . | nindent 4 }}
+  # The query ran and was valid; the chart itself is rendered by the client from the arguments.
+  output: "{}"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-labels
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Labels of a metric"
+      arguments: {"metric": "kube_pod_info"}
+    - summary: "Namespaces that have pods"
+      arguments: {"label": "namespace", "metric": "kube_pod_info"}
+  limit:
+    default: 200
+    max: 2000
+    narrowWith: [metric]
+  title: 'Prometheus: Labels'
+  description: |-
+    List the label names (dimensions) a metric can be filtered by, or, with label, the values one label takes.
+    Use it after prom_metrics and before writing label matchers: names first, then the values of the labels you want to match (namespace names, pod names, ...).
+    Defaults to the last hour; scope it to one metric with metric.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      label:
+        type: string
+        description: A label name to list the values of. Omit it to list the label names.
+      metric:
+        type: string
+        description: Metric name (from prom_metrics) to scope the result to. Leave empty for all metrics.
+      start:
+        type: string
+      end:
+        type: string
+  steps:
+    - name: range
+      expression: >-
+        {{ include "prom.range" . }}
+    - name: labels
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path:
+          expression: "(has(args.label) && args.label != '') ? '/api/v1/label/' + args.label + '/values' : '/api/v1/labels'"
+        query:
+          match[]: {argument: metric}
+          start: {expression: steps.range.start}
+          end: {expression: steps.range.end}
+  output: >-
+    (has(args.label) && args.label != '')
+    ? {'label': args.label, 'values': steps.labels.data}
+    : {'labels': steps.labels.data}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-series
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Series of a metric in one namespace"
+      arguments: {"selector": "kube_pod_info{namespace=\"payments\"}"}
+  limit:
+    default: 100
+    max: 1000
+    field: series
+    narrowWith: [selector]
+  title: 'Prometheus: Series'
+  description: >-
+    List the time series that match a selector, to check that label matchers select what was meant and how many series a query would touch before running it. Under a hundred series is cheap; above a thousand, add label matchers. Defaults to the last hour.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    required: [selector]
+    properties:
+      selector:
+        type: string
+        description: >-
+          PromQL series selector, e.g. 'kube_pod_info{namespace="payments"}', using metric names from prom_metrics.
+      start:
+        type: string
+      end:
+        type: string
+  steps:
+    - name: check
+      fail: >-
+        !(has(args.selector) && args.selector != '') ? 'matches parameter is required and must be a string' : ''
+    - name: range
+      expression: >-
+        {{ include "prom.range" . }}
+    - name: series
+      http:
+        {{- include "prom.http" . | nindent 8 }}
+        path: /api/v1/series
+        query:
+          match[]: {argument: selector}
+          start: {expression: steps.range.start}
+          end: {expression: steps.range.end}
+  output: "{'series': steps.series.data, 'cardinality': size(steps.series.data)}"
+{{- if .Values.alertmanagerUrl }}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-alerts
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Alerts firing right now"
+      arguments: {"active": true}
+  limit:
+    default: 100
+    max: 1000
+    field: alerts
+    narrowWith: [filter, active, receiver]
+  title: 'Alertmanager: Alerts'
+  description: >-
+    List the alerts Alertmanager knows, with their labels, annotations, state and since when. Start here when something is wrong: the labels carry the exact namespaces, pods and jobs to query next, and an alert the user names is found by filter. Without filters every alert is returned.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      active:
+        type: boolean
+        description: >-
+          Only alerts that are active (not resolved).
+      silenced:
+        type: boolean
+        description: >-
+          Only alerts that are silenced.
+      inhibited:
+        type: boolean
+        description: >-
+          Only alerts that are inhibited.
+      unprocessed:
+        type: boolean
+        description: >-
+          Only alerts not yet processed.
+      filter:
+        type: string
+        description: >-
+          Label matchers the alerts must satisfy, e.g. 'alertname=HighCPU' or 'severity=critical, namespace=payments'.
+      receiver:
+        type: string
+        description: >-
+          Only alerts routed to this receiver.
+  http:
+    {{- include "prom.alertmanagerHttp" . | nindent 4 }}
+    path: /api/v2/alerts
+    queryExpression: >-
+      {'active': has(args.active) ? dyn(string(args.active)) : dyn(null),
+       'silenced': has(args.silenced) ? dyn(string(args.silenced)) : dyn(null),
+       'inhibited': has(args.inhibited) ? dyn(string(args.inhibited)) : dyn(null),
+       'unprocessed': has(args.unprocessed) ? dyn(string(args.unprocessed)) : dyn(null),
+       'filter': (has(args.filter) && args.filter != '') ? dyn(args.filter.split(',').map(f, f.trim())) : dyn(null),
+       'receiver': (has(args.receiver) && args.receiver != '') ? dyn(args.receiver) : dyn(null)}
+  output: >-
+    {'alerts': response.map(a, {
+      'labels': has(a.labels) ? a.labels : {},
+      'annotations': has(a.annotations) ? a.annotations : {},
+      'startsAt': has(a.startsAt) ? a.startsAt : '',
+      'endsAt': has(a.endsAt) ? a.endsAt : '',
+      'status': {
+        'state': (has(a.status) && has(a.status.state)) ? a.status.state : '',
+        'silencedBy': (has(a.status) && has(a.status.silencedBy)) ? a.status.silencedBy : [],
+        'inhibitedBy': (has(a.status) && has(a.status.inhibitedBy)) ? a.status.inhibitedBy : []}})}
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: prom-silences
+spec:
+  toolset: prometheus
+  examples:
+    - summary: "Silences on one alert"
+      arguments: {"filter": "alertname=HighCPU"}
+  limit:
+    default: 100
+    max: 1000
+    field: silences
+    narrowWith: [filter]
+  title: 'Alertmanager: Silences'
+  description: >-
+    List the silences of Alertmanager: which label matchers are muted, by whom, since and until when, and whether each is active, pending or expired. Use it to explain why an alert is not notifying.
+  readOnly: true
+  idempotent: true
+  inputSchema:
+    type: object
+    properties:
+      filter:
+        type: string
+        description: >-
+          Label matchers the silences must match, e.g. 'alertname=HighCPU'.
+  http:
+    {{- include "prom.alertmanagerHttp" . | nindent 4 }}
+    path: /api/v2/silences
+    queryExpression: >-
+      {'filter': (has(args.filter) && args.filter != '') ? dyn(args.filter.split(',').map(f, f.trim())) : dyn(null)}
+  output: >-
+    {'silences': response.map(s, {
+      'id': has(s.id) ? s.id : '',
+      'status': {'state': (has(s.status) && has(s.status.state)) ? s.status.state : ''},
+      'matchers': (has(s.matchers) ? s.matchers : []).map(m, {
+        'name': has(m.name) ? m.name : '', 'value': has(m.value) ? m.value : '',
+        'isRegex': has(m.isRegex) && m.isRegex, 'isEqual': !has(m.isEqual) || m.isEqual}),
+      'startsAt': has(s.startsAt) ? s.startsAt : '',
+      'endsAt': has(s.endsAt) ? s.endsAt : '',
+      'createdBy': has(s.createdBy) ? s.createdBy : '',
+      'comment': has(s.comment) ? s.comment : ''})}
+{{- end }}

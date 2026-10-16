@@ -8,8 +8,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/os-observability/redhat-opentelemetry-collector/configschemas"
-
-	"github.com/containers/kubernetes-mcp-server/pkg/obs/toolcfg"
 )
 
 type mockToolCallRequest struct {
@@ -23,7 +21,7 @@ func (m *mockToolCallRequest) GetArguments() map[string]any {
 func handlerParams(t *testing.T, args map[string]any) api.ToolHandlerParams {
 	t.Helper()
 	return api.ToolHandlerParams{
-		Context: toolcfg.With(t.Context(), ToolsetName, &Config{SchemaFS: configschemas.Schemas}),
+		Context: With(t.Context(), ToolsetName, &Config{SchemaFS: configschemas.Schemas}),
 		Request: &mockToolCallRequest{arguments: args},
 	}
 }
