@@ -524,7 +524,8 @@ func toolsetContextFor(provider internalk8s.Provider, cfg *Configuration) api.To
 		ServerClients: func(ctx context.Context, target string) (api.KubernetesClient, error) {
 			return provider.GetServerKubernetes(ctx, target)
 		},
-		DefaultTarget: provider.GetDefaultTarget(),
+		DefaultTarget:    provider.GetDefaultTarget(),
+		AllowedHTTPHosts: cfg.AllowedHTTPHosts.Get(),
 	}
 }
 

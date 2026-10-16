@@ -262,6 +262,12 @@ type Config struct {
 	ClusterAuthMode Option[string]
 	// DeniedResources are GVKs that tools must not access.
 	DeniedResources Option[[]GroupVersionKind]
+	// AllowedHTTPHosts bounds the hosts dynamic Tool http actions may send
+	// credentials to. Empty (the default) allows any host: the trust model
+	// is then whoever can create Tool resources. Entries are exact hosts or
+	// "*.domain" wildcards matching subdomains; a port may be given and is
+	// ignored.
+	AllowedHTTPHosts Option[[]string]
 	// When true, expose only tools annotated with readOnlyHint=true.
 	ReadOnly Option[bool]
 	// When true, disable tools annotated with destructiveHint=true.
@@ -407,7 +413,21 @@ func newConfig() *Config {
 		ClusterProviderStrategy: opt("cluster_provider_strategy", "").desc("How the server finds clusters"),
 		ClusterAuthMode: opt("cluster_auth_mode", "").reload().validate(validateClusterAuthModeValue).
 			desc("How the MCP server authenticates to the cluster"),
-		DeniedResources:    opt("denied_resources", []GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
+		DeniedResources: opt("denied_resources", []GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
+		AllowedHTTPHosts: opt("allowed_http_hosts", []string(nil)).reload().validate(func(v []string) error {
+			for _, entry := range v {
+				entry = strings.TrimSpace(entry)
+				switch {
+				case entry == "":
+					return fmt.Errorf("allowed_http_hosts must not contain empty entries")
+				case strings.Contains(entry, "://"):
+					return fmt.Errorf("allowed_http_hosts entries are hosts, not URLs: %q", entry)
+				case entry == "*" || entry == "*.":
+					return fmt.Errorf("allowed_http_hosts wildcard %q must name a domain; an empty list already allows every host", entry)
+				}
+			}
+			return nil
+		}).desc("Hosts that dynamic Tool http actions may send the caller's credentials to (exact hosts or *.domain wildcards, port ignored); empty allows any host"),
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
 		ValidationEnabled:  opt("validation_enabled", false).reload().desc("Enable pre-execution validation of tool calls"),

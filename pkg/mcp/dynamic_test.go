@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -548,6 +549,108 @@ spec:
 		s.Equal("ShadowsBuiltIn", conditions[0].(map[string]any)["reason"])
 		s.Contains(conditions[0].(map[string]any)["message"], "pods_list")
 		s.Contains(conditions[0].(map[string]any)["message"], "core")
+	})
+}
+
+func (s *DynamicToolsSuite) TestHTTPHostAllowlist() {
+	s.Cfg.AllowedHTTPHosts.SetForTest([]string{"allowed.example.com"})
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: denied-url
+spec:
+  description: Calls a host the operator has not allowed
+  readOnly: true
+  http: {url: "https://denied.example.com"}
+`)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: computed-url
+spec:
+  description: Computes its host at call time
+  readOnly: true
+  inputSchema:
+    type: object
+    properties:
+      path: {type: string}
+  http:
+    urlExpression: "'https://denied.example.com'"
+    path: {argument: path}
+`)
+	s.createPrompt(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  name: denied-url-prompt
+spec:
+  description: Calls a host the operator has not allowed
+  steps:
+    - name: call
+      http: {url: "https://denied.example.com"}
+  messages:
+    - role: user
+      text: hi
+`)
+	s.createPrompt(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Prompt
+metadata:
+  name: computed-url-prompt
+spec:
+  description: Computes its host at call time
+  steps:
+    - name: call
+      http:
+        urlExpression: "'https://denied.example.com'"
+        path: /
+  messages:
+    - role: user
+      text: hi
+`)
+	s.InitMcpClient()
+	s.Run("a fixed url outside the list is withheld at registration", func() {
+		s.Nil(s.findTool("denied_url"))
+		object, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR).Get(s.T().Context(), "denied-url", metav1.GetOptions{})
+		s.Require().NoError(err)
+		conditions, _, _ := unstructured.NestedSlice(object.Object, "status", "conditions")
+		s.Require().Len(conditions, 1)
+		s.Equal("Withheld", conditions[0].(map[string]any)["reason"])
+		s.Contains(conditions[0].(map[string]any)["message"], "denied.example.com")
+	})
+	s.Run("a urlExpression host is refused at call time, when it is known", func() {
+		s.NotNil(s.findTool("computed_url"), "there is nothing to check at registration")
+		result, err := s.CallTool("computed_url", map[string]any{"path": "/x"})
+		s.Require().NoError(err)
+		s.True(result.IsError)
+		s.Contains(s.text(result), "denied.example.com")
+		s.Contains(s.text(result), "allowed_http_hosts")
+	})
+	s.Run("a prompt with a fixed url outside the list is withheld at registration", func() {
+		prompts, err := s.ListPrompts()
+		s.Require().NoError(err)
+		for _, prompt := range prompts.Prompts {
+			s.NotEqual("denied-url-prompt", prompt.Name, "withheld, not listed")
+		}
+		object, err := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.PromptGVR).Get(s.T().Context(), "denied-url-prompt", metav1.GetOptions{})
+		s.Require().NoError(err)
+		conditions, _, _ := unstructured.NestedSlice(object.Object, "status", "conditions")
+		s.Require().Len(conditions, 1)
+		s.Equal("Withheld", conditions[0].(map[string]any)["reason"])
+	})
+	s.Run("a prompt's urlExpression host is refused at call time too", func() {
+		prompts, err := s.ListPrompts()
+		s.Require().NoError(err)
+		var found bool
+		for _, prompt := range prompts.Prompts {
+			found = found || prompt.Name == "computed-url-prompt"
+		}
+		s.True(found, "there is nothing to check at registration")
+		_, err = s.GetPrompt("computed-url-prompt", map[string]string{})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "allowed_http_hosts")
 	})
 }
 
@@ -1324,28 +1427,6 @@ func (s *DynamicToolsSuite) createDeployment(name string, replicas int32) {
 	s.Require().NoError(err, "failed to create Deployment")
 }
 
-// loadToolManifests creates every Tool document of a manifest file. Chart
-// templates without Helm values (tekton, kubevirt) are plain YAML.
-func (s *DynamicToolsSuite) loadToolManifests(path string) {
-	// A chart's Tools name the family of its toolset.yaml; create it too.
-	if toolset := filepath.Join(filepath.Dir(path), "toolset.yaml"); toolset != path {
-		if raw, err := os.ReadFile(toolset); err == nil {
-			s.createToolSet(string(raw))
-		}
-	}
-	raw, err := os.ReadFile(path)
-	s.Require().NoError(err)
-	// Checkouts with CRLF line endings (Windows) must split the same way.
-	for _, doc := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n---") {
-		switch {
-		case strings.Contains(doc, "kind: ToolSet"):
-			s.createToolSet(doc)
-		case strings.Contains(doc, "kind: Tool"):
-			s.createTool(doc)
-		}
-	}
-}
-
 func (s *DynamicToolsSuite) createUnstructured(gvr schema.GroupVersionResource, manifest string) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	s.Require().NoError(yaml.Unmarshal([]byte(manifest), &obj.Object))
@@ -1401,7 +1482,7 @@ func (s *DynamicToolsSuite) TestTektonChartTools() {
 		s.Require().NoError(EnvTestEnableCRD(ctx, "tekton.dev", "v1", resource))
 	}
 	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
-	s.loadToolManifests(filepath.Join("..", "..", "charts", "dynamic-tools", "tekton-mcp-tools", "templates", "tools.yaml"))
+	s.loadChart("tekton-mcp-tools")
 	pipelineRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
 	taskRuns := schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
 	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
@@ -1501,7 +1582,7 @@ func (s *DynamicToolsSuite) TestKubevirtChartTools() {
 		s.Require().NoError(EnvTestEnableCRD(ctx, "kubevirt.io", "v1", resource))
 	}
 	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
-	s.loadToolManifests(filepath.Join("..", "..", "charts", "dynamic-tools", "kubevirt-mcp-tools", "templates", "tools.yaml"))
+	s.loadChart("kubevirt-mcp-tools")
 	vms := schema.GroupVersionResource{Group: "kubevirt.io", Version: "v1", Resource: "virtualmachines"}
 	client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig())
 	defer func() {
@@ -1899,13 +1980,10 @@ func (s *DynamicToolsSuite) TestShippedCRDAcceptsTheShippedManifests() {
 	}
 	s.Equal(3, installed, "Tool, Prompt and ToolSet")
 
-	for _, file := range []string{
-		filepath.Join("..", "..", "charts", "dynamic-tools", "tekton-mcp-tools", "templates", "tools.yaml"),
-		filepath.Join("..", "..", "charts", "dynamic-tools", "kubevirt-mcp-tools", "templates", "tools.yaml"),
-	} {
-		s.Run(filepath.Base(filepath.Dir(filepath.Dir(file)))+"/"+filepath.Base(file), func() {
+	for _, chart := range []string{"tekton-mcp-tools", "kubevirt-mcp-tools"} {
+		s.Run(chart, func() {
 			// Fails inside createTool if the API server rejects a manifest.
-			s.loadToolManifests(file)
+			s.loadChart(chart)
 		})
 	}
 	s.Run("the CEL rules reject a Tool with two kinds of action", func() {
@@ -2183,13 +2261,14 @@ func (s *DynamicToolsSuite) TestChartPrompts() {
 	}
 	s.Cfg.Toolsets.SetForTest([]string{"dynamic"})
 	for _, chart := range []string{"kubevirt-mcp-tools", "tekton-mcp-tools"} {
-		toolset, err := os.ReadFile(filepath.Join("..", "..", "charts", "dynamic-tools", chart, "templates", "toolset.yaml"))
-		s.Require().NoError(err)
-		s.createToolSet(string(toolset))
-		raw, err := os.ReadFile(filepath.Join("..", "..", "charts", "dynamic-tools", chart, "templates", "prompts.yaml"))
-		s.Require().NoError(err)
-		for _, doc := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n---") {
-			if strings.Contains(doc, "kind: Prompt") {
+		args := []string{"template", "x", filepath.Join("..", "..", "charts", "dynamic-tools", chart)}
+		out, err := exec.Command(s.helm(), args...).CombinedOutput()
+		s.Require().NoError(err, string(out))
+		for _, doc := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n---") {
+			switch {
+			case strings.Contains(doc, "kind: ToolSet"):
+				s.createToolSet(doc)
+			case strings.Contains(doc, "kind: Prompt"):
 				s.createPrompt(doc)
 			}
 		}

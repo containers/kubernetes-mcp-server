@@ -30,6 +30,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+
 )
 
 type DynamicSuite struct {
@@ -1442,6 +1443,114 @@ func (s *DynamicSuite) TestFamiliesShareOnePollLoop() {
 	go func() { counts <- inspector.lists.Load() }()
 	time.Sleep(50 * time.Millisecond)
 	s.Equal(<-counts, inspector.lists.Load(), "the last stop ends the loop")
+}
+
+func (s *DynamicSuite) TestHTTPHostAllowlist() {
+	s.Run("the matcher", func() {
+		allowed := []string{"kiali.svc", "*.apps.example.com", "*.wild-port.example:8443", "with-port.svc:20001", "  spaced.svc  "}
+		s.True(httpHostAllowed(nil, "anything.example"), "an empty list allows every host")
+		s.True(httpHostAllowed(allowed, "kiali.svc"))
+		s.True(httpHostAllowed(allowed, "KIALI.SVC:20001"), "the host matches case-insensitively, the port is ignored")
+		s.True(httpHostAllowed(allowed, "team.apps.example.com"), "a wildcard matches a subdomain")
+		s.True(httpHostAllowed(allowed, "team.wild-port.example"), "a wildcard's port is ignored too")
+		s.False(httpHostAllowed(allowed, "apps.example.com"), "the bare domain must be listed separately")
+		s.False(httpHostAllowed(allowed, "evil-apps.example.com"), "a look-alike suffix is not a subdomain")
+		s.True(httpHostAllowed(allowed, "with-port.svc:9999"), "the entry's port is not a security boundary")
+		s.True(httpHostAllowed(allowed, "spaced.svc"), "entries are trimmed")
+		s.False(httpHostAllowed(allowed, "other.svc"))
+	})
+	s.Run("a fixed url outside the list is withheld at registration", func() {
+		var lines []string
+		logger := funcr.New(func(_, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+		ctx := klog.NewContext(s.T().Context(), logger)
+		inspector := &fakeInspector{
+			names: map[string]string{"denied-url": "1", "allowed-url": "1"},
+			toolSpec: map[string]map[string]any{
+				"denied-url":  {"kubernetes": nil, "http": map[string]any{"url": "https://denied.example.com"}},
+				"allowed-url": {"kubernetes": nil, "http": map[string]any{"url": "https://allowed.svc"}},
+			},
+		}
+		toolsetContext := api.ToolsetContext{Inspector: inspector, AllowedHTTPHosts: []string{"allowed.svc"}}
+		var names []string
+		for _, tool := range (&Toolset{}).GetTools(ctx, toolsetContext) {
+			names = append(names, tool.Tool.Name)
+		}
+		s.Equal([]string{"allowed_url"}, names)
+		s.Require().Len(lines, 1, "one line for the withheld resource: %v", lines)
+		s.Contains(lines[0], "denied-url")
+		s.Contains(lines[0], "denied.example.com")
+	})
+	s.Run("fixed urls are collected from the action, the steps and the variants", func() {
+		spec := ToolSpec{
+			Description: "d",
+			Steps: []Step{
+				{Name: "call", HTTP: &HTTPAction{URL: "https://steps.example.com"}},
+				{Name: "skip", HTTP: &HTTPAction{URLExpression: "'https://computed.example.com'"}},
+			},
+			Variants: &Variants{
+				Argument: "action",
+				Options: map[string]Variant{
+					"one": {HTTP: &HTTPAction{URL: "https://variant.example.com"}},
+					"two": {Steps: []Step{{Name: "inner", HTTP: &HTTPAction{URL: "https://nested.example.com"}}}},
+				},
+			},
+		}
+		s.ElementsMatch([]string{
+			"https://steps.example.com", "https://variant.example.com", "https://nested.example.com",
+		}, fixedHTTPURLs(spec))
+		s.Empty(fixedHTTPURLs(ToolSpec{Description: "d", Kubernetes: &KubernetesAction{Verb: "list", APIVersion: "v1", Kind: "Pod"}}))
+	})
+	s.Run("a fixed url in a step is withheld at registration too", func() {
+		var lines []string
+		logger := funcr.New(func(_, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+		ctx := klog.NewContext(s.T().Context(), logger)
+		inspector := &fakeInspector{
+			names: map[string]string{"step-url": "1"},
+			toolSpec: map[string]map[string]any{
+				"step-url": {"kubernetes": nil, "steps": []any{map[string]any{
+					"name": "call",
+					"http": map[string]any{"url": "https://denied.example.com"},
+				}}},
+			},
+		}
+		toolsetContext := api.ToolsetContext{Inspector: inspector, AllowedHTTPHosts: []string{"allowed.svc"}}
+		s.Empty((&Toolset{}).GetTools(ctx, toolsetContext))
+		s.Require().Len(lines, 1, "one line for the withheld resource: %v", lines)
+		s.Contains(lines[0], "step-url")
+		s.Contains(lines[0], "denied.example.com")
+	})
+	s.Run("a prompt with a fixed url in a step is withheld at registration too", func() {
+		var lines []string
+		logger := funcr.New(func(_, args string) { lines = append(lines, args) }, funcr.Options{Verbosity: 0})
+		ctx := klog.NewContext(s.T().Context(), logger)
+		inspector := &fakeInspector{
+			prompts: map[string]string{"denied-prompt": "1"},
+			promptSpec: map[string]map[string]any{"denied-prompt": {"steps": []any{map[string]any{
+				"name": "call",
+				"http": map[string]any{"url": "https://denied.example.com"},
+			}}}},
+		}
+		toolsetContext := api.ToolsetContext{Inspector: inspector, AllowedHTTPHosts: []string{"allowed.svc"}}
+		s.Empty((&Toolset{}).GetPrompts(ctx, toolsetContext))
+		s.Require().Len(lines, 1, "one line for the withheld prompt: %v", lines)
+		s.Contains(lines[0], "denied-prompt")
+		s.Contains(lines[0], "denied.example.com")
+	})
+	s.Run("every request is checked at call time", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer server.Close()
+		tool, err := newCompiledTool(Tool{Metadata: Metadata{Name: "t"}, Spec: ToolSpec{Description: "d", HTTP: &HTTPAction{URL: server.URL}}})
+		s.Require().NoError(err)
+		env := runEnv{ctx: context.Background(), client: restConfigClient{config: &rest.Config{}}}
+		env.allowedHosts = func() []string { return []string{"allowed.svc"} }
+		_, err = tool.run(tool.action, env, evalVars{})
+		s.ErrorContains(err, "not in the server's allowed_http_hosts")
+		env.allowedHosts = func() []string { return []string{hostOf(server.URL)} }
+		_, err = tool.run(tool.action, env, evalVars{})
+		s.Require().NoError(err)
+	})
 }
 
 func (s *DynamicSuite) TestHTTPTransport() {

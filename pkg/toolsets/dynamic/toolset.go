@@ -433,6 +433,21 @@ func (t *Toolset) toolsOf(ctx context.Context, toolsetContext api.ToolsetContext
 			outcomes[definition.Metadata.Name] = outcome{reason: ReasonShadowsBuiltIn, message: "name " + compiled.name + " is a built-in tool of the " + owner + " toolset"}
 			continue
 		}
+		// A fixed http url is operator policy and visible at registration;
+		// urlExpression hosts are checked at call time, when they are known.
+		withheld := ""
+		for _, url := range fixedHTTPURLs(definition.Spec) {
+			if host := hostOf(url); !httpHostAllowed(toolsetContext.AllowedHTTPHosts, host) {
+				logger.Error(nil, "dynamic toolset: skipping Tool resource whose http url host is not allowed",
+					"tool", definition.Metadata.Name, "host", host)
+				withheld = fmt.Sprintf("http url host %q is not in the server's allowed_http_hosts", host)
+				break
+			}
+		}
+		if withheld != "" {
+			outcomes[definition.Metadata.Name] = outcome{reason: ReasonWithheld, message: withheld}
+			continue
+		}
 		if first, taken := seen[compiled.name]; taken {
 			logger.Error(nil, "dynamic toolset: skipping Tool resource whose name is already taken by another Tool resource",
 				"tool", definition.Metadata.Name, "name", compiled.name, "first", first)
@@ -511,6 +526,21 @@ func (t *Toolset) promptsOf(ctx context.Context, toolsetContext api.ToolsetConte
 			logger.Error(nil, "dynamic toolset: skipping Prompt resource whose name shadows a built-in prompt",
 				"prompt", definition.Metadata.Name, "name", compiled.name, "toolset", owner)
 			outcomes[definition.Metadata.Name] = outcome{reason: ReasonShadowsBuiltIn, message: "name " + compiled.name + " is a built-in prompt of the " + owner + " toolset"}
+			continue
+		}
+		// As for Tools: a fixed http url is operator policy and visible at
+		// registration; urlExpression hosts are checked at call time.
+		withheld := ""
+		for _, url := range stepsHTTPURLs(definition.Spec.Steps) {
+			if host := hostOf(url); !httpHostAllowed(toolsetContext.AllowedHTTPHosts, host) {
+				logger.Error(nil, "dynamic toolset: skipping Prompt resource whose http url host is not allowed",
+					"prompt", definition.Metadata.Name, "host", host)
+				withheld = fmt.Sprintf("http url host %q is not in the server's allowed_http_hosts", host)
+				break
+			}
+		}
+		if withheld != "" {
+			outcomes[definition.Metadata.Name] = outcome{reason: ReasonWithheld, message: withheld}
 			continue
 		}
 		if first, taken := seen[compiled.name]; taken {

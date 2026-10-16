@@ -537,9 +537,16 @@ Prevent access to specific Kubernetes resource types.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `denied_resources` | array | `[]` | List of GroupVersionKind objects that should not be accessible. |
+| `allowed_http_hosts` | string[] | `[]` | Hosts that dynamic Tool `http` actions may send the caller's credentials to: exact hosts or `*.domain` wildcards matching subdomains, a port may be given and is ignored. Empty (the default) allows any host — the trust model is then whoever can create `Tool` resources. A Tool with a fixed `url` outside the list is withheld at registration; every request, including `urlExpression` results, is checked again at call time. See [dynamic-tools.md](specs/dynamic-tools.md). |
 
 **Example:**
 ```toml
+# Only the reviewed backends may receive the caller's token
+allowed_http_hosts = [
+  "kiali.istio-system.svc.cluster.local",
+  "*.apps.example.com",
+]
+
 # Deny access to Secrets and ConfigMaps
 [[denied_resources]]
 group = ""

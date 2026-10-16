@@ -589,6 +589,17 @@ working directory, independently of each other.
 <td></td>
 </tr>
 <tr>
+<td>allowed_http_hosts</td>
+<td>[]string</td>
+<td>empty</td>
+<td><code>allowed_http_hosts</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td>Hosts that dynamic Tool http actions may send the caller's credentials to; empty allows any host</td>
+</tr>
+<tr>
 <td>denied_resources[].group</td>
 <td>string</td>
 <td></td>

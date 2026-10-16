@@ -147,6 +147,28 @@ func (s *ConfigSuite) TestReadConfigInvalid() {
 	})
 }
 
+func (s *ConfigSuite) TestAllowedHTTPHostsValidation() {
+	s.Run("hosts, wildcard hosts and ports validate", func() {
+		config, err := ReadToml(s.T().Context(), []byte("allowed_http_hosts = [\"kiali.svc\", \"*.apps.example.com\", \"with-port.svc:20001\"]\n"))
+		s.Require().NoError(err)
+		s.NoError(config.Validate(s.T().Context()))
+	})
+	for name, entry := range map[string]string{
+		"a URL":        "\"https://kiali.svc\"",
+		"empty":        "\"\"",
+		"a bare *":     "\"*\"",
+		"a domainless": "\"*.\"",
+	} {
+		s.Run("rejects "+name, func() {
+			config, err := ReadToml(s.T().Context(), []byte(fmt.Sprintf("allowed_http_hosts = [%s]\n", entry)))
+			s.Require().NoError(err)
+			err = config.Validate(s.T().Context())
+			s.Require().Error(err)
+			s.Contains(err.Error(), "allowed_http_hosts")
+		})
+	}
+}
+
 func (s *ConfigSuite) TestReadConfigValid() {
 	tmpDir := s.T().TempDir()
 	certPath := filepath.Join(tmpDir, "cert.pem")

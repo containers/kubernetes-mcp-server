@@ -35,6 +35,9 @@ type runEnv struct {
 	// requireTLS reports the server's require_tls setting; plain-HTTP
 	// requests of http actions are refused while it is true.
 	requireTLS func() bool
+	// allowedHosts reports the server's allowed_http_hosts; url-mode http
+	// requests to a host outside it are refused. Nil when unset (tests).
+	allowedHosts func() []string
 }
 
 // binaryResult is the result of an action declared with response: binary.
@@ -626,7 +629,8 @@ func defaultProjection(response any) any {
 }
 
 func toolEnv(params api.ToolHandlerParams) runEnv {
-	return runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor, requireTLS: requireTLS(params.Config)}
+	return runEnv{ctx: params, client: params.KubernetesClient, elicitor: params.Elicitor,
+		requireTLS: requireTLS(params.Config), allowedHosts: allowedHostsOf(params.Config)}
 }
 
 // serverConfigFor returns the credentials source of a tool that acts as
@@ -652,6 +656,15 @@ func requireTLS(cfg *config.Config) func() bool {
 		return nil
 	}
 	return func() bool { return cfg.RequireTLS.Get() }
+}
+
+// allowedHostsOf reads allowed_http_hosts per call, so a reload that
+// changes it applies without re-registering the tools.
+func allowedHostsOf(cfg *config.Config) func() []string {
+	if cfg == nil {
+		return nil
+	}
+	return func() []string { return cfg.AllowedHTTPHosts.Get() }
 }
 
 func (c *compiledTool) handle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

@@ -121,6 +121,11 @@ type ToolsetContext struct {
 	// DefaultTarget is the provider's default target: where resources that
 	// define the server's surface are read from and written back to.
 	DefaultTarget string
+	// AllowedHTTPHosts bounds the hosts dynamic http Tools may send
+	// credentials to (empty: any host). The dynamic toolset withholds a
+	// Tool whose fixed http url is outside it and checks every request
+	// again at call time.
+	AllowedHTTPHosts []string
 }
 
 type Toolset interface {

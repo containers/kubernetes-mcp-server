@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -61,6 +62,15 @@ func (t *compiledTool) runHTTP(action *compiledAction, env runEnv, vars evalVars
 			}
 		}
 		base = strings.TrimRight(base, "/")
+		if allowed := env.allowedHosts; allowed != nil && a.Service == nil {
+			// The url or urlExpression host is operator policy, unlike the
+			// service proxy, which carries no user token and is bounded by
+			// services/proxy RBAC.
+			host := hostOf(base)
+			if !httpHostAllowed(allowed(), host) {
+				return nil, fmt.Errorf("host %q is not in the server's allowed_http_hosts", host)
+			}
+		}
 	}
 
 	path, err := t.resolvePath(a.Path, vars)
@@ -192,6 +202,86 @@ func proxyServiceName(service *ServiceRef) string {
 		name += ":" + service.Port
 	}
 	return name
+}
+
+// stepsHTTPURLs returns the http urls a step list declares literally.
+func stepsHTTPURLs(steps []Step) []string {
+	var urls []string
+	for i := range steps {
+		if action := steps[i].HTTP; action != nil && action.URL != "" {
+			urls = append(urls, action.URL)
+		}
+	}
+	return urls
+}
+
+// fixedHTTPURLs returns the http urls a Tool declares literally: the
+// top-level action's, and those of its steps and of its variants' options.
+// A urlExpression is not among them; its host is checked at call time.
+func fixedHTTPURLs(spec ToolSpec) []string {
+	urls := stepsHTTPURLs(spec.Steps)
+	if action := spec.HTTP; action != nil && action.URL != "" {
+		urls = append(urls, action.URL)
+	}
+	if spec.Variants != nil {
+		for _, option := range spec.Variants.Options {
+			if action := option.HTTP; action != nil && action.URL != "" {
+				urls = append(urls, action.URL)
+			}
+			urls = append(urls, stepsHTTPURLs(option.Steps)...)
+		}
+	}
+	return urls
+}
+
+// hostOf returns the host of an absolute http(s) URL, lower-cased, without
+// the port.
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// httpHostAllowed reports whether host falls within allowed_http_hosts:
+// an empty list allows every host (the trust model is then whoever can
+// create Tool resources); an entry is an exact host or a "*.domain"
+// wildcard matching subdomains (the bare domain must be listed separately);
+// a port may be given and is ignored, since it is not a security boundary.
+func httpHostAllowed(allowed []string, host string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	host = strings.ToLower(host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	for _, entry := range allowed {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		if entry == "" {
+			continue
+		}
+		if strings.HasPrefix(entry, "*.") {
+			domain := entry[1:]
+			// A port may be given; match on the domain alone.
+			if h, _, err := net.SplitHostPort(domain); err == nil {
+				domain = h
+			}
+			if strings.HasSuffix(host, domain) {
+				return true
+			}
+			continue
+		}
+		// A port may be given; match on the host alone.
+		if h, _, err := net.SplitHostPort(entry); err == nil {
+			entry = h
+		}
+		if host == entry {
+			return true
+		}
+	}
+	return false
 }
 
 // checkRequestPath refuses a resolved path that could change where the

@@ -85,9 +85,14 @@ installed — for two dynamic families too: to the server a family is a
 toolset like any other, while within one family the collision is resolved
 per resource (`NameTaken`).
 
-Open hardening items (not implemented): restricting the listed Tools by label
-selector or allowed names in server configuration, and an allowlist of
-`http` hosts.
+`allowed_http_hosts` bounds where http actions may send credentials: when
+set, a Tool with a fixed `url` outside it is withheld at registration (its
+status says so), and every request — a `urlExpression` result, or any
+`url` — is checked again at call time. `service` actions are not affected:
+they carry no user token and are bounded by `services/proxy` RBAC.
+
+Open hardening item (not implemented): restricting the listed Tools by label
+selector or allowed names in server configuration.
 
 ## Resource
 
@@ -463,8 +468,9 @@ orphan           False   UnknownToolSet
 Reasons: `Registered`; `Invalid` (validation or CEL compilation, the
 message is the error); `Malformed` (the shape does not fit the definition);
 `ShadowsBuiltIn`; `NameTaken` (another resource exposes the name first);
-`UnknownToolSet`; `MissingPrefix`; `Withheld` (a mutating Prompt under
-`read_only`). `observedGeneration` is the generation the condition
+`UnknownToolSet`; `MissingPrefix`; `Withheld` (policy: a mutating Prompt
+under `read_only`, or an http Tool whose url host is not in
+`allowed_http_hosts`). `observedGeneration` is the generation the condition
 describes. The condition is written only when it changes, through the
 server's own identity, and is best effort: without `update` on the status
 subresources the tools work regardless and the server says so once. A

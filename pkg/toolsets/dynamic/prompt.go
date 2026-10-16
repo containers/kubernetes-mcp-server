@@ -84,7 +84,8 @@ func (c *compiledPrompt) handle(params api.PromptHandlerParams) (*api.PromptCall
 	ctx, cancel := context.WithTimeout(params, timeout)
 	defer cancel()
 	vars.ctx = withServes(ctx, params.KubernetesClient)
-	env := runEnv{ctx: ctx, client: params.KubernetesClient, elicitor: params.Elicitor, requireTLS: requireTLS(params.Config)}
+	env := runEnv{ctx: ctx, client: params.KubernetesClient, elicitor: params.Elicitor,
+		requireTLS: requireTLS(params.Config), allowedHosts: allowedHostsOf(params.Config)}
 	env.serverConfig = c.runner.serverConfigFor(ctx, params.Target)
 	if _, _, err := c.runner.runSteps(env, &vars); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
