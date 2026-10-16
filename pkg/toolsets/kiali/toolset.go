@@ -3,15 +3,21 @@ package kiali
 import (
 	"context"
 	"slices"
+	"sync"
 
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 	kialiPrompts "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/prompts"
 	kialiTools "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
+
+var warnKialiValidationDisabledOnce sync.Once
 
 type Toolset struct{}
 
@@ -26,28 +32,34 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
-	tools := slices.Concat(
-		kialiTools.InitGetMeshTrafficGraph(ctx, toolsetContext.Inspector),
-		kialiTools.InitGetMeshStatus(),
-		kialiTools.InitManageIstioConfigRead(),
-		kialiTools.InitManageIstioConfig(),
-		kialiTools.InitListMeshClusters(),
-		kialiTools.InitListOrGetResources(ctx, toolsetContext.Inspector),
-		kialiTools.InitListTraces(),
-		kialiTools.InitGetTraceDetails(),
-		kialiTools.InitGetPodPerformance(),
-		kialiTools.InitGetLogs(),
-		kialiTools.InitGetMetrics(),
-	)
-	// Kiali calls a single configured endpoint; mesh scope is selected via meshCluster,
-	// not the provider-level context parameter injected for core Kubernetes tools.
+	if !toolsetContext.TargetCompatibilityFiltersEnabled {
+		warnKialiValidationDisabledOnce.Do(func() {
+			klogutil.LogWarn(
+				klogutil.FromContext(ctx),
+				"experimental_enable_target_compatibility_tool_filters is disabled; Kiali URL reachability and in-cluster discovery are not validated",
+			)
+		})
+	} else if !kialiAvailable(ctx, toolsetContext) {
+		return nil
+	}
+
+	tools := kialiTools.All(ctx, toolsetContext.Inspector)
 	for i := range tools {
 		tools[i].ClusterAware = ptr.To(false)
 	}
 	return tools
 }
 
+func kialiAvailable(ctx context.Context, toolsetContext api.ToolsetContext) bool {
+	kp := kubernetes.ClusterProvider(toolsetContext.Inspector)
+	return kialiclient.HasKiali(ctx, toolsetContext.Config, kp, toolsetContext.Inspector)
+}
+
 func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerPrompt {
+	if toolsetContext.TargetCompatibilityFiltersEnabled && !kialiAvailable(ctx, toolsetContext) {
+		return nil
+	}
+
 	prompts := slices.Concat(
 		kialiPrompts.InitListApplications(ctx, toolsetContext.Inspector),
 		kialiPrompts.InitListIstioConfig(),
@@ -61,7 +73,6 @@ func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetCont
 		kialiPrompts.InitTraceAnalysis(),
 		kialiPrompts.InitIstioConfigReview(ctx, toolsetContext.Inspector),
 	)
-	// Same as tools: mesh scope is not selected via provider context.
 	for i := range prompts {
 		prompts[i].ClusterAware = ptr.To(false)
 	}
