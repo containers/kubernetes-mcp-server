@@ -171,6 +171,10 @@ func (k *Kubernetes) DiscoveryClient() discovery.CachedDiscoveryInterface {
 	return k.discoveryClient
 }
 
+func (k *Kubernetes) RawDiscoveryClient() discovery.DiscoveryInterface {
+	return k.rawDiscoveryClient
+}
+
 func (k *Kubernetes) DynamicClient() dynamic.Interface {
 	return k.dynamicClient
 }
