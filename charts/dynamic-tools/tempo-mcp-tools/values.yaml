@@ -15,3 +15,8 @@ identity: caller
 # PEM bundle used to verify the Tempo server certificate (empty: system roots).
 certificateAuthority: ""
 insecureSkipTLSVerify: false
+
+# Labels added to every Tool, Prompt and ToolSet the chart renders. Use them
+# with the server's dynamic_tools_selector to say which installs a server
+# serves (see charts/dynamic-tools/README.md).
+extraLabels: {}

@@ -1,10 +1,13 @@
-# Prompt resources of the KubeVirt chart. Originally exported from the in-tree kubevirt toolset; maintained by hand since.
+# Prompt resources of the KubeVirt chart, in the house style of docs/specs/tools-for-models.md.
 ---
 apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
 kind: Prompt
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-troubleshoot
 spec:
   toolset: kubevirt
@@ -197,6 +200,9 @@ kind: Prompt
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-windows-golden-image
 spec:
   toolset: kubevirt
@@ -313,6 +319,9 @@ kind: Prompt
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-hco-status
 spec:
   toolset: kubevirt
@@ -434,6 +443,9 @@ kind: Prompt
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-create
 spec:
   toolset: kubevirt

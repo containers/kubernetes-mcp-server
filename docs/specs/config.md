@@ -600,6 +600,17 @@ working directory, independently of each other.
 <td>Hosts that dynamic Tool http actions may send the caller's credentials to; empty allows any host</td>
 </tr>
 <tr>
+<td>dynamic_tools_selector</td>
+<td>string</td>
+<td>empty</td>
+<td><code>dynamic_tools_selector</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td>Kubernetes label selector that Tool, Prompt and ToolSet resources must match for the dynamic toolset to list them; empty lists everything</td>
+</tr>
+<tr>
 <td>denied_resources[].group</td>
 <td>string</td>
 <td></td>

@@ -15,3 +15,8 @@ insecureSkipTLSVerify: false
 # Return every sample of a range query instead of per-series summary
 # statistics (range_query_full_response).
 rangeQueryFullResponse: false
+
+# Labels added to every Tool, Prompt and ToolSet the chart renders. Use them
+# with the server's dynamic_tools_selector to say which installs a server
+# serves (see charts/dynamic-tools/README.md).
+extraLabels: {}

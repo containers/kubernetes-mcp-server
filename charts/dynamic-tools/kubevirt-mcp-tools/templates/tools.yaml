@@ -1,10 +1,13 @@
-# Tool resources of the KubeVirt chart. Originally exported from the in-tree kubevirt toolset; maintained by hand since.
+# Tool resources of the KubeVirt chart, in the house style of docs/specs/tools-for-models.md.
 ---
 apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
 kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-clone
 spec:
   toolset: kubevirt
@@ -52,6 +55,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-screenshot
 spec:
   toolset: kubevirt
@@ -120,6 +126,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-guest
 spec:
   toolset: kubevirt
@@ -188,6 +197,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-lifecycle
 spec:
   toolset: kubevirt
@@ -273,6 +285,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-create-from-template
 spec:
   toolset: kubevirt
@@ -325,6 +340,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: vm-troubleshoot
 spec:
   toolset: kubevirt

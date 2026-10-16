@@ -16,6 +16,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -281,7 +282,7 @@ func (f families) familyOf(toolset, name, separator string, family string) (Tool
 func (t *Toolset) listFamilies(ctx context.Context, toolsetContext api.ToolsetContext, family string, quiet bool) families {
 	logger := klogutil.FromContext(ctx)
 	index := families{sets: map[string]ToolSet{}}
-	listed, ok := listOrLast(ctx, toolsetContext.Inspector, ToolSetGVR, &t.toolsets, quiet)
+	listed, ok := listOrLast(ctx, toolsetContext.Inspector, ToolSetGVR, &t.toolsets, quiet, toolsetContext.ToolSelector)
 	index.unavailable = !ok && listed == nil
 	outcomes := map[string]outcome{}
 	for _, toolset := range listed {
@@ -334,6 +335,11 @@ type lastListed[T named] struct {
 	mu     sync.Mutex
 	items  []T
 	listed bool
+	// selectorKey is the dynamic_tools_selector the items were listed
+	// under, so a cache filled under one policy is never served under
+	// another: a tightened selector must not fail open through a list
+	// failure.
+	selectorKey string
 }
 
 // listOrLast lists the resources of one kind, falling back to the last
@@ -345,12 +351,16 @@ type lastListed[T named] struct {
 // With quiet set, a failure is logged at verbosity 1 only: the ToolSet
 // resources are listed by both the tool and the prompt collection of one
 // apply, and the failure is reported once.
-func listOrLast[T named](ctx context.Context, inspector api.ClusterInspector, gvr schema.GroupVersionResource, last *lastListed[T], quiet bool) ([]T, bool) {
-	items, err := listResources[T](ctx, inspector, gvr)
+func listOrLast[T named](ctx context.Context, inspector api.ClusterInspector, gvr schema.GroupVersionResource, last *lastListed[T], quiet bool, selector labels.Selector) ([]T, bool) {
+	items, err := listResources[T](ctx, inspector, gvr, selector)
+	key := ""
+	if selector != nil {
+		key = selector.String()
+	}
 	last.mu.Lock()
 	defer last.mu.Unlock()
 	if err == nil {
-		last.items, last.listed = items, true
+		last.items, last.listed, last.selectorKey = items, true, key
 		return items, true
 	}
 	logger := klogutil.FromContext(ctx)
@@ -364,7 +374,9 @@ func listOrLast[T named](ctx context.Context, inspector api.ClusterInspector, gv
 		}
 		logger.Error(err, message, keysAndValues...)
 	}
-	if !last.listed {
+	if !last.listed || last.selectorKey != key {
+		// Never cached, or cached under a different dynamic_tools_selector:
+		// serving it would apply the wrong policy.
 		report("dynamic toolset: unable to list resources, exposing none", "resource", gvr.Resource)
 		return nil, false
 	}
@@ -396,7 +408,7 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 // toolsOf collects the Tool resources of one family ("" for all of them).
 func (t *Toolset) toolsOf(ctx context.Context, toolsetContext api.ToolsetContext, family string) []api.ServerTool {
 	logger := klogutil.FromContext(ctx)
-	definitions, _ := listOrLast(ctx, toolsetContext.Inspector, GVR, &t.tools, false)
+	definitions, _ := listOrLast(ctx, toolsetContext.Inspector, GVR, &t.tools, false, toolsetContext.ToolSelector)
 	index := t.listFamilies(ctx, toolsetContext, family, false)
 	builtIn := builtInNames(ctx, toolsetContext)
 	// Two resources may resolve to the same MCP name (foo-bar and foo.bar,
@@ -492,7 +504,7 @@ func (t *Toolset) GetPrompts(ctx context.Context, toolsetContext api.ToolsetCont
 // promptsOf collects the Prompt resources of one family ("" for all of them).
 func (t *Toolset) promptsOf(ctx context.Context, toolsetContext api.ToolsetContext, family string) []api.ServerPrompt {
 	logger := klogutil.FromContext(ctx)
-	definitions, _ := listOrLast(ctx, toolsetContext.Inspector, PromptGVR, &t.prompts, false)
+	definitions, _ := listOrLast(ctx, toolsetContext.Inspector, PromptGVR, &t.prompts, false, toolsetContext.ToolSelector)
 	index := t.listFamilies(ctx, toolsetContext, family, true)
 	var discovery api.AggregateDiscovery
 	if toolsetContext.Inspector != nil {
@@ -631,7 +643,7 @@ func (t *Toolset) WatchToolset(ctx context.Context, toolsetContext api.ToolsetCo
 func (t *Toolset) pollResources(ctx context.Context, toolsetContext api.ToolsetContext, onChange func() error) (stop func()) {
 	ctx, cancel := context.WithCancel(ctx)
 	logger := klogutil.FromContext(ctx)
-	last, err := fingerprint(ctx, toolsetContext.Inspector)
+	last, err := fingerprint(ctx, toolsetContext.Inspector, toolsetContext.ToolSelector)
 	failing := err != nil
 	if failing {
 		logger.Error(err, "dynamic toolset: unable to list Tool or Prompt resources, will keep polling (further failures are logged at verbosity 1)", "hint", rbacHint)
@@ -648,7 +660,7 @@ func (t *Toolset) pollResources(ctx context.Context, toolsetContext api.ToolsetC
 			// A failed poll says nothing about the resources: skip it rather
 			// than mistake it for "every Tool was deleted", which would drop
 			// all dynamic tools and flap them back on the next success.
-			current, err := fingerprint(ctx, toolsetContext.Inspector)
+			current, err := fingerprint(ctx, toolsetContext.Inspector, toolsetContext.ToolSelector)
 			if err != nil {
 				if failing {
 					logger.V(1).Info("dynamic toolset: unable to list Tool or Prompt resources, keeping the current tools", "error", err.Error())
@@ -686,11 +698,17 @@ type named interface {
 
 // listResources returns the resources of the default target, sorted by name.
 // A missing CRD is not an error: it simply means no definitions.
-func listResources[T named](ctx context.Context, inspector api.ClusterInspector, gvr schema.GroupVersionResource) ([]T, error) {
+func listResources[T named](ctx context.Context, inspector api.ClusterInspector, gvr schema.GroupVersionResource, selector labels.Selector) ([]T, error) {
 	if inspector == nil || inspector.Unstructured() == nil {
 		return nil, errors.New("no cluster inspector available")
 	}
-	list, err := inspector.Unstructured().Resource(gvr).List(ctx, metav1.ListOptions{}).Default()
+	options := metav1.ListOptions{}
+	if selector != nil {
+		// dynamic_tools_selector: the API server does the filtering, so a
+		// resource outside the policy is not read at all.
+		options.LabelSelector = selector.String()
+	}
+	list, err := inspector.Unstructured().Resource(gvr).List(ctx, options).Default()
 	if err != nil {
 		if api.IsNotFound(err) {
 			return nil, nil
@@ -733,23 +751,23 @@ func metadataOf[T named](item T) Metadata {
 // fingerprint summarizes the names and resourceVersions of the Tool and
 // Prompt resources. A list failure is returned as such: an empty fingerprint
 // means there are no resources, never that the cluster could not be asked.
-func fingerprint(ctx context.Context, inspector api.ClusterInspector) (string, error) {
+func fingerprint(ctx context.Context, inspector api.ClusterInspector, selector labels.Selector) (string, error) {
 	var parts []string
-	tools, err := listResources[Tool](ctx, inspector, GVR)
+	tools, err := listResources[Tool](ctx, inspector, GVR, selector)
 	if err != nil {
 		return "", err
 	}
 	for _, tool := range tools {
 		parts = append(parts, "tool/"+tool.Metadata.Name+"="+tool.Metadata.ResourceVersion)
 	}
-	prompts, err := listResources[Prompt](ctx, inspector, PromptGVR)
+	prompts, err := listResources[Prompt](ctx, inspector, PromptGVR, selector)
 	if err != nil {
 		return "", err
 	}
 	for _, prompt := range prompts {
 		parts = append(parts, "prompt/"+prompt.Metadata.Name+"="+prompt.Metadata.ResourceVersion)
 	}
-	toolsets, err := listResources[ToolSet](ctx, inspector, ToolSetGVR)
+	toolsets, err := listResources[ToolSet](ctx, inspector, ToolSetGVR, selector)
 	if err != nil {
 		return "", err
 	}

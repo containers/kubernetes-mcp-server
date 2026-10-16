@@ -82,14 +82,21 @@ func (s *ExamplesSuite) TestHandWrittenExamplesAreValid() {
 	}
 }
 
-func (s *ExamplesSuite) TestChartsRenderValidTools() {
-	helm, err := exec.LookPath("helm")
-	if err != nil {
-		helm = filepath.Join("..", "..", "..", "_output", "tools", "bin", "helm")
-		if _, statErr := os.Stat(helm); statErr != nil {
-			s.T().Skip("helm not available (make helm)")
-		}
+// chartHelm returns the helm executable, or skips the test when none is
+// available.
+func (s *ExamplesSuite) chartHelm() string {
+	if helm, err := exec.LookPath("helm"); err == nil {
+		return helm
 	}
+	helm := filepath.Join("..", "..", "..", "_output", "tools", "bin", "helm")
+	if _, err := os.Stat(helm); err != nil {
+		s.T().Skip("helm not available (make helm)")
+	}
+	return helm
+}
+
+func (s *ExamplesSuite) TestChartsRenderValidTools() {
+	helm := s.chartHelm()
 	charts := s.charts()
 	for _, chart := range charts {
 		s.Run(filepath.Base(chart), func() {
@@ -103,13 +110,7 @@ func (s *ExamplesSuite) TestChartsRenderValidTools() {
 func (s *ExamplesSuite) TestChartsShipAToolSetAndTagEveryToolAndPrompt() {
 	// Every chart is a family: one ToolSet resource, and every Tool and
 	// Prompt names it and carries its prefix (docs/specs/tools-for-models.md).
-	helm, err := exec.LookPath("helm")
-	if err != nil {
-		helm = filepath.Join("..", "..", "..", "_output", "tools", "bin", "helm")
-		if _, statErr := os.Stat(helm); statErr != nil {
-			s.T().Skip("helm not available (make helm)")
-		}
-	}
+	helm := s.chartHelm()
 	for _, chart := range s.charts() {
 		s.Run(filepath.Base(chart), func() {
 			out, err := exec.Command(helm, "template", "x", chart, "--set", "url=https://example.invalid", "--set", "alertmanagerUrl=https://example.invalid").CombinedOutput()
@@ -157,12 +158,13 @@ func (s *ExamplesSuite) TestChartsShipAToolSetAndTagEveryToolAndPrompt() {
 }
 
 func (s *ExamplesSuite) TestKubeVirtToolsRequireTheVirtualMachineAPI() {
-	// The in-tree KubeVirt toolset hid its tools while no target served
-	// VirtualMachine; the chart must keep that through `requires`.
-	raw, err := os.ReadFile(filepath.Join(s.root, "kubevirt-mcp-tools", "templates", "tools.yaml"))
-	s.Require().NoError(err)
+	// The chart must hide its tools while no target serves VirtualMachine,
+	// through `requires` on every Tool.
+	args := []string{"template", "x", filepath.Join(s.root, "kubevirt-mcp-tools")}
+	out, err := exec.Command(s.chartHelm(), args...).CombinedOutput()
+	s.Require().NoError(err, string(out))
 	count := 0
-	for _, doc := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n---") {
+	for _, doc := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n---") {
 		if !strings.Contains(doc, "kind: Tool") {
 			continue
 		}

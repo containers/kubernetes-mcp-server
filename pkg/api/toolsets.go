@@ -10,6 +10,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/google/jsonschema-go/jsonschema"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 // ToolContent represents a single content block in a multi-content tool result.
@@ -126,6 +127,11 @@ type ToolsetContext struct {
 	// Tool whose fixed http url is outside it and checks every request
 	// again at call time.
 	AllowedHTTPHosts []string
+	// ToolSelector, when set, restricts the Tool, Prompt and ToolSet
+	// resources the dynamic toolset lists to those matching the label
+	// selector; a resource that does not match is not read and gets no
+	// status. Nil lists everything.
+	ToolSelector labels.Selector
 }
 
 type Toolset interface {

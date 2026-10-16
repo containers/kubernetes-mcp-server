@@ -5,6 +5,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-metrics
 spec:
   toolset: prometheus
@@ -49,6 +52,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-query
 spec:
   toolset: prometheus
@@ -147,6 +153,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-chart
 spec:
   toolset: prometheus
@@ -182,6 +191,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-labels
 spec:
   toolset: prometheus
@@ -237,6 +249,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-series
 spec:
   toolset: prometheus
@@ -288,6 +303,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-alerts
 spec:
   toolset: prometheus
@@ -357,6 +375,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: prom-silences
 spec:
   toolset: prometheus

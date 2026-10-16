@@ -1,10 +1,13 @@
-# Prompt resources of the Tekton chart. Originally exported from the in-tree tekton toolset; maintained by hand since.
+# Prompt resource of the Tekton chart: gathers the PipelineRun, its pods and their logs for the model to reason about.
 ---
 apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
 kind: Prompt
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: tekton-pipeline-troubleshoot
 spec:
   toolset: tekton

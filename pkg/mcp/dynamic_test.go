@@ -654,6 +654,50 @@ spec:
 	})
 }
 
+func (s *DynamicToolsSuite) TestDynamicToolsSelector() {
+	s.Cfg.DynamicToolsSelector.SetForTest("dynamic-tools-test=served")
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: selected-tool
+  labels:
+    dynamic-tools-test: served
+spec:
+  description: Within the selector
+  readOnly: true
+  kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
+`)
+	s.createTool(`
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  name: unselected-tool
+spec:
+  description: Outside the selector
+  readOnly: true
+  kubernetes: {verb: list, apiVersion: v1, kind: Namespace}
+`)
+	s.InitMcpClient()
+	s.Run("only resources matching the selector are listed", func() {
+		s.NotNil(s.findTool("selected_tool"))
+		s.Nil(s.findTool("unselected_tool"))
+	})
+	s.Run("a resource outside the selector is not read and gets no status", func() {
+		client := dynamicclient.NewForConfigOrDie(test.EnvTestRestConfig()).Resource(dynamic.GVR)
+		object, err := client.Get(s.T().Context(), "unselected-tool", metav1.GetOptions{})
+		s.Require().NoError(err)
+		conditions, found, _ := unstructured.NestedSlice(object.Object, "status", "conditions")
+		s.False(found, "the server never read the resource")
+		s.Empty(conditions)
+		object, err = client.Get(s.T().Context(), "selected-tool", metav1.GetOptions{})
+		s.Require().NoError(err)
+		conditions, _, _ = unstructured.NestedSlice(object.Object, "status", "conditions")
+		s.Require().Len(conditions, 1)
+		s.Equal("Registered", conditions[0].(map[string]any)["reason"])
+	})
+}
+
 func (s *DynamicToolsSuite) TestCrossFamilyDuplicateNamesFailTheReload() {
 	// To the server, a family is a toolset like any other: two enabled
 	// families exposing the same MCP name fail the reload (the SDK would

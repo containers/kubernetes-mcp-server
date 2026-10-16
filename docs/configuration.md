@@ -538,6 +538,7 @@ Prevent access to specific Kubernetes resource types.
 |-------|------|---------|-------------|
 | `denied_resources` | array | `[]` | List of GroupVersionKind objects that should not be accessible. |
 | `allowed_http_hosts` | string[] | `[]` | Hosts that dynamic Tool `http` actions may send the caller's credentials to: exact hosts or `*.domain` wildcards matching subdomains, a port may be given and is ignored. Empty (the default) allows any host — the trust model is then whoever can create `Tool` resources. A Tool with a fixed `url` outside the list is withheld at registration; every request, including `urlExpression` results, is checked again at call time. See [dynamic-tools.md](specs/dynamic-tools.md). |
+| `dynamic_tools_selector` | string | `""` | Kubernetes label selector that `Tool`, `Prompt` and `ToolSet` resources must match for the `dynamic` toolset to list them; a resource that does not match is not read. Empty lists everything — the trust model is then whoever can create `Tool` resources. Label the installs a server should serve with a chart's `extraLabels` value. See [dynamic-tools.md](specs/dynamic-tools.md). |
 
 **Example:**
 ```toml
@@ -546,6 +547,10 @@ allowed_http_hosts = [
   "kiali.istio-system.svc.cluster.local",
   "*.apps.example.com",
 ]
+
+# Only serve dynamic tools from installs labeled for this server
+# (helm install ... --set extraLabels.served-by=prod-mcp)
+dynamic_tools_selector = "served-by=prod-mcp"
 
 # Deny access to Secrets and ConfigMaps
 [[denied_resources]]

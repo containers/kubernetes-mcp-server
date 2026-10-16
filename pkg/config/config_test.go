@@ -169,6 +169,22 @@ func (s *ConfigSuite) TestAllowedHTTPHostsValidation() {
 	}
 }
 
+func (s *ConfigSuite) TestDynamicToolsSelectorValidation() {
+	s.Run("a valid selector loads", func() {
+		config, err := ReadToml(s.T().Context(), []byte("dynamic_tools_selector = \"served-by=prod, tier notin (dev)\"\n"))
+		s.Require().NoError(err)
+		s.Equal("served-by=prod, tier notin (dev)", config.DynamicToolsSelector.Get())
+		s.NoError(config.Validate(s.T().Context()))
+	})
+	s.Run("an invalid selector fails validation with its name", func() {
+		config, err := ReadToml(s.T().Context(), []byte("dynamic_tools_selector = \"!!!not a selector\"\n"))
+		s.Require().NoError(err, "the value parses as TOML; it must fail validation, as the server does at startup")
+		err = config.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "dynamic_tools_selector")
+	})
+}
+
 func (s *ConfigSuite) TestReadConfigValid() {
 	tmpDir := s.T().TempDir()
 	certPath := filepath.Join(tmpDir, "cert.pem")

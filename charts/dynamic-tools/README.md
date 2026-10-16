@@ -22,6 +22,13 @@ helm install kiali-tools kiali-mcp-tools --set url=https://kiali.example.com/kia
 #    renders the ClusterRole (list on the three resources, update on their status).
 helm upgrade kubernetes-mcp-server charts/kubernetes-mcp-server --reuse-values --set rbac.dynamicTools=true
 
+# 2c. Optional: bound which Tool resources a server reads at all. Label the
+#     installs a server should serve with the chart's extraLabels value, and
+#     give the server the matching dynamic_tools_selector; resources outside
+#     the selector are not read, compiled or given a status.
+helm install kiali-tools kiali-mcp-tools --set url=https://kiali.example.com/kiali --set extraLabels.served-by=prod-mcp
+#     server TOML: dynamic_tools_selector = "served-by=prod-mcp"
+
 # 3. Start the server with the toolset enabled (TOML). Each chart is a
 #    family (a ToolSet resource): enable them all with "dynamic", or pick
 #    toolsets = ["core", "config", "dynamic/kiali", "dynamic/prometheus"]

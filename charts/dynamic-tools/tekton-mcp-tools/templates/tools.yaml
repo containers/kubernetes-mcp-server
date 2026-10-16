@@ -1,10 +1,13 @@
-# Tool resources of the Tekton chart. Originally exported from the in-tree tekton toolset; reshaped by hand since.
+# Tool resources of the Tekton chart, in the house style of docs/specs/tools-for-models.md.
 ---
 apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
 kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: tekton-start
 spec:
   toolset: tekton
@@ -71,6 +74,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: tekton-restart
 spec:
   toolset: tekton
@@ -138,6 +144,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: tekton-cancel
 spec:
   toolset: tekton
@@ -179,6 +188,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: tekton-logs
 spec:
   toolset: tekton

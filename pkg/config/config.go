@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
@@ -268,6 +269,12 @@ type Config struct {
 	// "*.domain" wildcards matching subdomains; a port may be given and is
 	// ignored.
 	AllowedHTTPHosts Option[[]string]
+	// DynamicToolsSelector restricts the Tool, Prompt and ToolSet resources
+	// the dynamic toolset lists: a Kubernetes label selector. A resource
+	// that does not match is not read, compiled or given a status. Empty
+	// (the default) lists everything: the trust model is then whoever can
+	// create Tool resources.
+	DynamicToolsSelector Option[string]
 	// When true, expose only tools annotated with readOnlyHint=true.
 	ReadOnly Option[bool]
 	// When true, disable tools annotated with destructiveHint=true.
@@ -428,6 +435,15 @@ func newConfig() *Config {
 			}
 			return nil
 		}).desc("Hosts that dynamic Tool http actions may send the caller's credentials to (exact hosts or *.domain wildcards, port ignored); empty allows any host"),
+		DynamicToolsSelector: opt("dynamic_tools_selector", "").reload().validate(func(v string) error {
+			if v == "" {
+				return nil
+			}
+			if _, err := labels.Parse(v); err != nil {
+				return fmt.Errorf("invalid dynamic_tools_selector %q: %w", v, err)
+			}
+			return nil
+		}).desc("Kubernetes label selector that Tool, Prompt and ToolSet resources must match for the dynamic toolset to list them; empty lists everything"),
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
 		ValidationEnabled:  opt("validation_enabled", false).reload().desc("Enable pre-execution validation of tool calls"),

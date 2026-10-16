@@ -5,6 +5,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: loki-instances
 spec:
   toolset: loki
@@ -48,6 +51,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: loki-labels
 spec:
   toolset: loki
@@ -122,6 +128,9 @@ kind: Tool
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: loki-query
 spec:
   toolset: loki

@@ -16,6 +16,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/time/rate"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -515,7 +516,7 @@ func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
 }
 
 func toolsetContextFor(provider internalk8s.Provider, cfg *Configuration) api.ToolsetContext {
-	return api.ToolsetContext{
+	context := api.ToolsetContext{
 		// Toolsets are applied with no caller present (startup, reload, watch):
 		// discovery and resource listing use the server's own credentials.
 		Inspector:                         internalk8s.NewServerClusterInspector(provider),
@@ -527,6 +528,16 @@ func toolsetContextFor(provider internalk8s.Provider, cfg *Configuration) api.To
 		DefaultTarget:    provider.GetDefaultTarget(),
 		AllowedHTTPHosts: cfg.AllowedHTTPHosts.Get(),
 	}
+	// Validated at load and on reload; a value that raced past validation
+	// matches nothing rather than everything.
+	if raw := cfg.DynamicToolsSelector.Get(); raw != "" {
+		selector, err := labels.Parse(raw)
+		if err != nil {
+			selector = labels.Nothing()
+		}
+		context.ToolSelector = selector
+	}
+	return context
 }
 
 // serverInstructions assembles the MCP server instructions: the configured

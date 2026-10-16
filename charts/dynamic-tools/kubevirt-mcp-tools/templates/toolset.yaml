@@ -6,6 +6,9 @@ kind: ToolSet
 metadata:
   labels:
     app.kubernetes.io/part-of: kubernetes-mcp-server
+    {{- with .Values.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: kubevirt
 spec:
   description: KubeVirt virtual machine management and troubleshooting

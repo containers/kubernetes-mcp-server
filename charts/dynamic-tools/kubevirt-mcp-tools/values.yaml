@@ -1,2 +1,7 @@
 # No values: the tools talk to the KubeVirt (sub)resource APIs with the caller's identity.
 {}
+
+# Labels added to every Tool, Prompt and ToolSet the chart renders. Use them
+# with the server's dynamic_tools_selector to say which installs a server
+# serves (see charts/dynamic-tools/README.md).
+extraLabels: {}

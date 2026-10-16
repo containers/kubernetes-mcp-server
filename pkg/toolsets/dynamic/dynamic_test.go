@@ -31,6 +31,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 type DynamicSuite struct {
@@ -368,7 +369,7 @@ func (s *DynamicSuite) TestMalformedResourceIsSkipped() {
 	// spec.name is a string; a number does not fit the Go definition and the
 	// CRD does not catch it. The other resources must still load.
 	inspector := &fakeInspector{names: map[string]string{"good": "1", "bad": "1"}, toolSpec: map[string]map[string]any{"bad": {"name": 5}}}
-	tools, err := listResources[Tool](context.Background(), inspector, GVR)
+	tools, err := listResources[Tool](context.Background(), inspector, GVR, nil)
 	s.Require().NoError(err)
 	s.Require().Len(tools, 1)
 	s.Equal("good", tools[0].Metadata.Name)
@@ -1445,6 +1446,31 @@ func (s *DynamicSuite) TestFamiliesShareOnePollLoop() {
 	s.Equal(<-counts, inspector.lists.Load(), "the last stop ends the loop")
 }
 
+func (s *DynamicSuite) TestLastKnownListIsNotServedUnderAnotherSelector() {
+	inspector := &fakeInspector{names: map[string]string{"a-tool": "1", "b-tool": "1"}}
+	toolset := &Toolset{}
+	ctx := context.Background()
+	names := func(selector labels.Selector) []string {
+		var out []string
+		for _, tool := range toolset.GetTools(ctx, api.ToolsetContext{Inspector: inspector, ToolSelector: selector}) {
+			out = append(out, tool.Tool.Name)
+		}
+		return out
+	}
+	s.ElementsMatch([]string{"a_tool", "b_tool"}, names(nil))
+
+	// A failing list keeps the last known ones available: the surface does
+	// not disappear with the API server.
+	inspector.setErr(errors.New("list failed"))
+	s.ElementsMatch([]string{"a_tool", "b_tool"}, names(nil), "same selector: the last known ones keep the surface available")
+
+	// The cache was filled under no selector; it must not be served under
+	// one, or a tightened dynamic_tools_selector would fail open.
+	selector, err := labels.Parse("selected=true")
+	s.Require().NoError(err)
+	s.Empty(names(selector), "another selector: the cache belongs to another policy")
+}
+
 func (s *DynamicSuite) TestHTTPHostAllowlist() {
 	s.Run("the matcher", func() {
 		allowed := []string{"kiali.svc", "*.apps.example.com", "*.wild-port.example:8443", "with-port.svc:20001", "  spaced.svc  "}
@@ -1663,11 +1689,11 @@ func (s *DynamicSuite) TestWatchToolset() {
 	listErr := errors.New(`tools.tools.kubernetes-mcp-server.io is forbidden`)
 
 	s.Run("fingerprint reports a failed list instead of an empty set", func() {
-		fp, err := fingerprint(ctx, inspector)
+		fp, err := fingerprint(ctx, inspector, nil)
 		s.Require().NoError(err)
 		s.Equal("tool/a=1", fp)
 		inspector.setErr(listErr)
-		_, err = fingerprint(ctx, inspector)
+		_, err = fingerprint(ctx, inspector, nil)
 		s.ErrorContains(err, "is forbidden")
 		inspector.setErr(nil)
 	})

@@ -91,8 +91,15 @@ status says so), and every request — a `urlExpression` result, or any
 `url` — is checked again at call time. `service` actions are not affected:
 they carry no user token and are bounded by `services/proxy` RBAC.
 
-Open hardening item (not implemented): restricting the listed Tools by label
-selector or allowed names in server configuration.
+`dynamic_tools_selector` bounds which Tool, Prompt and ToolSet resources
+the server reads at all: a Kubernetes label selector, matched by the API
+server on every list, so a resource outside the policy is not read,
+compiled or given a status, and changes to it do not trigger a re-apply.
+The intended key is a label an operator applies with intent — a chart's
+`extraLabels` value — since a label every chart carries says nothing
+about trust. Restricting a server to one family is the `dynamic/<name>`
+toolset list; restricting it by tool name is `enabled_tools`, which
+applies to dynamic tools as to every other toolset.
 
 ## Resource
 
@@ -475,7 +482,9 @@ describes. The condition is written only when it changes, through the
 server's own identity, and is best effort: without `update` on the status
 subresources the tools work regardless and the server says so once. A
 resource of a family that is not enabled is not written to: only the
-toolset that owns a resource decides about it.
+toolset that owns a resource decides about it, and a resource
+`dynamic_tools_selector` does not match is never read, so nothing is
+written about it either.
 
 ## Lints
 
