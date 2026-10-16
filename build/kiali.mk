@@ -82,3 +82,97 @@ expose-kiali: kubectl
 
 .PHONY: setup-kiali
 setup-kiali: install-istio install-gateway-api-crds update-kiali-version install-bookinfo-demo expose-kiali expose-bookinfo-demo ## Setup Kiali
+
+define UPDATE_KIALI_DOCS_PY
+import json
+from pathlib import Path
+
+schema = Path("pkg/mcp/testdata/toolsets-kiali-tools.json")
+doc = Path("docs/KIALI.md")
+start_mark = "<!-- KIALI-TOOLS:START -->"
+end_mark = "<!-- KIALI-TOOLS:END -->"
+h = chr(35)
+
+def cell(value):
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+def param_type(prop):
+    kind = prop.get("type", "")
+    enum = prop.get("enum") or []
+    if not enum:
+        return kind
+    vals = ", ".join("`" + str(item) + "`" for item in enum)
+    return kind + " (" + vals + ")"
+
+def fmt_default(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+def describe(prop):
+    text = prop.get("description", "")
+    if "minimum" in prop:
+        text = text.rstrip(".") + ". Minimum: " + fmt_default(prop["minimum"]) + "."
+    if "maximum" in prop:
+        text = text.rstrip(".") + ". Maximum: " + fmt_default(prop["maximum"]) + "."
+    return cell(text)
+
+def render(tools):
+    tools = sorted(tools, key=lambda tool: tool["name"])
+    lines = [
+        "Generated from [`pkg/mcp/testdata/toolsets-kiali-tools.json`](../pkg/mcp/testdata/toolsets-kiali-tools.json). Refresh this list with `make update-kiali-docs`.",
+        "",
+        "| Tool | Access | Purpose |",
+        "| --- | --- | --- |",
+    ]
+    for tool in tools:
+        name = tool["name"]
+        ann = tool.get("annotations") or {}
+        access = "Read-only" if ann.get("readOnlyHint") else "Writes config"
+        title = ann.get("title") or tool.get("title") or name
+        lines.append("| [`" + name + "`](" + h + name + ") | " + access + " | " + cell(title) + " |")
+    lines.append("")
+    for tool in tools:
+        name = tool["name"]
+        ann = tool.get("annotations") or {}
+        access = "Read-only" if ann.get("readOnlyHint") else "Writes config"
+        title = ann.get("title") or tool.get("title") or name
+        lines.append(h * 4 + " `" + name + "`")
+        lines.append("")
+        lines.append("**" + title + ".** " + access + ".")
+        lines.append("")
+        lines.append((tool.get("description") or "").strip())
+        lines.append("")
+        schema_obj = tool.get("inputSchema") or {}
+        props = schema_obj.get("properties") or {}
+        required = set(schema_obj.get("required") or [])
+        if not props:
+            lines.append("This tool takes no parameters.")
+            lines.append("")
+            continue
+        lines.append("| Parameter | Type | Required | Default | Description |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for pname in sorted(props, key=lambda n: (n not in required, n)):
+            prop = props[pname]
+            default = "`" + fmt_default(prop["default"]) + "`" if "default" in prop else ""
+            req = "yes" if pname in required else "no"
+            lines.append("| `" + pname + "` | " + param_type(prop) + " | " + req + " | " + default + " | " + describe(prop) + " |")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+text = doc.read_text()
+try:
+    start = text.index(start_mark) + len(start_mark)
+    end = text.index(end_mark)
+except ValueError:
+    raise SystemExit("docs/KIALI.md is missing the KIALI-TOOLS markers")
+if start > end:
+    raise SystemExit("KIALI-TOOLS markers are out of order")
+doc.write_text(text[:start] + "\n" + render(json.loads(schema.read_text())) + text[end:])
+print("Updated docs/KIALI.md")
+endef
+export UPDATE_KIALI_DOCS_PY
+
+.PHONY: update-kiali-docs
+update-kiali-docs: ## Regenerate the Kiali tool catalog in docs/KIALI.md
+	@python3 -c 'import os; exec(os.environ["UPDATE_KIALI_DOCS_PY"])'
