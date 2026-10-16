@@ -295,6 +295,11 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 ### Tools
 
+The `show_timeseries` tool in `observability/metrics` requires at least one
+`perses.dev/v1alpha2` Perses resource instance in a configured cluster.
+Detection requires permission to list Perses resources across namespaces.
+This requirement applies regardless of `experimental_enable_target_compatibility_tool_filters`.
+
 In case multi-cluster support is enabled (default) and you have access to multiple clusters, all applicable tools will include an additional `context` argument to specify the Kubernetes context (cluster) to use for that operation.
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-START -->
