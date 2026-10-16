@@ -44,6 +44,8 @@ type Statistics struct {
 	StartTime     int64 `json:"start_time_unix"`
 }
 
+var _ Collector = (*OtelStatsCollector)(nil)
+
 // OtelStatsCollector collects metrics using OpenTelemetry SDK with ManualReader.
 // It provides a simple in-memory stats collector for the /stats endpoint
 // and a Prometheus exporter for the /metrics endpoint.
@@ -53,6 +55,7 @@ type OtelStatsCollector struct {
 	toolCallErrorCounter  metric.Int64Counter
 	toolDurationHistogram metric.Float64Histogram
 	httpRequestCounter    metric.Int64Counter
+	inFlightRequests      metric.Int64UpDownCounter
 	serverInfoGauge       metric.Int64Gauge
 
 	// Meter provider for shutdown
@@ -233,6 +236,14 @@ func NewOtelStatsCollectorWithConfig(ctx context.Context, cfg CollectorConfig) (
 		return nil, fmt.Errorf("failed to create HTTP request counter: %w", err)
 	}
 
+	inFlightRequests, err := meter.Int64UpDownCounter(
+		"k8s_mcp.requests.in_flight",
+		metric.WithDescription("Number of MCP requests currently being handled"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in-flight requests counter: %w", err)
+	}
+
 	serverInfoGauge, err := meter.Int64Gauge(
 		"k8s_mcp.server.info",
 		metric.WithDescription("Kubernetes MCP server version information"),
@@ -246,6 +257,7 @@ func NewOtelStatsCollectorWithConfig(ctx context.Context, cfg CollectorConfig) (
 		toolCallErrorCounter:  toolCallErrorCounter,
 		toolDurationHistogram: toolDurationHistogram,
 		httpRequestCounter:    httpRequestCounter,
+		inFlightRequests:      inFlightRequests,
 		serverInfoGauge:       serverInfoGauge,
 		provider:              provider,
 		reader:                reader,
@@ -313,6 +325,11 @@ func (c *OtelStatsCollector) RecordHTTPRequest(ctx context.Context, method, path
 		attribute.String("url.path", path),
 		attribute.String("http.response.status_class", statusClass),
 	))
+}
+
+// RecordInFlightRequest implements the Collector interface.
+func (c *OtelStatsCollector) RecordInFlightRequest(ctx context.Context, method string, delta int64) {
+	c.inFlightRequests.Add(ctx, delta, metric.WithAttributes(attribute.String("mcp.method.name", method)))
 }
 
 // GetStats returns a snapshot of current statistics by reading from OTel metrics.

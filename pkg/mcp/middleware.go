@@ -21,6 +21,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog" //nolint:staticcheck // MCP logging deprecated (SEP-2577)
+	"github.com/containers/kubernetes-mcp-server/pkg/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 )
 
@@ -298,6 +299,19 @@ func tracingMiddleware(tracerName string) func(mcp.MethodHandler) mcp.MethodHand
 			}
 
 			return result, err
+		}
+	}
+}
+
+// inFlightRequestsMiddleware tracks the number of MCP requests currently being
+// handled, labeled by method. The count is decremented when the handler returns,
+// including on error or panic, so it can drive horizontal autoscaling (e.g. KEDA).
+func inFlightRequestsMiddleware(collector metrics.Collector) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			collector.RecordInFlightRequest(ctx, method, 1)
+			defer collector.RecordInFlightRequest(context.WithoutCancel(ctx), method, -1)
+			return next(ctx, method, req)
 		}
 	}
 }

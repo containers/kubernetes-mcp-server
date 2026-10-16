@@ -433,6 +433,7 @@ This endpoint returns metrics in OpenMetrics/Prometheus text format, suitable fo
 | `k8s_mcp_tool_errors_total` | Counter | Total MCP tool errors (labeled by `tool_name`) |
 | `k8s_mcp_tool_duration_seconds` | Histogram | Tool call duration in seconds |
 | `k8s_mcp_http_requests_total` | Counter | HTTP requests (labeled by `http_request_method`, `url_path`, `http_response_status_class`) |
+| `k8s_mcp_requests_in_flight` | Gauge | MCP requests currently being handled (labeled by `mcp_method_name`); useful as a horizontal autoscaling signal, e.g. with KEDA. Very short requests (`initialize`, notifications, `ping`) are counted too, so for autoscaling `sum(k8s_mcp_requests_in_flight{mcp_method_name="tools/call"})` is usually the useful query |
 | `k8s_mcp_server_info` | Gauge | Server info (labeled by `version`, `go_version`) |
 
 ### Prometheus Scrape Configuration
