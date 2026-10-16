@@ -96,6 +96,10 @@ func EnvTest() *envtest.Environment {
 				CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineinstancetypes", "VirtualMachineInstancetype", "virtualmachineinstancetype", true),
 				CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachineclusterpreferences", "VirtualMachineClusterPreference", "virtualmachineclusterpreference", false),
 				CRD("instancetype.kubevirt.io", "v1beta1", "virtualmachinepreferences", "VirtualMachinePreference", "virtualmachinepreference", true),
+				// Loki and Tempo operators (observability charts)
+				CRD("loki.grafana.com", "v1", "lokistacks", "LokiStack", "lokistack", true),
+				CRD("tempo.grafana.com", "v1alpha1", "tempostacks", "TempoStack", "tempostack", true),
+				CRD("tempo.grafana.com", "v1alpha1", "tempomonolithics", "TempoMonolithic", "tempomonolithic", true),
 				// Tekton
 				CRD("tekton.dev", "v1", "pipelines", "Pipeline", "pipeline", true),
 				CRD("tekton.dev", "v1", "pipelineruns", "PipelineRun", "pipelinerun", true),
