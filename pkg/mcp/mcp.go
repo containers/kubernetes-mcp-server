@@ -458,7 +458,6 @@ func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
 		Inspector:                         internalk8s.NewClusterInspector(s.p),
 		Config:                            cfg.Config,
 		TargetCompatibilityFiltersEnabled: cfg.EnableTargetCompatibilityToolFilters.Get(),
-		Config:                            cfg.Config,
 	}
 }
 
