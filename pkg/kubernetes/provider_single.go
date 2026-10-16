@@ -75,10 +75,9 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 		return err
 	}
 
+	// Close releases the previous manager and watchers; manager is assigned
+	// after this, so the freshly-built one is left running.
 	p.Close()
-	if p.manager != nil {
-		p.manager.Close()
-	}
 	p.manager = manager
 	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
 	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
@@ -149,10 +148,33 @@ func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpRelo
 	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
 }
 
-func (p *singleClusterProvider) Close() {
+// closeWatchers stops the kubeconfig and cluster-state watchers without
+// touching the manager, so a caller holding a manager it still needs (or
+// about to assign one) can drop the watchers alone.
+func (p *singleClusterProvider) closeWatchers() {
 	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
 		if !reflect.ValueOf(w).IsNil() {
 			w.Close()
 		}
+	}
+}
+
+func (p *singleClusterProvider) Close() {
+	p.closeWatchers()
+	if p.manager != nil {
+		p.manager.Close()
+	}
+}
+
+// RefreshCAs re-fetches the manager's cluster CA now, so a rotated CA is
+// picked up on SIGHUP config reload without waiting out
+// ca_refresh_interval. The manager is read under the lock because a reload
+// may be replacing it concurrently.
+func (p *singleClusterProvider) RefreshCAs() {
+	p.mu.RLock()
+	manager := p.manager
+	p.mu.RUnlock()
+	if manager != nil {
+		manager.RefreshCAs()
 	}
 }

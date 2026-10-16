@@ -355,6 +355,11 @@ type Config struct {
 	WorkspacePollInterval Option[time.Duration]
 	// WorkspaceDebounceWindow is the debounce window for kcp workspace reloads.
 	WorkspaceDebounceWindow Option[time.Duration]
+	// CARefreshInterval is how often cached CA certificates are re-fetched
+	// so a rotated cluster CA is picked up without a restart. Zero disables
+	// re-fetching; the CA is then only refreshed when a manager is rebuilt
+	// or on an on-demand SIGHUP re-fetch.
+	CARefreshInterval Option[time.Duration]
 
 	// Internal: parsed provider configs (not exposed to TOML as Option fields)
 	parsedClusterProviderConfigs map[string]ExtendedConfig
@@ -455,6 +460,8 @@ func newConfig() *Config {
 			env("WORKSPACE_POLL_INTERVAL_MS", parseEnvDurationMS).desc("Poll interval for kcp workspace changes"),
 		WorkspaceDebounceWindow: opt("workspace_debounce_window", 5*time.Second).
 			env("WORKSPACE_DEBOUNCE_WINDOW_MS", parseEnvDurationMS).desc("Debounce window for kcp workspace changes"),
+		CARefreshInterval: opt("ca_refresh_interval", 24*time.Hour).
+			desc("How often a CA fetched via the caURL kubeconfig cluster extension is re-fetched (0 disables)"),
 	}
 }
 

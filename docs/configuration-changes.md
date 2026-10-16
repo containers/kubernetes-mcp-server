@@ -126,6 +126,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 | `telemetry.*` | matching `OTEL_*` | no |
 | `kube_client_qps`, `kube_client_burst` | `KUBE_CLIENT_QPS`, `KUBE_CLIENT_BURST` | no |
 | `kubeconfig_debounce_window`, `cluster_state_*`, `workspace_*` | matching `*_MS` | no |
+| `ca_refresh_interval` | — | no |
 | `toolset_configs` | — | yes |
 | `cluster_provider_configs` | — | no |
 
