@@ -1,0 +1,300 @@
+# Tool resources of the Tekton chart. Originally exported from the in-tree tekton toolset; reshaped by hand since.
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: tekton-start
+spec:
+  toolset: tekton
+  examples:
+    - summary: "Start a pipeline with a parameter"
+      arguments: {"kind": "pipeline", "name": "build", "namespace": "ci", "params": {"revision": "main"}}
+    - summary: "Start a task"
+      arguments: {"kind": "task", "name": "lint", "namespace": "ci"}
+  title: 'Tekton: Start'
+  description: >-
+    Start a Tekton Pipeline or Task by creating a run that references it. Returns
+    the name of the new PipelineRun or TaskRun; follow its progress with
+    tekton_logs.
+  inputSchema:
+    type: object
+    required: [name]
+    properties:
+      name:
+        type: string
+        description: Name of the Pipeline or Task to start.
+      namespace:
+        type: string
+      params:
+        type: object
+        additionalProperties: true
+        properties: {}
+        description: >-
+          Parameter values to pass, keyed by parameter name. A value is a string,
+          an array of strings or an object (map of string to string), matching the
+          parameter type declared in the Pipeline or Task spec.
+  variants:
+    argument: kind
+    description: What to start.
+    options:
+      pipeline:
+        description: a Pipeline, as a new PipelineRun
+        kubernetes:
+          verb: create
+          apiVersion: tekton.dev/v1
+          kind: PipelineRun
+          namespace: {argument: namespace}
+          body:
+            expression: >-
+              {'apiVersion': 'tekton.dev/v1', 'kind': 'PipelineRun', 'metadata': {'generateName': args.name + '-'},
+               'spec': {'pipelineRef': {'name': args.name}, 'params': has(args.params) ? args.params.map(k, {'name': k, 'value': args.params[k]}) : []}}
+        output: >-
+          "Pipeline '" + args.name + "' started as PipelineRun '" + response.metadata.name + "' in namespace '" + response.metadata.namespace + "'"
+      task:
+        description: a Task, as a new TaskRun
+        kubernetes:
+          verb: create
+          apiVersion: tekton.dev/v1
+          kind: TaskRun
+          namespace: {argument: namespace}
+          body:
+            expression: >-
+              {'apiVersion': 'tekton.dev/v1', 'kind': 'TaskRun', 'metadata': {'generateName': args.name + '-'},
+               'spec': {'taskRef': {'name': args.name}, 'params': has(args.params) ? args.params.map(k, {'name': k, 'value': args.params[k]}) : []}}
+        output: >-
+          "Task '" + args.name + "' started as TaskRun '" + response.metadata.name + "' in namespace '" + response.metadata.namespace + "'"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: tekton-restart
+spec:
+  toolset: tekton
+  examples:
+    - summary: "Run a failed PipelineRun again"
+      arguments: {"kind": "pipelinerun", "name": "build-run-abc12", "namespace": "ci"}
+  title: 'Tekton: Restart'
+  destructive: true
+  description: >-
+    Run a finished or failed PipelineRun or TaskRun again by creating a new run
+    with the same spec (the original is left as it is). Read its logs with
+    tekton_logs first to know why it failed.
+  inputSchema:
+    type: object
+    required: [name]
+    properties:
+      name:
+        type: string
+        description: Name of the PipelineRun or TaskRun to restart.
+      namespace:
+        type: string
+  variants:
+    argument: kind
+    description: What to restart.
+    options:
+      pipelinerun:
+        description: a PipelineRun
+        steps:
+          - name: existing
+            kubernetes: {verb: get, apiVersion: tekton.dev/v1, kind: PipelineRun, namespace: {argument: namespace}, name: {argument: name}}
+          - name: restarted
+            kubernetes:
+              verb: create
+              apiVersion: tekton.dev/v1
+              kind: PipelineRun
+              namespace: {argument: namespace}
+              body:
+                expression: >-
+                  {'apiVersion': 'tekton.dev/v1', 'kind': 'PipelineRun',
+                   'metadata': {'generateName': (has(steps.existing.metadata.generateName) && steps.existing.metadata.generateName != '') ? steps.existing.metadata.generateName : args.name + '-'},
+                   'spec': steps.existing.spec.transformMapEntry(k, v, k == 'status' ? {} : {k: v})}
+        output: >-
+          "PipelineRun '" + args.name + "' restarted as '" + steps.restarted.metadata.name + "' in namespace '" + steps.restarted.metadata.namespace + "'"
+      taskrun:
+        description: a TaskRun
+        steps:
+          - name: existing
+            kubernetes: {verb: get, apiVersion: tekton.dev/v1, kind: TaskRun, namespace: {argument: namespace}, name: {argument: name}}
+          - name: restarted
+            kubernetes:
+              verb: create
+              apiVersion: tekton.dev/v1
+              kind: TaskRun
+              namespace: {argument: namespace}
+              body:
+                expression: >-
+                  {'apiVersion': 'tekton.dev/v1', 'kind': 'TaskRun',
+                   'metadata': {'generateName': (has(steps.existing.metadata.generateName) && steps.existing.metadata.generateName != '') ? steps.existing.metadata.generateName : args.name + '-'},
+                   'spec': steps.existing.spec.transformMapEntry(k, v, k == 'status' ? {} : {k: v})}
+        output: >-
+          "TaskRun '" + args.name + "' restarted as '" + steps.restarted.metadata.name + "' in namespace '" + steps.restarted.metadata.namespace + "'"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: tekton-cancel
+spec:
+  toolset: tekton
+  examples:
+    - summary: "Cancel a running PipelineRun"
+      arguments: {"kind": "pipelinerun", "name": "build-run-abc12", "namespace": "ci"}
+  title: 'Tekton: Cancel'
+  destructive: true
+  description: >-
+    Cancel a running PipelineRun or TaskRun by setting its spec.status. Tekton
+    stops the pods and marks the run cancelled; the run can be started again with
+    tekton_restart.
+  inputSchema:
+    type: object
+    required: [name]
+    properties:
+      name:
+        type: string
+        description: Name of the PipelineRun or TaskRun to cancel.
+      namespace:
+        type: string
+  variants:
+    argument: kind
+    description: What to cancel.
+    options:
+      pipelinerun:
+        description: a PipelineRun (spec.status Cancelled)
+        kubernetes: {verb: patch, apiVersion: tekton.dev/v1, kind: PipelineRun, namespace: {argument: namespace}, name: {argument: name}, body: {value: {spec: {status: Cancelled}}}}
+        output: >-
+          "PipelineRun '" + args.name + "' cancelled in namespace '" + response.metadata.namespace + "'"
+      taskrun:
+        description: a TaskRun (spec.status TaskRunCancelled)
+        kubernetes: {verb: patch, apiVersion: tekton.dev/v1, kind: TaskRun, namespace: {argument: namespace}, name: {argument: name}, body: {value: {spec: {status: TaskRunCancelled}}}}
+        output: >-
+          "TaskRun '" + args.name + "' cancelled in namespace '" + response.metadata.namespace + "'"
+---
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: Tool
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: tekton-logs
+spec:
+  toolset: tekton
+  examples:
+    - summary: "Logs of one pipeline task"
+      arguments: {"kind": "pipelinerun", "name": "build-run-abc12", "namespace": "ci", "task": "compile", "tail": 200}
+    - summary: "Logs of one TaskRun step"
+      arguments: {"kind": "taskrun", "name": "build-run-abc12-compile", "namespace": "ci", "step": "build"}
+  title: 'Tekton: Logs'
+  readOnly: true
+  idempotent: true
+  description: >-
+    Read the step and sidecar logs of a PipelineRun (every TaskRun it owns) or of
+    one TaskRun, resolved to the right pods and containers. Narrow a PipelineRun
+    with task, and any run with step; tail bounds the lines per container. Returns
+    plain text with a "# TaskRun: <name> [step: <name>]" heading before each log.
+  inputSchema:
+    type: object
+    required: [name]
+    properties:
+      name:
+        type: string
+        description: Name of the PipelineRun or TaskRun.
+      namespace:
+        type: string
+      task:
+        type: string
+        description: Only the TaskRuns of this pipeline task (the tekton.dev/pipelineTask label); kind pipelinerun only.
+      step:
+        type: string
+        description: Only this step. When omitted, every step and sidecar is returned.
+      tail:
+        type: integer
+        default: 100
+        minimum: 0
+        description: Lines to return from the end of each container log.
+  variants:
+    argument: kind
+    description: Whose logs to read.
+    options:
+      pipelinerun:
+        description: every TaskRun of a PipelineRun
+        steps:
+          - name: pipelinerun
+            kubernetes: {verb: get, apiVersion: tekton.dev/v1, kind: PipelineRun, namespace: {argument: namespace}, name: {argument: name}}
+          - name: taskruns
+            kubernetes:
+              verb: list
+              apiVersion: tekton.dev/v1
+              kind: TaskRun
+              namespace: {argument: namespace}
+              queryExpression: "{'labelSelector': 'tekton.dev/pipelineRun=' + args.name + ((has(args.task) && args.task != '') ? ',tekton.dev/pipelineTask=' + args.task : '')}"
+          - name: runs
+            expression: steps.taskruns.items
+          - name: containers
+            expression: >-
+              steps.runs.map(tr, !(has(tr.status) && has(tr.status.podName) && tr.status.podName != '') ? [] :
+              (has(tr.status.steps) ? tr.status.steps : []).filter(st, !has(args.step) || args.step == '' || st.name == args.step).map(st,
+                {'taskRun': tr.metadata.name, 'pod': tr.status.podName, 'kind': 'step', 'name': st.name, 'container': st.container})
+              + ((!has(args.step) || args.step == '') && has(tr.status.sidecars) ? tr.status.sidecars.map(sc,
+                {'taskRun': tr.metadata.name, 'pod': tr.status.podName, 'kind': 'sidecar', 'name': sc.name, 'container': sc.container}) : [])).flatten()
+          - name: notStarted
+            expression: steps.runs.filter(tr, !(has(tr.status) && has(tr.status.podName) && tr.status.podName != '')).map(tr, tr.metadata.name)
+          - name: logs
+            forEach: steps.containers
+            ignoreError: true
+            kubernetes:
+              verb: get
+              apiVersion: v1
+              kind: Pod
+              subresource: log
+              namespace: {argument: namespace}
+              name: {expression: item.pod}
+              query:
+                container: {expression: item.container}
+                tailLines: {expression: 'has(args.tail) && int(args.tail) > 0 ? int(args.tail) : 100'}
+        output: >-
+          size(steps.runs) == 0
+            ? "No TaskRuns found for PipelineRun '" + args.name + "' in namespace '" + steps.pipelinerun.metadata.namespace + "'" + ((has(args.task) && args.task != '') ? " matching pipeline task '" + args.task + "'" : "")
+            : (size(steps.containers) == 0 && size(steps.notStarted) == 0
+              ? "No logs available for PipelineRun '" + args.name + "' in namespace '" + steps.pipelinerun.metadata.namespace + "'"
+              : (steps.notStarted.map(n, "TaskRun '" + n + "' in namespace '" + args.namespace + "' has not started a pod yet")
+            + range(size(steps.containers)).map(i, "# TaskRun: " + steps.containers[i].taskRun + " [" + steps.containers[i].kind + ": " + steps.containers[i].name + "]\n"
+              + (type(steps.logs[i]) == string ? steps.logs[i] : "error retrieving logs: " + steps.logs[i].error))).join("\n"))
+      taskrun:
+        description: one TaskRun
+        steps:
+          - name: taskrun
+            kubernetes: {verb: get, apiVersion: tekton.dev/v1, kind: TaskRun, namespace: {argument: namespace}, name: {argument: name}}
+          - name: runs
+            expression: '[steps.taskrun]'
+          - name: containers
+            expression: >-
+              steps.runs.map(tr, !(has(tr.status) && has(tr.status.podName) && tr.status.podName != '') ? [] :
+              (has(tr.status.steps) ? tr.status.steps : []).filter(st, !has(args.step) || args.step == '' || st.name == args.step).map(st,
+                {'taskRun': tr.metadata.name, 'pod': tr.status.podName, 'kind': 'step', 'name': st.name, 'container': st.container})
+              + ((!has(args.step) || args.step == '') && has(tr.status.sidecars) ? tr.status.sidecars.map(sc,
+                {'taskRun': tr.metadata.name, 'pod': tr.status.podName, 'kind': 'sidecar', 'name': sc.name, 'container': sc.container}) : [])).flatten()
+          - name: notStarted
+            expression: steps.runs.filter(tr, !(has(tr.status) && has(tr.status.podName) && tr.status.podName != '')).map(tr, tr.metadata.name)
+          - name: logs
+            forEach: steps.containers
+            ignoreError: true
+            kubernetes:
+              verb: get
+              apiVersion: v1
+              kind: Pod
+              subresource: log
+              namespace: {argument: namespace}
+              name: {expression: item.pod}
+              query:
+                container: {expression: item.container}
+                tailLines: {expression: 'has(args.tail) && int(args.tail) > 0 ? int(args.tail) : 100'}
+        output: >-
+          size(steps.containers) == 0 && size(steps.notStarted) == 0
+            ? "No logs available for TaskRun '" + args.name + "' in namespace '" + steps.taskrun.metadata.namespace + "'"
+            : (steps.notStarted.map(n, "TaskRun '" + n + "' in namespace '" + args.namespace + "' has not started a pod yet")
+            + range(size(steps.containers)).map(i, "# TaskRun: " + steps.containers[i].taskRun + " [" + steps.containers[i].kind + ": " + steps.containers[i].name + "]\n"
+              + (type(steps.logs[i]) == string ? steps.logs[i] : "error retrieving logs: " + steps.logs[i].error))).join("\n")

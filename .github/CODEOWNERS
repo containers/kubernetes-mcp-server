@@ -38,8 +38,7 @@
 /docs/kubevirt.md           @ksimon1 @lyarwood
 
 # toolset: tekton
-/pkg/toolsets/tekton/       @ksimon1
-/pkg/mcp/tekton*            @ksimon1
+/charts/dynamic-tools/tekton-mcp-tools/   @ksimon1
 /build/tekton.mk            @ksimon1
 /evals/tasks/tekton/        @ksimon1
 

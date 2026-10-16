@@ -1,0 +1,21 @@
+# The ToolSet resource of the tekton-mcp-tools chart: the family operators enable as
+# "dynamic/tekton", the prefix of every tool, and the instructions the
+# server contributes to its MCP instructions (see docs/specs/tools-for-models.md).
+apiVersion: tools.kubernetes-mcp-server.io/v1alpha1
+kind: ToolSet
+metadata:
+  labels:
+    app.kubernetes.io/part-of: kubernetes-mcp-server
+  name: tekton
+spec:
+  description: Tekton Pipelines runs, tasks and troubleshooting
+  prefix: tekton
+  requires:
+    - {apiVersion: tekton.dev/v1, kind: PipelineRun}
+  instructions: |
+    Tekton tools start, inspect, restart and cancel Pipelines and Tasks; each
+    takes a kind argument that says which. To find out why a run failed, read
+    its logs with tekton_logs (narrow with task and step) before restarting
+    it; tekton_restart creates a new run from the existing spec and leaves
+    the original. Use the tekton-pipeline-troubleshoot prompt for a full
+    diagnosis of one PipelineRun.

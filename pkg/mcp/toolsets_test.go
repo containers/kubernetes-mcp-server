@@ -22,7 +22,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/logs"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/otelcol"
-	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/tekton"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/traces"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -282,7 +281,6 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&logs.Toolset{},
 		&metrics.Toolset{},
 		&otelcol.Toolset{},
-		&tekton.Toolset{},
 		&traces.Toolset{},
 	}
 	for _, testCase := range testCases {

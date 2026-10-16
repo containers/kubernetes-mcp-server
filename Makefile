@@ -184,6 +184,7 @@ local-env-setup-tekton: ## Setup complete local development environment with Min
 	@echo "========================================="
 	$(MAKE) minikube-create-cluster
 	$(MAKE) tekton-install
+	$(MAKE) dynamic-tools-install DYNAMIC_TOOLS_CHARTS=tekton-mcp-tools
 	$(MAKE) build
 	@echo ""
 	@echo "========================================="
@@ -191,10 +192,10 @@ local-env-setup-tekton: ## Setup complete local development environment with Min
 	@echo "========================================="
 	@echo ""
 	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME) --toolsets core,config"
+	@echo "  ./$(BINARY_NAME) --toolsets core,config,dynamic"
 	@echo ""
 	@echo "Or run with MCP inspector:"
-	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --toolsets core,config"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --toolsets core,config,dynamic"
 	@echo ""
 	@echo "Tekton Pipelines is now available!"
 	@echo "Check status with: make tekton-status"
