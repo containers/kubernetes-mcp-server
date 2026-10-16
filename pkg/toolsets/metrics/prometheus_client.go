@@ -2,10 +2,10 @@ package metrics
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	promapi "github.com/prometheus/client_golang/api"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/auth"
@@ -48,13 +48,13 @@ func getPromClient(params api.ToolHandlerParams) (prometheus.Loader, error) {
 	metricsBackendURL := cfg.PrometheusURL
 	if metricsBackendURL == "" {
 		metricsBackendURL = defaultPrometheusURL
-		slog.Info("No prometheus_url configured, using default", "url", defaultPrometheusURL)
+		klogutil.FromContext(params.Context).Info("No prometheus_url configured, using default", "url", defaultPrometheusURL)
 	}
 
 	// Get guardrails configuration
 	guardrails, err := cfg.GetGuardrails()
 	if err != nil {
-		slog.Warn("Failed to parse guardrails configuration", "err", err)
+		klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to parse guardrails configuration", klogutil.Err(err))
 	}
 
 	apiConfig, err := buildAPIConfig(params, metricsBackendURL, cfg.Insecure, cfg.GetAuthMode())
