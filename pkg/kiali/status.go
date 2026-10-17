@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 const (
@@ -75,7 +75,11 @@ func (k *Kiali) probeStatus(ctx context.Context) bool {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	limit, err := k.backendLimit()
+	if err != nil {
+		return false
+	}
+	body, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
 		return false
 	}
