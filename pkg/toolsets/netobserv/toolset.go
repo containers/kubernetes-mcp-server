@@ -3,6 +3,9 @@ package netobserv
 import (
 	"context"
 	"slices"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	netobserv "github.com/containers/kubernetes-mcp-server/pkg/netobserv"
@@ -24,13 +27,15 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(ctx context.Context, tc api.ToolsetContext) []api.ServerTool {
+	explicitURL := false
 	cfg, err := netobserv.DetectConfig(ctx, tc.Inspector)
 	if err != nil {
 		cfg.Unknown = true
 	}
 	if tc.Config != nil {
 		if configValue, ok := tc.Config.GetToolsetConfig(netobserv.ToolsetConfigKey); ok {
-			if netobservCfg, ok := configValue.(*netobserv.Config); ok {
+			if netobservCfg, ok := configValue.(*netobserv.Config); ok && netobservCfg != nil {
+				explicitURL = strings.TrimSpace(netobservCfg.Url) != ""
 				cfg = netobserv.MergeEffectiveConfig(cfg, netobservCfg)
 			}
 		}
@@ -43,6 +48,17 @@ func (t *Toolset) GetTools(ctx context.Context, tc api.ToolsetContext) []api.Ser
 	}
 	if metricsEnabled {
 		tools = slices.Concat(tools, netobservTools.InitGetFlowMetrics(tc.Inspector, cfg))
+	}
+	compatible := func() bool {
+		if explicitURL || tc.Inspector == nil {
+			return true
+		}
+		return api.AnyTargetHasGVK(ctx, tc.Inspector, schema.GroupVersionKind{
+			Group: "flows.netobserv.io", Kind: "FlowCollector",
+		})
+	}
+	for i := range tools {
+		tools[i].TargetCompatibilityFilters = append(tools[i].TargetCompatibilityFilters, compatible)
 	}
 	return tools
 }

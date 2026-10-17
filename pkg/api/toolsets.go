@@ -107,9 +107,10 @@ func (s *ServerTool) IsTargetListProvider() bool {
 }
 
 type ToolsetContext struct {
-	Inspector                         ClusterInspector
-	Config                            *config.Config
-	TargetCompatibilityFiltersEnabled bool
+	Inspector ClusterInspector
+	// Config is the configuration being applied. During a configuration reload,
+	// it contains the incoming configuration, not the previously active one.
+	Config *config.Config
 }
 
 type Toolset interface {
