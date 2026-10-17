@@ -481,6 +481,33 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 toolsets = ["core", "config", "helm", "kubevirt"]
 ```
 
+#### Perses requirement for timeseries charts
+
+The `show_timeseries` tool in `observability/metrics` is registered only
+when at least one `perses.dev/v1alpha2` Perses resource instance is found
+in a configured cluster. This check applies regardless of
+`experimental_enable_target_compatibility_tool_filters`.
+
+The credentials used for detection must have permission to list Perses
+resources across namespaces. Without that permission, the tool stays hidden.
+No Perses-specific permissions are granted by default.
+
+For Helm deployments using the chart's ServiceAccount, configure:
+
+```yaml
+rbac:
+  extraClusterRoles:
+    - name: perses-reader
+      rules:
+        - apiGroups: ["perses.dev"]
+          resources: ["perses"]
+          verbs: ["list"]
+  extraClusterRoleBindings:
+    - name: perses-reader
+      roleRef:
+        name: perses-reader
+```
+
 **Available Resources:**
 
 <!-- AVAILABLE-TOOLSETS-RESOURCES-START -->

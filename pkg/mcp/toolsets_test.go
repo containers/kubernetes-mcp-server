@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,6 +33,16 @@ import (
 )
 
 const updateJsonEnvVar = "UPDATE_TOOLSETS_JSON"
+
+const persesListWithInstance = `{
+	"apiVersion": "perses.dev/v1alpha2",
+	"kind": "PersesList",
+	"items": [{
+		"apiVersion": "perses.dev/v1alpha2",
+		"kind": "Perses",
+		"metadata": {"name": "monitoring", "namespace": "observability"}
+	}]
+}`
 
 type ToolsetsSuite struct {
 	suite.Suite
@@ -298,7 +309,92 @@ func (s *ToolsetsSuite) TestDefaultToolsetsPromptsInMultiCluster() {
 	})
 }
 
+func (s *ToolsetsSuite) TestShowTimeseriesRequiresPersesInstance() {
+	testCases := []struct {
+		name    string
+		status  int
+		body    string
+		present bool
+	}{
+		{
+			name:    "Perses instance exists",
+			status:  http.StatusOK,
+			body:    persesListWithInstance,
+			present: true,
+		},
+		{
+			name:   "Perses CRD exists without instances",
+			status: http.StatusOK,
+			body:   `{"apiVersion":"perses.dev/v1alpha2","kind":"PersesList","items":[]}`,
+		},
+		{
+			name:   "Perses API is missing",
+			status: http.StatusNotFound,
+			body:   `{"apiVersion":"v1","kind":"Status","status":"Failure","reason":"NotFound","code":404}`,
+		},
+		{
+			name:   "Perses list permission denied",
+			status: http.StatusForbidden,
+			body:   `{"apiVersion":"v1","kind":"Status","status":"Failure","reason":"Forbidden","code":403}`,
+		},
+	}
+	for _, filtering := range []bool{false, true} {
+		for _, tc := range testCases {
+			s.Run(tc.name+"/filtering="+strconv.FormatBool(filtering), func() {
+				s.ResetHandlers()
+				var resources []metav1.APIResourceList
+				if tc.status != http.StatusNotFound {
+					resources = append(resources, metav1.APIResourceList{
+						GroupVersion: "perses.dev/v1alpha2",
+						APIResources: []metav1.APIResource{
+							{Name: "perses", Kind: "Perses", Namespaced: true, Verbs: metav1.Verbs{"list"}},
+						},
+					})
+				}
+				s.Handle(test.NewDiscoveryClientHandler(resources...))
+				s.handlePersesList(tc.status, tc.body)
+				s.Cfg.Toolsets.SetForTest([]string{(&metrics.Toolset{}).GetName()})
+				s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(filtering)
+				s.InitMcpClient()
+
+				tools, err := s.ListTools()
+				s.Require().NoError(err)
+				s.Require().NotNil(tools)
+				names := make([]string, 0, len(tools.Tools))
+				found := false
+				for _, tool := range tools.Tools {
+					names = append(names, tool.Name)
+					if tool.Name == "show_timeseries" {
+						found = true
+					}
+				}
+				s.Equal(tc.present, found, "show_timeseries must require a Perses instance")
+				s.Contains(names, "execute_range_query", "Other metrics tools must remain available")
+			})
+		}
+	}
+}
+
+func (s *ToolsetsSuite) handlePersesList(status int, body string) {
+	s.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet || req.URL.Path != "/apis/perses.dev/v1alpha2/perses" {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+}
+
 func (s *ToolsetsSuite) TestGranularToolsetsTools() {
+	s.ResetHandlers()
+	s.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
+		GroupVersion: "perses.dev/v1alpha2",
+		APIResources: []metav1.APIResource{
+			{Name: "perses", Kind: "Perses", Namespaced: true, Verbs: metav1.Verbs{"list"}},
+		},
+	}))
+	s.handlePersesList(http.StatusOK, persesListWithInstance)
 	testCases := []api.Toolset{
 		&core.Toolset{},
 		&config.Toolset{},
