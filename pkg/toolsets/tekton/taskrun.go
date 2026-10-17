@@ -14,10 +14,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/buffer"
 	"k8s.io/utils/ptr"
 )
-
-const maxLogBytesPerContainer = 1 << 20 // 1 MiB
 
 func taskRunTools() []api.ServerTool {
 	return []api.ServerTool{
@@ -233,11 +232,10 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 }
 
 func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
-	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: container,
 		TailLines: &tailLines,
-	})
-	stream, err := req.Stream(ctx)
+	}).Stream(ctx)
 	if err != nil {
 		fmt.Fprintf(sb, "[%s: %s] error retrieving logs: %v\n", kind, name, err)
 		return
@@ -246,12 +244,42 @@ func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *
 		_ = stream.Close()
 	}()
 
-	bytes, err := io.ReadAll(io.LimitReader(stream, maxLogBytesPerContainer))
+	logBytes, err := io.ReadAll(stream)
 	if err != nil {
 		fmt.Fprintf(sb, "[%s: %s] error reading logs: %v\n", kind, name, err)
 		return
 	}
-	if len(bytes) > 0 {
-		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, string(bytes))
+	if len(logBytes) > 0 {
+		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, string(logBytes))
 	}
+}
+
+func readContainerLog(ctx context.Context, client api.KubernetesClient, namespace, podName, container string, maxBytes, tailLines int64) (string, bool, error) {
+	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: container,
+		TailLines: &tailLines,
+	}).Stream(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() {
+		_ = stream.Close()
+	}()
+
+	logText, truncated, err := readLogTail(stream, maxBytes)
+	if err != nil {
+		return "", false, fmt.Errorf("error reading logs for container %s: %w", container, err)
+	}
+	return logText, truncated, nil
+}
+
+func readLogTail(reader io.Reader, maxBytes int64) (string, bool, error) {
+	logTail, err := buffer.NewTypedRingFixed[byte](int(maxBytes))
+	if err != nil {
+		return "", false, fmt.Errorf("invalid byte limit %d: %w", maxBytes, err)
+	}
+	if _, err := io.Copy(logTail, reader); err != nil {
+		return "", false, err
+	}
+	return string(logTail.Slice()), logTail.TotalWritten() > maxBytes, nil
 }
