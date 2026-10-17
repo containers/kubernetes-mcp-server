@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -56,8 +57,26 @@ func newKcpClusterProvider(ctx context.Context, cfg *config.Config) (kubernetes.
 
 func (p *kcpClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.resetLocked(ctx)
+	oldWorkspaceWatcher := p.workspaceWatcher
+	oldClusterStateWatcher := p.clusterStateWatcher
+	oldManagers := p.managers
+	err := p.resetLocked(ctx)
+	p.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if oldWorkspaceWatcher != nil {
+		oldWorkspaceWatcher.Close()
+	}
+	if oldClusterStateWatcher != nil {
+		oldClusterStateWatcher.Close()
+	}
+	for _, old := range oldManagers {
+		if old != nil {
+			old.Close()
+		}
+	}
+	return nil
 }
 
 func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
@@ -122,22 +141,32 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 	}
 	newManagers[defaultWorkspace] = baseManager
 
-	oldManagers := p.managers
 	p.clientCmdConfig = clientCmdConfig
 	p.baseServerURL = baseServerURL
 	p.defaultWorkspace = defaultWorkspace
 	p.restConfig = restConfig
 	p.managers = newManagers
-	p.Close()
 	p.workspaceWatcher = NewWorkspaceWatcher(ctx, k8s.DynamicClient(), defaultWorkspace, p.cfg.WorkspacePollInterval.Get(), p.cfg.WorkspaceDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, k8s.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
-	for _, old := range oldManagers {
-		if old != nil {
-			old.Close()
-		}
-	}
+	p.clusterStateWatcher = watcher.NewClusterStateForTargets(ctx, p.discoveryClients, p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 
 	return nil
+}
+
+func (p *kcpClusterProvider) discoveryClients(ctx context.Context) map[string]discovery.CachedDiscoveryInterface {
+	targets, err := p.GetTargets(ctx)
+	if err != nil {
+		return nil
+	}
+	clients := make(map[string]discovery.CachedDiscoveryInterface, len(targets))
+	for _, target := range targets {
+		manager, err := p.managerForWorkspace(ctx, target, false)
+		if err != nil {
+			clients[target] = nil
+			continue
+		}
+		clients[target] = manager.DiscoveryClient()
+	}
+	return clients
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.

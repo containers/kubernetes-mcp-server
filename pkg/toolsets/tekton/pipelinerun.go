@@ -26,7 +26,7 @@ const (
 	pipelineRunActionCancel  pipelineRunLifecycleAction = "cancel"
 )
 
-func pipelineRunTools() []api.ServerTool {
+func pipelineRunTools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -55,6 +55,9 @@ func pipelineRunTools() []api.ServerTool {
 				},
 			),
 			Handler: pipelineRunLifecycle,
+			TargetCompatibilityFilters: []func() bool{
+				hasTektonKinds(ctx, inspector, pipelineRunKind),
+			},
 		},
 		{
 			Tool: api.Tool{
@@ -115,6 +118,9 @@ func pipelineRunTools() []api.ServerTool {
 				},
 			),
 			Handler: getPipelineRunLogs,
+			TargetCompatibilityFilters: []func() bool{
+				hasTektonKinds(ctx, inspector, pipelineRunKind, taskRunKind),
+			},
 		},
 	}
 }
@@ -178,8 +184,8 @@ func restartPipelineRun(ctx context.Context, dynamicClient dynamic.Interface, na
 
 	newPR := &tektonv1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "tekton.dev/v1",
-			Kind:       "PipelineRun",
+			APIVersion: tektonv1.SchemeGroupVersion.String(),
+			Kind:       pipelineRunKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    namespace,

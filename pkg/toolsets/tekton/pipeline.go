@@ -1,6 +1,7 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -12,7 +13,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func pipelineTools() []api.ServerTool {
+func pipelineTools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -60,6 +61,9 @@ func pipelineTools() []api.ServerTool {
 				},
 			),
 			Handler: startPipeline,
+			TargetCompatibilityFilters: []func() bool{
+				hasTektonKinds(ctx, inspector, pipelineKind, pipelineRunKind),
+			},
 		},
 	}
 }
@@ -90,8 +94,8 @@ func startPipeline(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	pr := &tektonv1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "tekton.dev/v1",
-			Kind:       "PipelineRun",
+			APIVersion: tektonv1.SchemeGroupVersion.String(),
+			Kind:       pipelineRunKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    namespace,
