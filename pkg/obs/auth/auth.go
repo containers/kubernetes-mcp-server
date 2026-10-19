@@ -91,7 +91,7 @@ func createRoundTripperWithToken(ctx context.Context, cfg *config.Config, restCo
 		return nil, fmt.Errorf("failed to build observability TLS config: %w", err)
 	}
 
-	var transport http.RoundTripper = config.NewTLSEnforcingTransport(rt, func() bool { return cfg.RequireTLS.Get() })
+	transport := config.NewTLSEnforcingTransport(rt, func() bool { return cfg.RequireTLS.Get() })
 	if token != "" {
 		transport = promcfg.NewAuthorizationCredentialsRoundTripper(
 			"Bearer", promcfg.NewInlineSecret(token), transport)
