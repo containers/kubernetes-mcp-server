@@ -17,7 +17,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func taskRunTools() []api.ServerTool {
+func taskRunTools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -59,6 +59,9 @@ func taskRunTools() []api.ServerTool {
 				},
 			),
 			Handler: restartTaskRun,
+			TargetCompatibilityFilters: []func() bool{
+				hasTektonKinds(ctx, inspector, taskRunKind),
+			},
 		},
 		{
 			Tool: api.Tool{
@@ -110,6 +113,9 @@ func taskRunTools() []api.ServerTool {
 				},
 			),
 			Handler: getTaskRunLogs,
+			TargetCompatibilityFilters: []func() bool{
+				hasTektonKinds(ctx, inspector, taskRunKind),
+			},
 		},
 	}
 }
@@ -137,8 +143,8 @@ func restartTaskRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	newTR := &tektonv1.TaskRun{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "tekton.dev/v1",
-			Kind:       "TaskRun",
+			APIVersion: tektonv1.SchemeGroupVersion.String(),
+			Kind:       taskRunKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    namespace,

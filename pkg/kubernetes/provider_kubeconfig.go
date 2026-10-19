@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sync"
 
+	"k8s.io/client-go/discovery"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
@@ -47,8 +49,26 @@ func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Prov
 
 func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.resetLocked(ctx)
+	oldKubeconfigWatcher := p.kubeconfigWatcher
+	oldClusterStateWatcher := p.clusterStateWatcher
+	oldManagers := p.managers
+	err := p.resetLocked(ctx)
+	p.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if oldKubeconfigWatcher != nil {
+		oldKubeconfigWatcher.Close()
+	}
+	if oldClusterStateWatcher != nil {
+		oldClusterStateWatcher.Close()
+	}
+	for _, old := range oldManagers {
+		if old != nil {
+			old.Close()
+		}
+	}
+	return nil
 }
 
 func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
@@ -83,11 +103,6 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 		}
 	}
 
-	for _, old := range p.managers {
-		if old != nil {
-			old.Close()
-		}
-	}
 	p.managers = map[string]*Manager{
 		defaultContext: m,
 	}
@@ -99,12 +114,28 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 		p.managers[name] = nil
 	}
 
-	p.Close()
 	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
+	p.clusterStateWatcher = watcher.NewClusterStateForTargets(ctx, p.discoveryClients, p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	p.defaultContext = defaultContext
 
 	return nil
+}
+
+func (p *kubeConfigClusterProvider) discoveryClients(ctx context.Context) map[string]discovery.CachedDiscoveryInterface {
+	targets, err := p.GetTargets(ctx)
+	if err != nil {
+		return nil
+	}
+	clients := make(map[string]discovery.CachedDiscoveryInterface, len(targets))
+	for _, target := range targets {
+		manager, err := p.managerForContext(ctx, target, false)
+		if err != nil {
+			clients[target] = nil
+			continue
+		}
+		clients[target] = manager.DiscoveryClient()
+	}
+	return clients
 }
 
 // managerForWorkspace returns or creates a Manager for the specified kubeContext.

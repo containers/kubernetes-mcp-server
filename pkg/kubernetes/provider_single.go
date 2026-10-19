@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sync"
 
+	"k8s.io/client-go/discovery"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
@@ -48,8 +50,24 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 
 func (p *singleClusterProvider) reset(ctx context.Context) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.resetLocked(ctx)
+	oldKubeconfigWatcher := p.kubeconfigWatcher
+	oldClusterStateWatcher := p.clusterStateWatcher
+	oldManager := p.manager
+	err := p.resetLocked(ctx)
+	p.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if oldKubeconfigWatcher != nil {
+		oldKubeconfigWatcher.Close()
+	}
+	if oldClusterStateWatcher != nil {
+		oldClusterStateWatcher.Close()
+	}
+	if oldManager != nil {
+		oldManager.Close()
+	}
+	return nil
 }
 
 func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
@@ -75,14 +93,19 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 		return err
 	}
 
-	p.Close()
-	if p.manager != nil {
-		p.manager.Close()
-	}
 	p.manager = manager
 	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
+	p.clusterStateWatcher = watcher.NewClusterStateForTargets(ctx, p.discoveryClients, p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	return nil
+}
+
+func (p *singleClusterProvider) discoveryClients(context.Context) map[string]discovery.CachedDiscoveryInterface {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.manager == nil {
+		return map[string]discovery.CachedDiscoveryInterface{"": nil}
+	}
+	return map[string]discovery.CachedDiscoveryInterface{"": p.manager.DiscoveryClient()}
 }
 
 func (p *singleClusterProvider) IsMultiTarget() bool {

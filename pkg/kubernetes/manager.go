@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -178,6 +179,14 @@ func (m *Manager) Config() *config.Config {
 		return nil
 	}
 	return m.config.Load()
+}
+
+// DiscoveryClient returns the manager's shared cached discovery client.
+func (m *Manager) DiscoveryClient() discovery.CachedDiscoveryInterface {
+	if m == nil || m.kubernetes == nil {
+		return nil
+	}
+	return m.kubernetes.DiscoveryClient()
 }
 
 func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
