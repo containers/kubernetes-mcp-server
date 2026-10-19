@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	promapi "github.com/prometheus/client_golang/api"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/auth"

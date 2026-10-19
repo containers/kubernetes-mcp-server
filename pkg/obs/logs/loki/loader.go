@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 const (
