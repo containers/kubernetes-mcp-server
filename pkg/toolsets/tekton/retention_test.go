@@ -181,11 +181,112 @@ func (s *RetentionSuite) TestPipelineEventsStopBeforeTheNextTarget() {
 		{ObjectMeta: metav1.ObjectMeta{Name: "t2"}, Status: tektonv1.TaskRunStatus{TaskRunStatusFields: tektonv1.TaskRunStatusFields{PodName: "p2"}}},
 	}
 	b := api.NewBuilderWithBudget(32)
-	fetchPipelineRunEventsForPrompt(params, "ns", "pr", taskRuns, b)
+	fetchPipelineRunEventsForPrompt(params, "ns", "pr", nil, taskRuns, b)
 	s.Equal(int32(1), lists.Load())
 	s.True(b.Truncated())
 	s.Contains(b.String(), api.ResultTruncationNotice)
 }
+
+func (s *RetentionSuite) TestPipelineRunDiagnosisStopsAfterResultBudgetIsSpent() {
+	pipelineRun := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "PipelineRun",
+		"metadata": map[string]any{
+			"name":      "budgeted",
+			"namespace": "ns",
+			"uid":       "pipeline-run-uid",
+		},
+		"status": map[string]any{
+			"conditions": []any{map[string]any{
+				"type":    "Succeeded",
+				"status":  "False",
+				"reason":  "Failed",
+				"message": strings.Repeat("x", 1024),
+			}},
+		},
+	}}
+	dynamicClient := fake.NewSimpleDynamicClient(runtime.NewScheme(), pipelineRun)
+	var taskRunLists atomic.Int32
+	dynamicClient.PrependReactor("list", "taskruns", func(clienttesting.Action) (bool, runtime.Object, error) {
+		taskRunLists.Add(1)
+		return false, nil, nil
+	})
+
+	core := fakeclient.NewSimpleClientset()
+	var eventLists atomic.Int32
+	core.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+		eventLists.Add(1)
+		return false, nil, nil
+	})
+
+	result, err := diagnosePipelineRun(api.ToolHandlerParams{
+		Context: api.WithResultBudget(s.T().Context(), 512),
+		KubernetesClient: diagnosisBudgetClient{
+			coreClient: coreClient{Interface: core},
+			dynamic:    dynamicClient,
+		},
+		Request: retentionToolRequest{"namespace": "ns", "name": "budgeted"},
+	})
+	s.Require().NoError(err)
+	s.Require().NoError(result.Error)
+	diagnosis, ok := result.StructuredContent.(pipelineRunDiagnosis)
+	s.Require().True(ok)
+	s.True(diagnosis.Truncated)
+	s.Empty(diagnosis.PipelineRun.Conditions)
+	s.Empty(diagnosis.FailedTaskRuns)
+	s.Empty(diagnosis.WarningEvents)
+	s.Zero(taskRunLists.Load())
+	s.Zero(eventLists.Load())
+	s.LessOrEqual(2*len(result.Content), 512)
+}
+
+func (s *RetentionSuite) TestPipelineRunDiagnosisSortsWarningEvents() {
+	core := fakeclient.NewSimpleClientset()
+	core.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, &corev1.EventList{Items: []corev1.Event{
+			{
+				ObjectMeta:     metav1.ObjectMeta{Name: "z-event", UID: "z-event-uid"},
+				Type:           corev1.EventTypeWarning,
+				InvolvedObject: corev1.ObjectReference{Kind: "PipelineRun", Name: "z-run", UID: "z-run-uid"},
+			},
+			{
+				ObjectMeta:     metav1.ObjectMeta{Name: "a-event", UID: "a-event-uid"},
+				Type:           corev1.EventTypeWarning,
+				InvolvedObject: corev1.ObjectReference{Kind: "PipelineRun", Name: "a-run", UID: "a-run-uid"},
+			},
+		}}, nil
+	})
+	params := api.ToolHandlerParams{
+		Context:          s.T().Context(),
+		KubernetesClient: coreClient{Interface: core},
+	}
+	diagnosis := pipelineRunDiagnosis{WarningEvents: []diagnosedEvent{}}
+	collectWarningEventsForPipelineRun(
+		params.Context,
+		params,
+		"ns",
+		&tektonv1.PipelineRun{ObjectMeta: metav1.ObjectMeta{Name: "run", UID: "run-uid"}},
+		nil,
+		&diagnosis,
+		newDiagnosisResultBudget(params.Context),
+	)
+
+	s.Equal([]string{"a-run", "z-run"}, []string{
+		diagnosis.WarningEvents[0].InvolvedName,
+		diagnosis.WarningEvents[1].InvolvedName,
+	})
+}
+
+type retentionToolRequest map[string]any
+
+func (r retentionToolRequest) GetArguments() map[string]any { return r }
+
+type diagnosisBudgetClient struct {
+	coreClient
+	dynamic dynamic.Interface
+}
+
+func (c diagnosisBudgetClient) DynamicClient() dynamic.Interface { return c.dynamic }
 
 // coreClient exposes a clientset to retention tests. Those tests call CoreV1 only.
 type coreClient struct {
