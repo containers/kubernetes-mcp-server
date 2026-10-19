@@ -83,7 +83,11 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiC
 	if inspector == nil {
 		return nil
 	}
-	list, err := inspector.Unstructured().Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
+	unstructuredAPI := inspector.Unstructured()
+	if unstructuredAPI == nil {
+		return nil
+	}
+	list, err := unstructuredAPI.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
 	if err != nil {
 		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs", "error", err)
 		return nil
