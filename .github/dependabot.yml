@@ -32,6 +32,13 @@ updates:
           - "*"
   - package-ecosystem: "npm"
     directory: "/test/browser/basic-host"
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
