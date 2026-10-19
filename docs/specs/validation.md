@@ -26,6 +26,8 @@ The validation layer catches these types of issues:
 
 Validation is **disabled by default**. Schema and RBAC validators run together when enabled. Resource existence is always checked as part of access control.
 
+Resource existence is resolved from cached API discovery. A new API group added to the default cluster (context or workspace) after the server started, for example by a CRD or an aggregated API such as Metrics Server, is recognized once the cluster state watcher detects it: within `cluster_state_poll_interval` plus `cluster_state_debounce_window` (30s + 5s by default). New kinds or versions in an API group that already existed, and API groups added to non-default targets, are recognized after a restart.
+
 ```toml
 # Enable all validation (default: false)
 validation_enabled = true

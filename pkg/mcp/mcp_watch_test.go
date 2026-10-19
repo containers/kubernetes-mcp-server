@@ -2,12 +2,14 @@ package mcp
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -374,6 +376,52 @@ func (s *WatchClusterStateSuite) TestDetectsMetricsServerClusterStateChange() {
 				s.Require().NotEqual("nodes_top", tool.Name, "expected nodes_top to be removed when metrics API is gone")
 			}
 		})
+	})
+}
+
+func (s *WatchClusterStateSuite) TestResolvesAPIGroupAddedAfterStartup() {
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/api/v1/nodes":
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"NodeList","items":[` +
+				`{"metadata":{"name":"node-1"},"status":{"allocatable":{"cpu":"4","memory":"16Gi"}}}]}`))
+		case "/apis/metrics.k8s.io/v1beta1/nodes":
+			_, _ = w.Write([]byte(`{"apiVersion":"metrics.k8s.io/v1beta1","kind":"NodeMetricsList","items":[` +
+				`{"metadata":{"name":"node-1"},"timestamp":"2025-10-29T09:00:00Z","window":"30s",` +
+				`"usage":{"cpu":"500m","memory":"2Gi"}}]}`))
+		}
+	}))
+	s.InitMcpClient()
+
+	s.Run("resolves resources discovered at startup", func() {
+		toolResult, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "Node"})
+		s.Require().NoError(err, "call tool should not return error object")
+		s.Falsef(toolResult.IsError, "call tool should succeed: %s", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+
+	s.Run("nodes_top fails while the metrics API is not served", func() {
+		toolResult, _ := s.CallTool("nodes_top", map[string]interface{}{})
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Truef(toolResult.IsError, "call tool should fail before the metrics API is added")
+	})
+
+	s.Run("nodes_top succeeds after the metrics API is added", func() {
+		capture := s.StartCapturingNotifications()
+		s.handler.AddAPIResourceList(metav1.APIResourceList{
+			GroupVersion: "metrics.k8s.io/v1beta1",
+			APIResources: []metav1.APIResource{
+				{Name: "nodes", Kind: "NodeMetrics", Namespaced: false, Verbs: metav1.Verbs{"get", "list"}},
+			},
+		})
+		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+		time.Sleep(serverSettleDelay)
+
+		toolResult, err := s.CallTool("nodes_top", map[string]interface{}{})
+		s.Require().NoError(err, "call tool should not return error object")
+		s.Require().NotNil(toolResult, "toolResult should not be nil")
+		s.Falsef(toolResult.IsError, "call tool should succeed once the metrics API is discovered: %s",
+			toolResult.Content[0].(*mcp.TextContent).Text)
 	})
 }
 

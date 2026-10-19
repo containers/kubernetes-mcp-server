@@ -225,7 +225,10 @@ func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload Mcp
 		})
 	}
 	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
+	p.mu.RLock()
+	clusterStateWatcher, defaultManager := p.clusterStateWatcher, p.managers[p.defaultContext]
+	p.mu.RUnlock()
+	clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback(defaultManager))
 }
 
 func (p *kubeConfigClusterProvider) Close() {

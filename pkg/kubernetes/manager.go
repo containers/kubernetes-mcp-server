@@ -242,9 +242,11 @@ func (m *Manager) Close() {
 	}
 }
 
-// Invalidate invalidates the cached discovery information.
+// Invalidate invalidates the cached discovery information, including the REST mapper
+// that resolves resources for request validation, so API groups added to the cluster
+// after startup are found on the next request.
 func (m *Manager) Invalidate() {
-	m.kubernetes.DiscoveryClient().Invalidate()
+	m.kubernetes.RESTMapper().Reset()
 }
 
 // applyRateLimit applies QPS and Burst from Config when those options are set.

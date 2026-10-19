@@ -146,7 +146,10 @@ func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpRelo
 		})
 	}
 	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
+	p.mu.RLock()
+	clusterStateWatcher, manager := p.clusterStateWatcher, p.manager
+	p.mu.RUnlock()
+	clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback(manager))
 }
 
 func (p *singleClusterProvider) Close() {

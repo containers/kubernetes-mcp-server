@@ -340,7 +340,10 @@ func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes
 		})
 	}
 	p.workspaceWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
+	p.mu.RLock()
+	clusterStateWatcher, defaultManager := p.clusterStateWatcher, p.managers[p.defaultWorkspace]
+	p.mu.RUnlock()
+	clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback(defaultManager))
 }
 
 func (p *kcpClusterProvider) Close() {
