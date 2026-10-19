@@ -1,6 +1,7 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -12,7 +13,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func taskTools() []api.ServerTool {
+func taskTools(_ context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -60,6 +61,9 @@ func taskTools() []api.ServerTool {
 				},
 			),
 			Handler: startTask,
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				hasTektonKinds(inspector, taskKind, taskRunKind),
+			},
 		},
 	}
 }
@@ -90,8 +94,8 @@ func startTask(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	tr := &tektonv1.TaskRun{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "tekton.dev/v1",
-			Kind:       "TaskRun",
+			APIVersion: tektonv1.SchemeGroupVersion.String(),
+			Kind:       taskRunKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    namespace,
