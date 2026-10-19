@@ -24,6 +24,6 @@
     "@vitejs/plugin-react": "4.7.0",
     "bun": "1.4.3",
     "typescript": "7.0.2",
-    "vite": "6.4.3"
+    "vite": "8.3.4"
   }
 }
