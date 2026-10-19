@@ -85,6 +85,58 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForNonAPIResources() {
 	}
 }
 
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripResolvesResourcesAddedAfterMapperIsLoaded() {
+	mockServer := test.NewMockServer()
+	defer mockServer.Close()
+	discoveryHandler := test.NewDiscoveryClientHandler()
+	mockServer.Handle(discoveryHandler)
+	clientSet, err := kubernetes.NewForConfig(mockServer.Config())
+	s.Require().NoError(err, "Expected no error creating clientset")
+	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(clientSet.Discovery()))
+
+	delegateCalled := false
+	rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+		Delegate: &mockRoundTripper{
+			called: &delegateCalled,
+			onRequest: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		RestMapperProvider: func() meta.RESTMapper { return restMapper },
+	})
+	addGroup := func(group, resource, kind string) {
+		discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
+			GroupVersion: group + "/v1",
+			APIResources: []metav1.APIResource{{Name: resource, Kind: kind, Namespaced: true, Verbs: metav1.Verbs{"get", "list"}}},
+		})
+	}
+
+	s.Run("resolves resources discovered when the mapper is loaded", func() {
+		delegateCalled = false
+		_, err := rt.RoundTrip(httptest.NewRequest("GET", "/api/v1/namespaces/default/pods", nil))
+		s.NoError(err)
+		s.True(delegateCalled, "Expected delegate to be called for pods")
+	})
+
+	s.Run("resolves a resource added after the mapper is loaded", func() {
+		addGroup("widgets.example.com", "widgets", "Widget")
+		delegateCalled = false
+		_, err := rt.RoundTrip(httptest.NewRequest("GET", "/apis/widgets.example.com/v1/namespaces/default/widgets", nil))
+		s.NoError(err, "Expected the REST mapper to be reset on NoMatch")
+		s.True(delegateCalled, "Expected delegate to be called for widgets")
+	})
+
+	s.Run("resets the REST mapper at most once per interval", func() {
+		addGroup("gadgets.example.com", "gadgets", "Gadget")
+		delegateCalled = false
+		_, err := rt.RoundTrip(httptest.NewRequest("GET", "/apis/gadgets.example.com/v1/namespaces/default/gadgets", nil))
+		var ve *api.ValidationError
+		s.Require().ErrorAs(err, &ve, "Expected a validation error while the reset is rate limited")
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+		s.False(delegateCalled, "Expected delegate not to be called while the reset is rate limited")
+	})
+}
+
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripWithNilRestMapper() {
 	// This test covers the nil restMapper branch (issue #688 fix).
 	// When restMapperProvider returns nil, requests should fail with an error

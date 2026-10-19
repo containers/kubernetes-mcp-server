@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +40,12 @@ type AccessControlRoundTripper struct {
 	validatorsMu   sync.Mutex
 	validatorsCfg  *config.Config
 	liveValidators []api.HTTPValidator
+
+	lastRESTMapperReset atomic.Int64
 }
+
+// restMapperResetInterval bounds how often a NoMatch resets the REST mapper.
+const restMapperResetInterval = 30 * time.Second
 
 // AccessControlRoundTripperConfig configures the AccessControlRoundTripper.
 type AccessControlRoundTripperConfig struct {
@@ -238,6 +245,9 @@ func (rt *AccessControlRoundTripper) getGVK(
 	}
 
 	gvk, err := restMapper.KindFor(gvr)
+	if meta.IsNoMatchError(err) && rt.resetRESTMapper(restMapper) {
+		gvk, err = restMapper.KindFor(gvr)
+	}
 	if err == nil {
 		return gvk, nil
 	}
@@ -482,6 +492,26 @@ func isCollectionPath(path string) bool {
 		return false
 	}
 	return resourceIdx == len(parts)-1
+}
+
+// resetRESTMapper resets a resettable REST mapper at most once per
+// restMapperResetInterval, so resources added to the cluster after the mapper
+// was built are found without a restart. It reports whether it reset the mapper.
+func (rt *AccessControlRoundTripper) resetRESTMapper(restMapper meta.RESTMapper) bool {
+	resettable, ok := restMapper.(meta.ResettableRESTMapper)
+	if !ok {
+		return false
+	}
+	now := time.Now().UnixNano()
+	last := rt.lastRESTMapperReset.Load()
+	if last != 0 && now-last < int64(restMapperResetInterval) {
+		return false
+	}
+	if !rt.lastRESTMapperReset.CompareAndSwap(last, now) {
+		return false
+	}
+	resettable.Reset()
+	return true
 }
 
 // rawDiscoveryCache caches per-group/version resource lists fetched from the

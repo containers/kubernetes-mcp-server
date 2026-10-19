@@ -67,10 +67,18 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 		s.Run("With provider "+reflect.TypeOf(provider).String(), func() {
 			callback, waitForCallback := CallbackWaiter()
 			provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
-			k, err := provider.GetDerivedKubernetes(s.T().Context(), provider.GetDefaultTarget())
-			s.Require().NoError(err, "Expected no error from GetDerivedKubernetes")
-			_, err = k.RESTMapper().KindFor(schema.GroupVersionResource{Version: "v1", Resource: "pods"})
-			s.Require().NoError(err, "Expected the REST mapper to resolve resources discovered at startup")
+			targets := []string{provider.GetDefaultTarget()}
+			if provider.IsMultiTarget() {
+				targets = append(targets, "context-1")
+			}
+			clients := make(map[string]*Kubernetes, len(targets))
+			for _, target := range targets {
+				k, err := provider.GetDerivedKubernetes(s.T().Context(), target)
+				s.Require().NoError(err, "Expected no error from GetDerivedKubernetes for target %q", target)
+				_, err = k.RESTMapper().KindFor(schema.GroupVersionResource{Version: "v1", Resource: "pods"})
+				s.Require().NoError(err, "Expected the REST mapper of target %q to resolve resources discovered at startup", target)
+				clients[target] = k
+			}
 			s.Run("Reloads provider on cluster changes", func() {
 				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{
 					GroupVersion: group + "/v1",
@@ -79,10 +87,14 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 
 				s.Require().NoError(waitForCallback(5 * time.Second))
 			})
-			s.Run("Resolves resources of the API group added after startup", func() {
-				_, err := k.RESTMapper().KindFor(schema.GroupVersionResource{Group: group, Version: "v1", Resource: "widgets"})
-				s.NoError(err, "Expected the REST mapper to resolve the new API group after the cluster state change")
-			})
+			for target, k := range clients {
+				s.Run(fmt.Sprintf("Resolves resources of the API group added after startup for target %q", target), func() {
+					s.Eventually(func() bool {
+						_, err := k.RESTMapper().KindFor(schema.GroupVersionResource{Group: group, Version: "v1", Resource: "widgets"})
+						return err == nil
+					}, 5*time.Second, 50*time.Millisecond, "Expected the REST mapper to resolve the new API group after the cluster state change")
+				})
+			}
 		})
 	}
 }

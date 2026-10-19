@@ -49,18 +49,28 @@ func (r McpReloader) ApplyToolsets() error {
 	return nil
 }
 
-// ClusterStateCallback returns the cluster-state watcher callback. It invalidates the
-// cached discovery of m, the manager whose discovery the watcher polls, so request
-// validation sees the new API groups, and then re-applies the toolsets.
-func (r McpReloader) ClusterStateCallback(m *Manager) func() error {
+func (r McpReloader) ClusterStateCallback() func() error {
+	if r.withLock == nil && r.applyLocked == nil {
+		return func() error { return nil }
+	}
 	return func() error {
-		if m != nil {
-			m.Invalidate()
-		}
-		if r.withLock == nil && r.applyLocked == nil {
-			return nil
-		}
 		return r.Run(r.ApplyToolsets)
+	}
+}
+
+// ClusterStateCallbackWithInvalidate returns the cluster-state watcher callback that
+// re-applies the toolsets and, once they are applied, calls invalidate so cached
+// discovery and REST mappers see the new cluster state.
+func (r McpReloader) ClusterStateCallbackWithInvalidate(invalidate func()) func() error {
+	apply := r.ClusterStateCallback()
+	return func() error {
+		if err := apply(); err != nil {
+			return err
+		}
+		if invalidate != nil {
+			invalidate()
+		}
+		return nil
 	}
 }
 

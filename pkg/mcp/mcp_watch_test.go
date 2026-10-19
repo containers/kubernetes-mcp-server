@@ -393,17 +393,28 @@ func (s *WatchClusterStateSuite) TestResolvesAPIGroupAddedAfterStartup() {
 		}
 	}))
 	s.InitMcpClient()
+	text := func(toolResult *mcp.CallToolResult) string {
+		if len(toolResult.Content) == 0 {
+			return ""
+		}
+		if content, ok := toolResult.Content[0].(*mcp.TextContent); ok {
+			return content.Text
+		}
+		return ""
+	}
 
 	s.Run("resolves resources discovered at startup", func() {
 		toolResult, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "Node"})
 		s.Require().NoError(err, "call tool should not return error object")
-		s.Falsef(toolResult.IsError, "call tool should succeed: %s", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Falsef(toolResult.IsError, "call tool should succeed: %s", text(toolResult))
 	})
 
 	s.Run("nodes_top fails while the metrics API is not served", func() {
-		toolResult, _ := s.CallTool("nodes_top", map[string]interface{}{})
+		toolResult, err := s.CallTool("nodes_top", map[string]interface{}{})
+		s.Require().NoError(err, "call tool should not return error object")
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
 		s.Truef(toolResult.IsError, "call tool should fail before the metrics API is added")
+		s.Contains(text(toolResult), "metrics API is not available", "call tool should fail because the metrics API is not discovered")
 	})
 
 	s.Run("nodes_top succeeds after the metrics API is added", func() {
@@ -420,8 +431,7 @@ func (s *WatchClusterStateSuite) TestResolvesAPIGroupAddedAfterStartup() {
 		toolResult, err := s.CallTool("nodes_top", map[string]interface{}{})
 		s.Require().NoError(err, "call tool should not return error object")
 		s.Require().NotNil(toolResult, "toolResult should not be nil")
-		s.Falsef(toolResult.IsError, "call tool should succeed once the metrics API is discovered: %s",
-			toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Falsef(toolResult.IsError, "call tool should succeed once the metrics API is discovered: %s", text(toolResult))
 	})
 }
 
