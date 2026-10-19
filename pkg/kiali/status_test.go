@@ -53,6 +53,20 @@ func TestKiali_Available(t *testing.T) {
 		}
 	})
 
+	t.Run("respects the configured backend response limit", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"status":{"Kiali state":"running"}}`))
+		}))
+		defer srv.Close()
+
+		cfg := kialiTestConfig(srv.URL)
+		cfg.MaxBackendResponseBytes.SetForTest(8)
+		k := testKialiClient(t, cfg)
+		if k.Available(context.Background()) {
+			t.Fatal("expected probe to reject a response exceeding the configured limit")
+		}
+	})
+
 	t.Run("returns false for missing status object", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"externalServices":[]}`))

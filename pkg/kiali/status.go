@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 const (
@@ -39,7 +39,10 @@ func (k *Kiali) Available(ctx context.Context) bool {
 }
 
 func (k *Kiali) probeStatus(ctx context.Context) bool {
-
+	limit, err := k.backendLimit()
+	if err != nil {
+		return false
+	}
 	statusURL, err := k.validateAndGetURL(statusPath)
 	if err != nil {
 		klogutil.FromContext(ctx).V(2).Info("kiali status probe: invalid URL", "error", err)
@@ -75,7 +78,7 @@ func (k *Kiali) probeStatus(ctx context.Context) bool {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	body, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
 		return false
 	}
