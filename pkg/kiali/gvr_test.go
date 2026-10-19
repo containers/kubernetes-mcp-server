@@ -46,46 +46,50 @@ type mockKialiInspectorWithCRs struct {
 }
 
 func (m *mockKialiInspectorWithCRs) Unstructured() api.AggregateUnstructured {
-	return &mockKialiUnstructured{crs: m.crs}
+	return &mockKialiUnstructured{crs: m.crs, tp: m}
 }
 
 type mockKialiUnstructured struct {
 	crs []unstructured.Unstructured
+	tp  api.TargetProvider
 }
 
 func (m *mockKialiUnstructured) Resource(gvr schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
 	if gvr != KialiGVR {
-		return &mockKialiEmptyResource{}
+		return &mockKialiEmptyResource{tp: m.tp}
 	}
-	return &mockKialiNamespacedResource{crs: m.crs}
+	return &mockKialiNamespacedResource{crs: m.crs, tp: m.tp}
 }
 
 type mockKialiNamespacedResource struct {
 	crs []unstructured.Unstructured
+	tp  api.TargetProvider
 }
 
 func (m *mockKialiNamespacedResource) Namespace(string) api.AggregateResourceInterface { return m }
 func (m *mockKialiNamespacedResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
-	return api.NewResults(ctx, m, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+	return api.NewResults(ctx, m.tp, func(context.Context, string) (*unstructured.UnstructuredList, error) {
 		return &unstructured.UnstructuredList{Items: m.crs}, nil
 	})
 }
-func (m *mockKialiNamespacedResource) Get(context.Context, string, metav1.GetOptions, ...string) api.Results[*unstructured.Unstructured] {
-	return api.NewResults(context.Background(), m, func(context.Context, string) (*unstructured.Unstructured, error) {
+func (m *mockKialiNamespacedResource) Get(ctx context.Context, _ string, _ metav1.GetOptions, _ ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(ctx, m.tp, func(context.Context, string) (*unstructured.Unstructured, error) {
 		return nil, nil
 	})
 }
 
-type mockKialiEmptyResource struct{}
+type mockKialiEmptyResource struct {
+	tp api.TargetProvider
+}
 
 func (m *mockKialiEmptyResource) Namespace(string) api.AggregateResourceInterface { return m }
 func (m *mockKialiEmptyResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
-	return api.NewResults(ctx, m, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+	return api.NewResults(ctx, m.tp, func(context.Context, string) (*unstructured.UnstructuredList, error) {
 		return &unstructured.UnstructuredList{}, nil
 	})
 }
-func (m *mockKialiEmptyResource) Get(context.Context, string, metav1.GetOptions, ...string) api.Results[*unstructured.Unstructured] {
-	return api.NewResults(context.Background(), m, func(context.Context, string) (*unstructured.Unstructured, error) {
+func (m *mockKialiEmptyResource) Get(ctx context.Context, _ string, _ metav1.GetOptions, _ ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(ctx, m.tp, func(context.Context, string) (*unstructured.Unstructured, error) {
 		return nil, nil
 	})
 }
