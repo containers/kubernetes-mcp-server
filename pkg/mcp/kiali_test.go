@@ -687,6 +687,8 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
 			experimental_enable_target_compatibility_tool_filters = true
+			read_only = false
+			disable_destructive = false
 			[toolset_configs.kiali]
 			url = "%s"
 			insecure = true

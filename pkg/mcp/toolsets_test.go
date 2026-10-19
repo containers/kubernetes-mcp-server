@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -191,13 +192,13 @@ func (s *ToolsetsSuite) TestKialiToolsFilteredWhenURLUnreachable() {
 	s.Run("Kiali tools are filtered out when configured URL fails /api/status probe", func() {
 		toolsetName := (&kiali.Toolset{}).GetName()
 		kubeConfig := s.Cfg.KubeConfig.Get()
-		cfg, err := configuration.ReadToml(s.T().Context(), []byte(`
-			toolsets = ["kiali"]
+		cfg, err := configuration.ReadToml(s.T().Context(), fmt.Appendf(nil, `
+			toolsets = ["%s"]
 			experimental_enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
 			url = "http://127.0.0.1:1"
 			insecure = true
-		`))
+		`, toolsetName))
 		s.Require().NoError(err)
 		s.Cfg = cfg
 		s.Cfg.KubeConfig.SetForTest(kubeConfig)
