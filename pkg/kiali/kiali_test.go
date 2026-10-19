@@ -14,6 +14,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
+	"k8s.io/client-go/rest"
 )
 
 type KialiSuite struct {
@@ -73,6 +74,20 @@ func (s *KialiSuite) TestNewKiali_SetsFields() {
 	s.Run("BearerToken is set", func() {
 		s.Equal("bearer-token", k.bearerToken, "Unexpected Kiali BearerToken")
 	})
+}
+
+func (s *KialiSuite) TestNewKiali_BearerTokenFromFile() {
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
+		[toolset_configs.kiali]
+		url = "https://kiali.example/"
+		insecure = true
+	`)))
+	tokenFile := s.T().TempDir() + "/token"
+	s.Require().NoError(os.WriteFile(tokenFile, []byte("file-sa-token\n"), 0o600))
+	restCfg := &rest.Config{BearerTokenFile: tokenFile}
+	k, err := NewKiali(s.Config, restCfg)
+	s.Require().NoError(err)
+	s.Equal("file-sa-token", k.bearerToken)
 }
 
 func (s *KialiSuite) TestNewKiali_InvalidConfig() {
