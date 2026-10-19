@@ -41,7 +41,8 @@ type AccessControlRoundTripper struct {
 	validatorsCfg  *config.Config
 	liveValidators []api.HTTPValidator
 
-	lastRESTMapperReset atomic.Int64
+	resetRESTMapperOnNoMatch bool
+	lastRESTMapperReset      atomic.Int64
 }
 
 // restMapperResetInterval bounds how often a NoMatch resets the REST mapper.
@@ -61,6 +62,10 @@ type AccessControlRoundTripperConfig struct {
 	ConfirmationFallback string
 	// SchemaCache is the parsed OpenAPI model shared by clients of one manager.
 	SchemaCache *openAPISchemaCache
+	// ResetRESTMapperOnNoMatch resets the REST mapper on NoMatch, at most once per
+	// restMapperResetInterval. Set it for long-lived clients whose mapper can go
+	// stale; per-request clients build a fresh mapper and leave it unset.
+	ResetRESTMapperOnNoMatch bool
 	// ConfigProvider, when set, is read on every request so SIGHUP can
 	// update denied_resources, validation, and confirmation without
 	// rebuilding Kubernetes clients. Snapshot fields are the fallback
@@ -100,7 +105,8 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 			AuthClient:  cfg.AuthClientProvider,
 			SchemaCache: cfg.SchemaCache,
 		},
-		snapshotValidators: validatorsFromAccessControlConfig(cfg),
+		snapshotValidators:       validatorsFromAccessControlConfig(cfg),
+		resetRESTMapperOnNoMatch: cfg.ResetRESTMapperOnNoMatch,
 	}
 
 	return rt
@@ -498,6 +504,9 @@ func isCollectionPath(path string) bool {
 // restMapperResetInterval, so resources added to the cluster after the mapper
 // was built are found without a restart. It reports whether it reset the mapper.
 func (rt *AccessControlRoundTripper) resetRESTMapper(restMapper meta.RESTMapper) bool {
+	if !rt.resetRESTMapperOnNoMatch {
+		return false
+	}
 	resettable, ok := restMapper.(meta.ResettableRESTMapper)
 	if !ok {
 		return false

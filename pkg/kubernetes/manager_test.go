@@ -1,14 +1,19 @@
 package kubernetes
 
 import (
+	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -267,6 +272,39 @@ func (s *ManagerTestSuite) TestNewManager() {
 		s.Require().Error(err)
 		s.EqualError(err, "config cannot be nil", "expected 'config cannot be nil' error as first check")
 		s.Nil(manager, "expected nil manager when all parameters are nil")
+	})
+}
+
+func (s *ManagerTestSuite) TestRESTMapperResetOnNoMatch() {
+	s.mockServer.Handle(test.NewDiscoveryClientHandler())
+	var groupListRequests atomic.Int32
+	s.mockServer.Handle(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/apis" {
+			groupListRequests.Add(1)
+		}
+	}))
+	cfg := config.New()
+	cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
+	manager, err := NewKubeconfigManager(s.T().Context(), cfg, "")
+	s.Require().NoError(err)
+	s.T().Cleanup(manager.Close)
+
+	listUnknownResource := func(ctx context.Context) int32 {
+		k, err := manager.Derived(ctx)
+		s.Require().NoError(err)
+		before := groupListRequests.Load()
+		gvr := schema.GroupVersionResource{Group: "unknown.example.com", Version: "v1", Resource: "widgets"}
+		_, err = k.DynamicClient().Resource(gvr).List(ctx, metav1.ListOptions{})
+		s.Require().Error(err, "Expected an unknown resource to be rejected")
+		return groupListRequests.Load() - before
+	}
+
+	s.Run("kubeconfig client reloads discovery once to reset its REST mapper", func() {
+		s.Equal(int32(2), listUnknownResource(s.T().Context()))
+	})
+	s.Run("per-request OAuth client loads discovery once", func() {
+		ctx := context.WithValue(s.T().Context(), OAuthAuthorizationHeader, "Bearer test-token")
+		s.Equal(int32(1), listUnknownResource(ctx))
 	})
 }
 

@@ -156,7 +156,7 @@ func NewManager(ctx context.Context, cfg *config.Config, restConfig *rest.Config
 	//k8s.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	m.kubernetes, err = newKubernetesFromLive(ctx, &m.config, clientCmdConfig, restConfig, m.schemaCache)
+	m.kubernetes, err = newKubernetesFromLive(ctx, &m.config, clientCmdConfig, restConfig, m.schemaCache, true)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg, m.schemaCache)
+	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg, m.schemaCache, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create derived client: %w", err)
 	}

@@ -69,7 +69,7 @@ func NewKubernetes(
 ) (*Kubernetes, error) {
 	live := &atomic.Pointer[config.Config]{}
 	live.Store(cfg)
-	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig, nil)
+	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig, nil, true)
 }
 
 func newKubernetesFromLive(
@@ -78,6 +78,7 @@ func newKubernetesFromLive(
 	clientCmdConfig clientcmd.ClientConfig,
 	restConfig *rest.Config,
 	schemaCache *openAPISchemaCache,
+	resetRESTMapperOnNoMatch bool,
 ) (*Kubernetes, error) {
 	if live == nil || live.Load() == nil {
 		return nil, errors.New("config cannot be nil")
@@ -110,6 +111,8 @@ func newKubernetesFromLive(
 			ConfirmationRules:    cfg.ConfirmationRules.Get(),
 			ConfirmationFallback: cfg.ConfirmationFallback.Get(),
 			SchemaCache:          k.schemaCache,
+			// Per-request clients build a fresh REST mapper, so only long-lived ones reset it.
+			ResetRESTMapperOnNoMatch: resetRESTMapperOnNoMatch,
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {

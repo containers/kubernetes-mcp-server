@@ -102,7 +102,8 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripResolvesResourcesAdded
 				w.WriteHeader(http.StatusOK)
 			},
 		},
-		RestMapperProvider: func() meta.RESTMapper { return restMapper },
+		RestMapperProvider:       func() meta.RESTMapper { return restMapper },
+		ResetRESTMapperOnNoMatch: true,
 	})
 	addGroup := func(group, resource, kind string) {
 		discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
@@ -135,6 +136,40 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripResolvesResourcesAdded
 		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
 		s.False(delegateCalled, "Expected delegate not to be called while the reset is rate limited")
 	})
+}
+
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripDoesNotResetRESTMapperUnlessEnabled() {
+	mockServer := test.NewMockServer()
+	defer mockServer.Close()
+	discoveryHandler := test.NewDiscoveryClientHandler()
+	mockServer.Handle(discoveryHandler)
+	clientSet, err := kubernetes.NewForConfig(mockServer.Config())
+	s.Require().NoError(err, "Expected no error creating clientset")
+	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(clientSet.Discovery()))
+
+	delegateCalled := false
+	rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+		Delegate: &mockRoundTripper{
+			called: &delegateCalled,
+			onRequest: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		RestMapperProvider: func() meta.RESTMapper { return restMapper },
+	})
+	_, err = rt.RoundTrip(httptest.NewRequest("GET", "/api/v1/namespaces/default/pods", nil))
+	s.Require().NoError(err, "Expected pods to resolve when the mapper is loaded")
+
+	discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
+		GroupVersion: "widgets.example.com/v1",
+		APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}}},
+	})
+	delegateCalled = false
+	_, err = rt.RoundTrip(httptest.NewRequest("GET", "/apis/widgets.example.com/v1/namespaces/default/widgets", nil))
+	var ve *api.ValidationError
+	s.Require().ErrorAs(err, &ve, "Expected the loaded REST mapper to be kept")
+	s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	s.False(delegateCalled, "Expected delegate not to be called")
 }
 
 func (s *AccessControlRoundTripperTestSuite) TestRoundTripWithNilRestMapper() {
