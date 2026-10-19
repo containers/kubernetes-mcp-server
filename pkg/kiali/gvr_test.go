@@ -3,7 +3,6 @@ package kiali
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,23 +18,15 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
-func kialiTestConfig(url string) *config.Config {
-	cfg, err := config.ReadToml(context.Background(), []byte(fmt.Sprintf(`
-		[toolset_configs.kiali]
-		url = "%s"
-	`, url)))
-	if err != nil {
-		panic(err)
-	}
-	return cfg
-}
-
 type mockKialiInspector struct {
 	available bool
 }
 
 func (m *mockKialiInspector) Discovery() api.AggregateDiscovery       { return m }
 func (m *mockKialiInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (m *mockKialiInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, m, func(context.Context, string) (string, error) { return "", nil })
+}
 func (m *mockKialiInspector) GetTargets(context.Context) ([]string, error) {
 	return []string{""}, nil
 }
