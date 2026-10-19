@@ -108,10 +108,8 @@ func (s *ServerTool) IsTargetListProvider() bool {
 
 type ToolsetContext struct {
 	Inspector                         ClusterInspector
+	Config                            *config.Config
 	TargetCompatibilityFiltersEnabled bool
-	// Config is the live server configuration used for registration-time
-	// applicability checks (e.g. toolset_configs), without widening provider APIs.
-	Config *config.Config
 }
 
 type Toolset interface {

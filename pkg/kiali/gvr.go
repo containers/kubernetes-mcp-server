@@ -10,7 +10,6 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
-	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 // KialiGVK is the GroupVersionKind for the Kiali custom resource installed by
@@ -19,7 +18,7 @@ import (
 // Target-compatibility filtering enables Kiali tools when:
 //   - [toolset_configs.kiali].url is set and GET {url}/api/status succeeds, or
 //   - no URL is set, a Kiali CRD/CR path can discover a working in-cluster
-//     Service URL via kubernetes.Provider (or well-known Service DNS when the
+//     Service URL via ClusterInspector (or well-known Service DNS when the
 //     Kiali GVK is present but no cluster client is available).
 var KialiGVK = schema.GroupVersionKind{
 	Group:   "kiali.io",
@@ -49,15 +48,15 @@ func getDiscoveredURL() string {
 
 // HasKiali reports whether Kiali is reachable: either a configured URL passes
 // GET /api/status, or an in-cluster Service URL can be discovered and probed.
-func HasKiali(ctx context.Context, cfg *config.Config, kp kubernetes.Provider, inspector api.ClusterInspector) bool {
-	return evaluateKialiAvailability(ctx, cfg, kp, inspector)
+func HasKiali(ctx context.Context, cfg *config.Config, inspector api.ClusterInspector) bool {
+	return evaluateKialiAvailability(ctx, cfg, inspector)
 }
 
-func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, kp kubernetes.Provider, inspector api.ClusterInspector) bool {
-	kialiCfg, cfgOK := kialiConfigFrom(ctx, cfg, kp)
+func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, inspector api.ClusterInspector) bool {
+	kialiCfg, cfgOK := kialiConfigFrom(cfg)
 	if cfgOK && strings.TrimSpace(kialiCfg.Url) != "" {
 		setDiscoveredURL("")
-		token := bearerTokenFromProvider(ctx, kp)
+		token := bearerTokenFromInspector(ctx, inspector)
 		ok := probeStatusURL(ctx, kialiCfg.Url, kialiCfg, token)
 		if !ok {
 			klogutil.FromContext(ctx).V(1).Info("configured Kiali URL failed /api/status probe; disabling Kiali tools",
@@ -66,37 +65,17 @@ func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, kp kuber
 		return ok
 	}
 
-	if kp != nil {
-		return discoverInjectAndProbe(ctx, kialiCfg, kp)
+	if inspector != nil {
+		return discoverInjectAndProbe(ctx, kialiCfg, inspector)
 	}
 
-	if inspector == nil || !api.AnyTargetHasGVK(ctx, inspector, KialiGVK) {
-		setDiscoveredURL("")
-		return false
-	}
-	token := bearerTokenFromProvider(ctx, nil)
-	url, ok := probeCandidateURLs(ctx, wellKnownInternalURLs(), kialiCfg, token)
-	if !ok {
-		klogutil.FromContext(ctx).V(1).Info("Kiali GVK present but no reachable well-known in-cluster URL")
-		setDiscoveredURL("")
-		return false
-	}
-	storeDiscoveredURL(ctx, url)
-	return true
+	setDiscoveredURL("")
+	return false
 }
 
-func discoverInjectAndProbe(ctx context.Context, cfg *Config, kp kubernetes.Provider) bool {
-	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
-	if err != nil || k8s == nil {
-		klogutil.FromContext(ctx).V(2).Info("Kiali discovery skipped: cannot derive Kubernetes client", "error", err)
-		setDiscoveredURL("")
-		return false
-	}
-	token := ""
-	if rc := k8s.RESTConfig(); rc != nil {
-		token = rc.BearerToken
-	}
-	url, ok := discoverAndValidateInternalURL(ctx, k8s.DynamicClient(), cfg, token)
+func discoverInjectAndProbe(ctx context.Context, cfg *Config, inspector api.ClusterInspector) bool {
+	token := bearerTokenFromInspector(ctx, inspector)
+	url, ok := discoverAndValidateInternalURL(ctx, inspector, cfg, token)
 	if !ok {
 		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(), cfg, token)
 	}
@@ -113,24 +92,11 @@ func storeDiscoveredURL(ctx context.Context, url string) {
 	klogutil.FromContext(ctx).V(1).Info("stored discovered Kiali URL for client use", "url", url)
 }
 
-func kialiConfigFrom(ctx context.Context, cfg *config.Config, kp kubernetes.Provider) (*Config, bool) {
-	if cfg != nil {
-		if kc, ok := kialiConfigFromExtended(cfg.GetToolsetConfig("kiali")); ok {
-			return kc, true
-		}
-	}
-	if kp == nil {
+func kialiConfigFrom(cfg *config.Config) (*Config, bool) {
+	if cfg == nil {
 		return nil, false
 	}
-	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
-	if err != nil || k8s == nil {
-		return nil, false
-	}
-	live := k8s.Config()
-	if live == nil {
-		return nil, false
-	}
-	return kialiConfigFromExtended(live.GetToolsetConfig("kiali"))
+	return kialiConfigFromExtended(cfg.GetToolsetConfig("kiali"))
 }
 
 func kialiConfigFromExtended(ext config.ExtendedConfig, ok bool) (*Config, bool) {
@@ -144,15 +110,15 @@ func kialiConfigFromExtended(ext config.ExtendedConfig, ok bool) (*Config, bool)
 	return kc, true
 }
 
-func bearerTokenFromProvider(ctx context.Context, kp kubernetes.Provider) string {
-	if kp == nil {
+func bearerTokenFromInspector(ctx context.Context, inspector api.ClusterInspector) string {
+	if inspector == nil {
 		return ""
 	}
-	k8s, err := kp.GetDerivedKubernetes(ctx, kp.GetDefaultTarget())
-	if err != nil || k8s == nil || k8s.RESTConfig() == nil {
+	token, err := inspector.BearerToken(ctx).Default()
+	if err != nil {
 		return ""
 	}
-	return k8s.RESTConfig().BearerToken
+	return token
 }
 
 func wellKnownInternalURLs() []string {

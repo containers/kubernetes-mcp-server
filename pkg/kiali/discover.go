@@ -9,8 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
@@ -80,11 +79,11 @@ func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
 }
 
 // listKialiCRs returns all Kiali CRs across namespaces. Returns nil when none exist or on error.
-func listKialiCRs(ctx context.Context, dc dynamic.Interface) []*KialiCR {
-	if dc == nil {
+func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiCR {
+	if inspector == nil {
 		return nil
 	}
-	list, err := dc.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	list, err := inspector.Unstructured().Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
 	if err != nil {
 		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs", "error", err)
 		return nil
@@ -106,8 +105,8 @@ func listKialiCRs(ctx context.Context, dc dynamic.Interface) []*KialiCR {
 
 // discoverAndValidateInternalURL finds a Kiali CR, builds in-cluster Service URL candidates,
 // and returns the first base URL that responds successfully to GET /api/status.
-func discoverAndValidateInternalURL(ctx context.Context, dc dynamic.Interface, cfg *Config, bearerToken string) (string, bool) {
-	crs := listKialiCRs(ctx, dc)
+func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, cfg *Config, bearerToken string) (string, bool) {
+	crs := listKialiCRs(ctx, inspector)
 	if len(crs) == 0 {
 		return "", false
 	}

@@ -9,10 +9,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic/fake"
-	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -40,6 +37,56 @@ func (m *mockKialiInspector) ServerResourcesForGroupVersion(ctx context.Context,
 			list.APIResources = []metav1.APIResource{{Kind: KialiGVK.Kind}}
 		}
 		return list, nil
+	})
+}
+
+type mockKialiInspectorWithCRs struct {
+	mockKialiInspector
+	crs []unstructured.Unstructured
+}
+
+func (m *mockKialiInspectorWithCRs) Unstructured() api.AggregateUnstructured {
+	return &mockKialiUnstructured{crs: m.crs}
+}
+
+type mockKialiUnstructured struct {
+	crs []unstructured.Unstructured
+}
+
+func (m *mockKialiUnstructured) Resource(gvr schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
+	if gvr != KialiGVR {
+		return &mockKialiEmptyResource{}
+	}
+	return &mockKialiNamespacedResource{crs: m.crs}
+}
+
+type mockKialiNamespacedResource struct {
+	crs []unstructured.Unstructured
+}
+
+func (m *mockKialiNamespacedResource) Namespace(string) api.AggregateResourceInterface { return m }
+func (m *mockKialiNamespacedResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
+	return api.NewResults(ctx, m, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+		return &unstructured.UnstructuredList{Items: m.crs}, nil
+	})
+}
+func (m *mockKialiNamespacedResource) Get(context.Context, string, metav1.GetOptions, ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(context.Background(), m, func(context.Context, string) (*unstructured.Unstructured, error) {
+		return nil, nil
+	})
+}
+
+type mockKialiEmptyResource struct{}
+
+func (m *mockKialiEmptyResource) Namespace(string) api.AggregateResourceInterface { return m }
+func (m *mockKialiEmptyResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
+	return api.NewResults(ctx, m, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+		return &unstructured.UnstructuredList{}, nil
+	})
+}
+func (m *mockKialiEmptyResource) Get(context.Context, string, metav1.GetOptions, ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(context.Background(), m, func(context.Context, string) (*unstructured.Unstructured, error) {
+		return nil, nil
 	})
 }
 
@@ -131,13 +178,13 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		if !HasKiali(context.Background(), kialiTestConfig(srv.URL), nil, nil) {
+		if !HasKiali(context.Background(), kialiTestConfig(srv.URL), nil) {
 			t.Fatal("expected HasKiali true for reachable configured URL")
 		}
 	})
 
 	t.Run("disables when configured URL fails status probe", func(t *testing.T) {
-		if HasKiali(context.Background(), kialiTestConfig("http://127.0.0.1:1"), nil, nil) {
+		if HasKiali(context.Background(), kialiTestConfig("http://127.0.0.1:1"), nil) {
 			t.Fatal("expected HasKiali false for unreachable configured URL")
 		}
 	})
@@ -145,7 +192,7 @@ func TestHasKiali_ConfiguredURL(t *testing.T) {
 
 func TestHasKiali_DiscoverFromCR(t *testing.T) {
 	t.Run("returns false when no URL and provider cannot access cluster", func(t *testing.T) {
-		if HasKiali(context.Background(), config.New(), nil, &mockKialiInspector{available: true}) {
+		if HasKiali(context.Background(), config.New(), &mockKialiInspector{available: true}) {
 			t.Fatal("expected false without cluster access for discovery")
 		}
 	})
@@ -156,15 +203,8 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 			"kind":       "Kiali",
 			"metadata":   map[string]any{"name": "kiali", "namespace": "istio-system"},
 		}}
-		scheme := runtime.NewScheme()
-		dc := fake.NewSimpleDynamicClientWithCustomListKinds(scheme,
-			map[schema.GroupVersionResource]string{KialiGVR: "KialiList"},
-			cr,
-		)
-		dc.PrependReactor("list", "kialis", func(action k8stesting.Action) (bool, runtime.Object, error) {
-			return true, &unstructured.UnstructuredList{Items: []unstructured.Unstructured{*cr}}, nil
-		})
-		url, ok := discoverAndValidateInternalURL(context.Background(), dc, &Config{}, "")
+		inspector := &mockKialiInspectorWithCRs{crs: []unstructured.Unstructured{*cr}}
+		url, ok := discoverAndValidateInternalURL(context.Background(), inspector, &Config{}, "")
 		if ok || url != "" {
 			t.Fatalf("expected discovery to fail for unreachable in-cluster URL, got %q", url)
 		}
@@ -172,7 +212,7 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 }
 
 func TestHasKiali_NoURLNoCR(t *testing.T) {
-	if HasKiali(context.Background(), config.New(), nil, nil) {
+	if HasKiali(context.Background(), config.New(), nil) {
 		t.Fatal("expected false when no URL and no cluster access")
 	}
 }

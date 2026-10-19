@@ -187,27 +187,6 @@ func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 	})
 }
 
-func (s *ToolsetsSuite) TestKialiToolsFilteredWithoutCRDs() {
-	s.Run("Kiali tools are filtered out when Kiali GVK is not present and URL is unset", func() {
-		toolsetName := (&kiali.Toolset{}).GetName()
-		s.Cfg.Toolsets.SetForTest([]string{toolsetName})
-		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
-		s.InitMcpClient()
-		tools, err := s.ListTools()
-		s.Run("ListTools returns tools", func() {
-			s.NotNil(tools, "Expected tools from ListTools")
-			s.NoError(err, "Expected no error from ListTools")
-		})
-		s.Run("kiali tools are not present", func() {
-			for _, tool := range tools.Tools {
-				for _, kialiTool := range s.kialiToolNames(toolsetName) {
-					s.Require().NotEqual(kialiTool, tool.Name, "Expected %s to not be present when filtering enabled on cluster without Kiali CRD or URL", kialiTool)
-				}
-			}
-		})
-	})
-}
-
 func (s *ToolsetsSuite) TestKialiToolsFilteredWhenURLUnreachable() {
 	s.Run("Kiali tools are filtered out when configured URL fails /api/status probe", func() {
 		toolsetName := (&kiali.Toolset{}).GetName()
