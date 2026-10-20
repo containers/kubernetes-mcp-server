@@ -80,7 +80,7 @@ func (p *RealLoader) ListMetrics(ctx context.Context, nameRegex string) ([]strin
 	}
 
 	start := time.Now()
-	labelValues, _, err := p.client.LabelValues(ctx, "__name__", matches, time.Now().Add(-ListMetricsTimeRange), time.Now())
+	labelValues, _, _, err := p.client.LabelValues(ctx, "__name__", matches, time.Now().Add(-ListMetricsTimeRange), time.Now())
 	duration := time.Since(start)
 	if err != nil {
 		slog.Error("Backend call failed", "backend", p.backend, "operation", "list_metrics",
@@ -170,7 +170,7 @@ func (p *RealLoader) ExecuteRangeQuery(ctx context.Context, query string, queryS
 	}
 
 	start := time.Now()
-	result, warnings, err := p.client.QueryRange(ctx, query, r, v1.WithTimeout(DefaultQueryTimeout))
+	result, warnings, _, err := p.client.QueryRange(ctx, query, r, v1.WithTimeout(DefaultQueryTimeout))
 	duration := time.Since(start)
 	if err != nil {
 		slog.Error("Backend call failed", "backend", p.backend, "operation", "range_query",
@@ -198,7 +198,7 @@ func (p *RealLoader) ExecuteInstantQuery(ctx context.Context, query string, ts t
 	}
 
 	start := time.Now()
-	result, warnings, err := p.client.Query(ctx, query, ts)
+	result, warnings, _, err := p.client.Query(ctx, query, ts)
 	duration := time.Since(start)
 	if err != nil {
 		slog.Error("Backend call failed", "backend", p.backend, "operation", "instant_query",
@@ -227,7 +227,7 @@ func (p *RealLoader) GetLabelNames(ctx context.Context, metricName string, start
 	}
 
 	apiStart := time.Now()
-	labelNames, _, err := p.client.LabelNames(ctx, matches, start, end)
+	labelNames, _, _, err := p.client.LabelNames(ctx, matches, start, end)
 	duration := time.Since(apiStart)
 	if err != nil {
 		slog.Error("Backend call failed", "backend", p.backend, "operation", "label_names",
@@ -251,7 +251,7 @@ func (p *RealLoader) GetLabelValues(ctx context.Context, label, metricName strin
 	}
 
 	apiStart := time.Now()
-	labelValues, _, err := p.client.LabelValues(ctx, label, matches, start, end)
+	labelValues, _, _, err := p.client.LabelValues(ctx, label, matches, start, end)
 	duration := time.Since(apiStart)
 	if err != nil {
 		slog.Error("Backend call failed", "backend", p.backend, "operation", "label_values",
@@ -270,7 +270,7 @@ func (p *RealLoader) GetLabelValues(ctx context.Context, label, metricName strin
 
 func (p *RealLoader) GetSeries(ctx context.Context, matches []string, start, end time.Time) ([]map[string]string, error) {
 	apiStart := time.Now()
-	seriesList, _, err := p.client.Series(ctx, matches, start, end)
+	seriesList, _, _, err := p.client.Series(ctx, matches, start, end)
 	duration := time.Since(apiStart)
 	if err != nil {
 		slog.Error("Backend call failed", "backend", p.backend, "operation", "series",
