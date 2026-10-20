@@ -33,23 +33,18 @@ func (t *Toolset) GetTools(ctx context.Context, tc api.ToolsetContext) []api.Ser
 		initExecuteInstantQuery(),
 		initExecuteRangeQuery(),
 	}
-	// Without a cluster resource client, return the full tool catalog.
-	if tc.Inspector == nil || tc.Inspector.Unstructured() == nil {
+	found, err := tc.Inspector.Unstructured().Resource(schema.GroupVersionResource{
+		Group:    "perses.dev",
+		Version:  "v1alpha2",
+		Resource: "perses",
+	}).List(ctx, metav1.ListOptions{Limit: 1}).Any(func(list *unstructured.UnstructuredList) bool {
+		return len(list.Items) > 0
+	})
+	if err != nil && !api.IsNotFound(err) {
+		klogutil.FromContext(ctx).Error(err, "Failed to check for Perses instances")
+	}
+	if found {
 		tools = append(tools, initShowTimeseries())
-	} else {
-		found, err := tc.Inspector.Unstructured().Resource(schema.GroupVersionResource{
-			Group:   "perses.dev",
-			Version: "v1alpha2",
-			Resource: "perses",
-		}).List(ctx, metav1.ListOptions{Limit: 1}).Any(func(list *unstructured.UnstructuredList) bool {
-			return len(list.Items) > 0
-		})
-		if err != nil && !api.IsNotFound(err) {
-			klogutil.FromContext(ctx).Error(err, "Failed to check for Perses instances")
-		}
-		if found {
-			tools = append(tools, initShowTimeseries())
-		}
 	}
 	return append(tools,
 		initGetLabelNames(),
