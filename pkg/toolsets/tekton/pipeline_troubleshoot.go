@@ -161,7 +161,11 @@ Analyze the collected data and use these exact section headings in the response:
 		},
 		api.Text("\n\n---\n\n## Events\n\n"),
 		func(b *api.BuilderWithBudget) error {
-			fetchPipelineRunEventsForPrompt(params, namespace, name, pipelineRun, taskRuns, b)
+			var pipelineRunObject metav1.Object
+			if pipelineRun != nil {
+				pipelineRunObject = pipelineRun
+			}
+			fetchPipelineRunEventsForPrompt(params, namespace, name, pipelineRunObject, taskRuns, b)
 			return nil
 		},
 		api.Text(`

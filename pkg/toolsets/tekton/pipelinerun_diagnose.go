@@ -10,6 +10,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/sanitize"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -555,8 +556,9 @@ func collectWarningEventsForPipelineRun(ctx context.Context, params api.ToolHand
 
 func (result *pipelineRunDiagnosis) addPartialError(ctx context.Context, budget *diagnosisResultBudget, source string, err error) {
 	message := result.truncateText(err.Error())
+	logMessage, _ := truncateDiagnosisText(sanitize.Text(err.Error()))
 	klogutil.LogWarn(klogutil.FromContext(ctx), "Partial PipelineRun diagnosis collection failure",
-		klogutil.Field("source", source), klogutil.Field("error", message))
+		klogutil.Field("source", source), klogutil.Field("error", logMessage))
 	result.PartialErrors = append(result.PartialErrors, diagnosisPartialError{Source: source, Message: message})
 	if !budget.accept(result) {
 		result.PartialErrors = result.PartialErrors[:len(result.PartialErrors)-1]
