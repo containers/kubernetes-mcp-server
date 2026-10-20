@@ -30,37 +30,13 @@ When the `kiali` toolset is enabled with an explicit HTTPS URL and `insecure = f
 
 ### How authentication works
 
-- The MCP server calls Kiali with `Authorization: Bearer <token>`, using the same Kubernetes credentials as the current tool call (kubeconfig user token or in-cluster ServiceAccount token from `BearerToken` / `BearerTokenFile` on the REST config).
-- Client `Authorization` headers on the MCP HTTP endpoint are **not** forwarded to Kiali when `cluster_auth_mode = "kubeconfig"`; the pod or kubeconfig identity is used instead.
+- The server uses your existing Kubernetes credentials (from kubeconfig or in-cluster) to set a bearer token for Kiali calls.
+- If you pass an HTTP Authorization header to the MCP HTTP endpoint, that is not required for Kiali; Kiali calls use the server's configured token.
+- Kiali enforces access with that token (namespace get/list and, for writes and logs, resource RBAC). Tools advertise this as [RBAC metadata](tool-rbac-metadata.md):
+  - **Bounded** for tools whose Kubernetes checks are derivable from arguments or a finite kind enum (logs, resource details, Istio config read/write, metrics/traces namespace gate, traffic graph). On OpenShift, resource/graph declarations also include `deploymentconfigs` and `routes` from the operator's viewer role.
+  - **Unbounded** for mesh-wide status and mesh cluster listing, where Kiali aggregates control-plane and observability backends that cannot be expressed as a finite Kubernetes requirement set.
 
-**Kiali auth strategy (important):** The default Kiali Operator setting is `spec.auth.strategy: token`. That strategy is for the **Kiali UI login** (paste a ServiceAccount token, then use a **session cookie**). It does **not** accept a Bearer token on `GET /api/status` or other API routes, so reachability probes and MCP tool calls will get **401 Unauthorized** even when RBAC is correct.
-
-For programmatic access (this MCP server, `curl`, automation), configure Kiali with the [**header** strategy](https://kiali.io/docs/configuration/authentication/header/):
-
-```yaml
-apiVersion: kiali.io/v1alpha1
-kind: Kiali
-metadata:
-  name: kiali
-  namespace: istio-system
-spec:
-  auth:
-    strategy: header
-```
-
-The ServiceAccount used by the MCP server must be allowed to use Kiali (typically bind it to the operator-created **`kiali-viewer`** ClusterRole, in addition to whatever Kubernetes API access you need).
-
-Verify from the MCP pod (replace the token if testing manually):
-
-```bash
-TOKEN=$(kubectl -n mcp-system create token kubernetes-mcp-server --duration=600m)
-kubectl -n mcp-system exec deploy/kubernetes-mcp-server -- \
-  curl -sS -o /dev/null -w '%{http_code}\n' \
-  -H "Authorization: Bearer $TOKEN" \
-  http://kiali.istio-system.svc:20001/kiali/api/status
-```
-
-Expect `200` when `strategy: header`, RBAC is correct, and the URL includes Kiali's `web_root` (often `/kiali` on Kubernetes).
+Binding the caller's identity to the operator-provided `kiali-viewer` (read) or `kiali` (read/write) ClusterRole remains the practical way to grant the full surface those tools may need.
 
 ### Multi-cluster support
 
@@ -109,7 +85,7 @@ curl -sk -X POST "${KIALI_URL}api/chat/mcp/list_clusters" \
 ### Troubleshooting
 
 - Kiali tools missing from `tools/list` → enable `experimental_enable_target_compatibility_tool_filters = true`, then set `[toolset_configs.kiali].url` or ensure a Kiali CR is installed so the in-cluster Service URL can be discovered.
-- Tools still missing with a Kiali CR installed → `GET {url}/api/status` is probably failing (often **401**). Check Kiali `spec.auth.strategy`: use **`header`** for Bearer tokens, not **`token`** (UI session). Bind the MCP ServiceAccount to **`kiali-viewer`** and re-test the curl probe above from the MCP pod.
+- Tools still missing with a Kiali CR installed → `GET {url}/api/status` is probably failing (often **401**). Bind the MCP ServiceAccount to **`kiali-viewer`** and re-test the curl probe above from the MCP pod.
 - Invalid or unreachable URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL and that `GET {url}/api/status` succeeds from the MCP server with the MCP server's bearer token.
 - TLS certificate validation:
   - If `[toolset_configs.kiali].url` uses HTTPS and `[toolset_configs.kiali].insecure` is false, you must set `[toolset_configs.kiali].certificate_authority` with the path to the CA certificate file. Relative paths are resolved relative to the directory containing the config file.
