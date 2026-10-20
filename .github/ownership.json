@@ -20,7 +20,7 @@
     },
     {
       "toolset": "helm",
-      "paths": ["/pkg/toolsets/helm/", "/pkg/helm/"],
+      "paths": ["/pkg/toolsets/helm/", "/pkg/helm/", "/evals/tasks/helm/"],
       "reviewers": []
     },
     {
@@ -53,35 +53,43 @@
       "reviewers": ["@ksimon1", "@lyarwood"]
     },
     {
-      "toolset": "logs",
+      "toolset": "observability/logs",
       "paths": [
         "/pkg/toolsets/logs/",
         "/pkg/obs/logs/",
         "/pkg/obs/auth/",
         "/pkg/obs/instrumentation/",
         "/pkg/obs/openshift/",
+        "/pkg/obs/tools/",
         "/pkg/obs/toolcfg/"
       ],
       "reviewers": []
     },
     {
-      "toolset": "metrics",
+      "toolset": "observability/metrics",
       "paths": [
         "/pkg/toolsets/metrics/",
         "/pkg/obs/metrics/",
         "/pkg/obs/auth/",
+        "/pkg/obs/tools/",
         "/pkg/obs/toolcfg/"
       ],
       "reviewers": []
     },
     {
       "toolset": "netobserv",
-      "paths": ["/pkg/toolsets/netobserv/", "/pkg/netobserv/"],
+      "paths": [
+        "/pkg/toolsets/netobserv/",
+        "/pkg/netobserv/",
+        "/pkg/mcp/netobserv*",
+        "/build/netobserv.mk",
+        "/evals/tasks/netobserv/"
+      ],
       "reviewers": []
     },
     {
-      "toolset": "otelcol",
-      "paths": ["/pkg/toolsets/otelcol/", "/pkg/obs/toolcfg/"],
+      "toolset": "observability/otelcol",
+      "paths": ["/pkg/toolsets/otelcol/", "/pkg/obs/tools/", "/pkg/obs/toolcfg/"],
       "reviewers": []
     },
     {
@@ -95,13 +103,14 @@
       "reviewers": ["@ksimon1"]
     },
     {
-      "toolset": "traces",
+      "toolset": "observability/traces",
       "paths": [
         "/pkg/toolsets/traces/",
         "/pkg/obs/traces/",
         "/pkg/obs/auth/",
         "/pkg/obs/instrumentation/",
         "/pkg/obs/openshift/",
+        "/pkg/obs/tools/",
         "/pkg/obs/toolcfg/"
       ],
       "reviewers": []

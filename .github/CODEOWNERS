@@ -14,6 +14,7 @@
 # toolset: helm
 /pkg/toolsets/helm/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/helm/                 @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/evals/tasks/helm/         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: kcp
 /pkg/toolsets/kcp/         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
@@ -35,19 +36,22 @@
 /evals/tasks/kubevirt/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /docs/kubevirt.md          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# toolset: logs
+# toolset: observability/logs
 /pkg/toolsets/logs/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/obs/logs/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# toolset: metrics
+# toolset: observability/metrics
 /pkg/toolsets/metrics/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/obs/metrics/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: netobserv
 /pkg/toolsets/netobserv/   @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/netobserv/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/mcp/netobserv*        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/build/netobserv.mk        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/evals/tasks/netobserv/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# toolset: otelcol
+# toolset: observability/otelcol
 /pkg/toolsets/otelcol/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: tekton
@@ -56,16 +60,17 @@
 /build/tekton.mk           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /evals/tasks/tekton/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# toolset: traces
+# toolset: observability/traces
 /pkg/toolsets/traces/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/obs/traces/           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# shared: logs, metrics, traces
+# shared: observability/logs, observability/metrics, observability/traces
 /pkg/obs/auth/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# shared: logs, traces
+# shared: observability/logs, observability/traces
 /pkg/obs/instrumentation/  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/obs/openshift/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
-# shared: logs, metrics, otelcol, traces
+# shared: observability/logs, observability/metrics, observability/otelcol, observability/traces
+/pkg/obs/tools/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 /pkg/obs/toolcfg/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo

@@ -27,7 +27,7 @@ type Config struct {
 }
 
 var (
-	toolsetName = regexp.MustCompile(`^[a-z0-9_-]+$`)
+	toolsetName = regexp.MustCompile(`^[a-z0-9_-]+(/[a-z0-9_-]+)?$`)
 	githubUser  = regexp.MustCompile(`^@[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9_-]*)?$`)
 )
 
@@ -62,6 +62,7 @@ func (config Config) Validate() error {
 		return err
 	}
 	seenToolsets := make(map[string]bool)
+	var paths []string
 	for _, area := range config.Areas {
 		if len(area.Paths) == 0 {
 			return fmt.Errorf("area must have at least one path")
@@ -83,9 +84,28 @@ func (config Config) Validate() error {
 				(strings.Contains(path, "*") && (!strings.HasSuffix(path, "*") || strings.Count(path, "*") != 1)) {
 				return fmt.Errorf("invalid CODEOWNERS path %q", path)
 			}
+			// CODEOWNERS uses the last matching rule, while triage matches every
+			// area. Different overlapping patterns would make one area lose its
+			// approvers depending on the order of the generated sections.
+			for _, previous := range paths {
+				if previous != path && (covers(previous, path) || covers(path, previous)) {
+					return fmt.Errorf("overlapping CODEOWNERS paths %q and %q", previous, path)
+				}
+			}
+			paths = append(paths, path)
 		}
 	}
 	return nil
+}
+
+func covers(pattern, path string) bool {
+	if strings.HasSuffix(pattern, "/") {
+		return strings.HasPrefix(path, pattern)
+	}
+	if strings.HasSuffix(pattern, "*") {
+		return strings.HasPrefix(path, strings.TrimSuffix(pattern, "*"))
+	}
+	return false
 }
 
 func validateUsers(users []string) error {
@@ -110,16 +130,4 @@ func Unique(users ...[]string) []string {
 		}
 	}
 	return unique
-}
-
-// Matches supports the CODEOWNERS patterns used by the triage workflow.
-func Matches(file, pattern string) bool {
-	p := strings.TrimPrefix(pattern, "/")
-	if strings.HasSuffix(p, "/") {
-		return strings.HasPrefix(file, p)
-	}
-	if strings.HasSuffix(p, "*") {
-		return strings.HasPrefix(file, strings.TrimSuffix(p, "*"))
-	}
-	return file == p
 }
