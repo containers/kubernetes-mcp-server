@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	testutil "github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
@@ -29,6 +31,8 @@ import (
 	"k8s.io/client-go/rest"
 	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
@@ -159,30 +163,81 @@ func (s *RetentionSuite) TestAppendTaskBlockStopsTheScratch() {
 	s.Equal(1, strings.Count(dst.String(), api.ResultTruncationNotice))
 }
 
+func (s *RetentionSuite) TestDiagnosisPartialErrorSanitizesServerLogs() {
+	var logBuffer testutil.SyncBuffer
+	originalLogger := klog.Background()
+	klog.SetLogger(textlogger.NewLogger(textlogger.NewConfig(
+		textlogger.Verbosity(5),
+		textlogger.Output(&logBuffer),
+	)))
+	s.T().Cleanup(func() { klog.SetLogger(originalLogger) })
+
+	const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" // notsecret
+	diagnosis := pipelineRunDiagnosis{}
+	diagnosis.addPartialError(
+		context.Background(),
+		newDiagnosisResultBudget(context.Background()),
+		"logs",
+		errors.New("Authorization: Bearer "+token),
+	)
+
+	s.Require().Len(diagnosis.PartialErrors, 1)
+	s.Contains(diagnosis.PartialErrors[0].Message, token)
+	s.NotContains(logBuffer.String(), token)
+	s.Contains(logBuffer.String(), "[REDACTED]")
+}
+
 func (s *RetentionSuite) TestPipelineEventsStopBeforeTheNextTarget() {
 	var lists atomic.Int32
+	var firstSelector string
 	cs := fakeclient.NewSimpleClientset()
-	cs.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+	cs.PrependReactor("list", "events", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		lists.Add(1)
+		firstSelector = action.(clienttesting.ListAction).GetListRestrictions().Fields.String()
 		return true, &corev1.EventList{Items: []corev1.Event{{
 			ObjectMeta:     metav1.ObjectMeta{Name: "warn", Namespace: "ns", UID: "u"},
 			Type:           corev1.EventTypeWarning,
 			Reason:         "Failed",
 			Message:        strings.Repeat("m", 400),
-			InvolvedObject: corev1.ObjectReference{Kind: "PipelineRun", Name: "pr"},
+			InvolvedObject: corev1.ObjectReference{Kind: "PipelineRun", Name: "pr", UID: "pr-uid"},
 		}}}, nil
 	})
 	params := api.PromptHandlerParams{
 		Context:          context.Background(),
 		KubernetesClient: coreClient{Interface: cs},
 	}
+	controller := true
+	pipelineRun := &unstructured.Unstructured{}
+	pipelineRun.SetName("pr")
+	pipelineRun.SetUID(types.UID("pr-uid"))
 	taskRuns := []tektonv1.TaskRun{
-		{ObjectMeta: metav1.ObjectMeta{Name: "t1"}, Status: tektonv1.TaskRunStatus{TaskRunStatusFields: tektonv1.TaskRunStatusFields{PodName: "p1"}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "t2"}, Status: tektonv1.TaskRunStatus{TaskRunStatusFields: tektonv1.TaskRunStatusFields{PodName: "p2"}}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "t1",
+				UID:  "t1-uid",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "tekton.dev/v1", Kind: "PipelineRun", Name: "pr", UID: "pr-uid", Controller: &controller,
+				}},
+			},
+			Status: tektonv1.TaskRunStatus{TaskRunStatusFields: tektonv1.TaskRunStatusFields{PodName: "p1"}},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "t2",
+				UID:  "t2-uid",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "tekton.dev/v1", Kind: "PipelineRun", Name: "pr", UID: "pr-uid", Controller: &controller,
+				}},
+			},
+			Status: tektonv1.TaskRunStatus{TaskRunStatusFields: tektonv1.TaskRunStatusFields{PodName: "p2"}},
+		},
 	}
 	b := api.NewBuilderWithBudget(32)
-	fetchPipelineRunEventsForPrompt(params, "ns", "pr", nil, taskRuns, b)
+	fetchPipelineRunEventsForPrompt(params, "ns", "pr", pipelineRun, taskRuns, b)
 	s.Equal(int32(1), lists.Load())
+	s.Contains(firstSelector, "involvedObject.kind=PipelineRun")
+	s.Contains(firstSelector, "involvedObject.name=pr")
+	s.Contains(firstSelector, "involvedObject.uid=pr-uid")
 	s.True(b.Truncated())
 	s.Contains(b.String(), api.ResultTruncationNotice)
 }

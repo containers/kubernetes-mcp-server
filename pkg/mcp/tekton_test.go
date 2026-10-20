@@ -564,6 +564,18 @@ func (s *TektonMcpSuite) TestPipelineTroubleshootPrompt() {
 		s.NotContains(text, "NormalEvent")
 	})
 
+	s.Run("continues when the PipelineRun is missing", func() {
+		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{
+			"namespace": s.namespace,
+			"name":      "missing-run",
+		})
+		s.Require().NoError(err)
+		s.Require().NotNil(result)
+		text := result.Messages[0].Content.(*mcp.TextContent).Text
+		s.Contains(text, "Error fetching PipelineRun")
+		s.Contains(text, "No related warning events found")
+	})
+
 	s.Run("requires namespace", func() {
 		result, err := s.GetPrompt("pipeline-troubleshoot", map[string]string{"name": "broken-run"})
 		s.Error(err)
