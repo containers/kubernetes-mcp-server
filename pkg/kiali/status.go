@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
@@ -109,21 +110,21 @@ func isTemporaryDNSProbeError(err error) bool {
 	return errors.As(err, &dnsErr) && dnsErr.IsTemporary
 }
 
-func probeStatusURL(ctx context.Context, baseURL string, cfg *Config, bearerToken string) bool {
-	k := kialiForStatusProbe(baseURL, cfg, bearerToken)
+func probeStatusURL(ctx context.Context, baseURL string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) bool {
+	k := kialiForStatusProbe(baseURL, kialiCfg, serverCfg, bearerToken)
 	if k == nil {
 		return false
 	}
 	return k.probeStatus(ctx)
 }
 
-func kialiForStatusProbe(baseURL string, cfg *Config, bearerToken string) *Kiali {
+func kialiForStatusProbe(baseURL string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) *Kiali {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return nil
 	}
 
-	probeCfg := cfg
+	probeCfg := kialiCfg
 	if probeCfg == nil {
 		probeCfg = &Config{Url: baseURL}
 	} else if strings.TrimSpace(probeCfg.Url) == "" {
@@ -132,7 +133,12 @@ func kialiForStatusProbe(baseURL string, cfg *Config, bearerToken string) *Kiali
 		probeCfg = &cp
 	}
 
+	if serverCfg == nil {
+		serverCfg = config.New()
+	}
+
 	return &Kiali{
+		cfg:                  serverCfg,
 		bearerToken:          bearerToken,
 		kialiURL:             probeCfg.Url,
 		kialiInsecure:        probeCfg.Insecure,
@@ -140,12 +146,12 @@ func kialiForStatusProbe(baseURL string, cfg *Config, bearerToken string) *Kiali
 	}
 }
 
-func probeCandidateURLs(ctx context.Context, candidates []string, cfg *Config, bearerToken string) (string, bool) {
+func probeCandidateURLs(ctx context.Context, candidates []string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
 	if len(candidates) == 0 {
 		return "", false
 	}
 	if len(candidates) == 1 {
-		if probeStatusURL(ctx, candidates[0], cfg, bearerToken) {
+		if probeStatusURL(ctx, candidates[0], kialiCfg, serverCfg, bearerToken) {
 			return candidates[0], true
 		}
 		return "", false
@@ -161,7 +167,7 @@ func probeCandidateURLs(ctx context.Context, candidates []string, cfg *Config, b
 	g, gctx := errgroup.WithContext(probeCtx)
 	for _, candidate := range candidates {
 		g.Go(func() error {
-			if probeStatusURL(gctx, candidate, cfg, bearerToken) {
+			if probeStatusURL(gctx, candidate, kialiCfg, serverCfg, bearerToken) {
 				mu.Lock()
 				if found == "" {
 					found = candidate

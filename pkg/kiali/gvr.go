@@ -57,7 +57,7 @@ func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, inspecto
 	if cfgOK && strings.TrimSpace(kialiCfg.Url) != "" {
 		setDiscoveredURL("")
 		token := bearerTokenFromInspector(ctx, inspector)
-		ok := probeStatusURL(ctx, kialiCfg.Url, kialiCfg, token)
+		ok := probeStatusURL(ctx, kialiCfg.Url, kialiCfg, cfg, token)
 		if !ok {
 			klogutil.FromContext(ctx).V(1).Info("configured Kiali URL failed /api/status probe; disabling Kiali tools",
 				"url", kialiCfg.Url)
@@ -66,18 +66,18 @@ func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, inspecto
 	}
 
 	if inspector != nil {
-		return discoverInjectAndProbe(ctx, kialiCfg, inspector)
+		return discoverInjectAndProbe(ctx, cfg, kialiCfg, inspector)
 	}
 
 	setDiscoveredURL("")
 	return false
 }
 
-func discoverInjectAndProbe(ctx context.Context, cfg *Config, inspector api.ClusterInspector) bool {
+func discoverInjectAndProbe(ctx context.Context, serverCfg *config.Config, kialiCfg *Config, inspector api.ClusterInspector) bool {
 	token := bearerTokenFromInspector(ctx, inspector)
-	url, ok := discoverAndValidateInternalURL(ctx, inspector, cfg, token)
+	url, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
 	if !ok {
-		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(), cfg, token)
+		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(), kialiCfg, serverCfg, token)
 	}
 	if !ok {
 		setDiscoveredURL("")

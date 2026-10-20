@@ -151,7 +151,7 @@ func TestProbeStatusURL(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		if !probeStatusURL(context.Background(), srv.URL, &Config{Url: srv.URL}, "") {
+		if !probeStatusURL(context.Background(), srv.URL, &Config{Url: srv.URL}, nil, "") {
 			t.Fatal("expected probe to succeed")
 		}
 	})
@@ -161,13 +161,13 @@ func TestProbeStatusURL(t *testing.T) {
 			_, _ = w.Write([]byte(`{"externalServices":[]}`))
 		}))
 		defer srv.Close()
-		if probeStatusURL(context.Background(), srv.URL, nil, "") {
+		if probeStatusURL(context.Background(), srv.URL, nil, nil, "") {
 			t.Fatal("expected probe to fail")
 		}
 	})
 
 	t.Run("returns false on connection error", func(t *testing.T) {
-		if probeStatusURL(context.Background(), "http://127.0.0.1:1", nil, "") {
+		if probeStatusURL(context.Background(), "http://127.0.0.1:1", nil, nil, "") {
 			t.Fatal("expected probe to fail for unreachable URL")
 		}
 	})
@@ -208,7 +208,7 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 			"metadata":   map[string]any{"name": "kiali", "namespace": "istio-system"},
 		}}
 		inspector := &mockKialiInspectorWithCRs{crs: []unstructured.Unstructured{*cr}}
-		url, ok := discoverAndValidateInternalURL(context.Background(), inspector, &Config{}, "")
+		url, ok := discoverAndValidateInternalURL(context.Background(), inspector, &Config{}, nil, "")
 		if ok || url != "" {
 			t.Fatalf("expected discovery to fail for unreachable in-cluster URL, got %q", url)
 		}
@@ -234,7 +234,7 @@ func TestProbeCandidateURLs(t *testing.T) {
 			"http://127.0.0.1:1",
 			srv.URL,
 			"http://127.0.0.1:2",
-		}, nil, "")
+		}, nil, nil, "")
 		if !ok || url != srv.URL {
 			t.Fatalf("expected reachable URL %q, got %q ok=%v", srv.URL, url, ok)
 		}

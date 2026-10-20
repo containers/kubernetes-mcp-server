@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -109,7 +110,7 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiC
 
 // discoverAndValidateInternalURL finds a Kiali CR, builds in-cluster Service URL candidates,
 // and returns the first base URL that responds successfully to GET /api/status.
-func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, cfg *Config, bearerToken string) (string, bool) {
+func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
 	crs := listKialiCRs(ctx, inspector)
 	if len(crs) == 0 {
 		return "", false
@@ -119,7 +120,7 @@ func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterIn
 	for _, cr := range crs {
 		candidates = append(candidates, internalServiceURLs(cr)...)
 	}
-	url, ok := probeCandidateURLs(ctx, candidates, cfg, bearerToken)
+	url, ok := probeCandidateURLs(ctx, candidates, kialiCfg, serverCfg, bearerToken)
 	if ok {
 		klogutil.FromContext(ctx).V(1).Info("discovered reachable Kiali URL from CR", "url", url)
 		return url, true
