@@ -243,7 +243,7 @@ tls_cipher_suites = [
 
 When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
 
-Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali, NetObserv, and observability backends re-read TLS settings on each tool invocation. Observability backends verify certificates and hostnames against the system trust store and the CA from the Kubernetes REST config (CA data or CA file, or the mounted service CA when neither is set); setting an observability toolset's `insecure = true` is rejected.
+Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali, NetObserv, and observability backends re-read TLS settings on each tool invocation. Observability backends verify certificates and hostnames using the combined system trust store, Kubernetes REST config CA data and CA file (when configured), and mounted service CA (when present); an unreadable or invalid CA source fails the connection. Setting an observability toolset's `insecure = true` is rejected.
 
 ```bash
 # Example: Enforce TLS 1.3 minimum version (inbound + outbound)

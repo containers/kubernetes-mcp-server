@@ -100,7 +100,7 @@ func createRoundTripperWithToken(ctx context.Context, cfg *config.Config, restCo
 	return transport, nil
 }
 
-// createCertPoolFromRESTConfig creates a cert pool from Kubernetes REST config.
+// createCertPoolFromRESTConfig combines system, REST config, and service CA certificates.
 func createCertPoolFromRESTConfig(restConfig *rest.Config) (*x509.CertPool, error) {
 	var certPool *x509.CertPool
 
@@ -111,13 +111,12 @@ func createCertPoolFromRESTConfig(restConfig *rest.Config) (*x509.CertPool, erro
 		certPool = x509.NewCertPool()
 	}
 
-	// Use the same CA sources as the Kubernetes REST config, without changing
-	// the verification of the backend hostname.
 	if len(restConfig.CAData) > 0 {
 		if !certPool.AppendCertsFromPEM(restConfig.CAData) {
 			return nil, fmt.Errorf("failed to parse CA certificates from REST config CAData")
 		}
-	} else if restConfig.CAFile != "" {
+	}
+	if restConfig.CAFile != "" {
 		caPEM, err := os.ReadFile(restConfig.CAFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read REST config CA file: %w", err)
@@ -125,7 +124,8 @@ func createCertPoolFromRESTConfig(restConfig *rest.Config) (*x509.CertPool, erro
 		if !certPool.AppendCertsFromPEM(caPEM) {
 			return nil, fmt.Errorf("failed to parse REST config CA file %q", restConfig.CAFile)
 		}
-	} else if _, err := os.Stat(serviceCAFile); err == nil {
+	}
+	if _, err := os.Stat(serviceCAFile); err == nil {
 		caPEM, err := os.ReadFile(serviceCAFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read service CA file: %w", err)

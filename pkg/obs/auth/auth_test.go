@@ -232,6 +232,29 @@ func TestBuildRoundTripperTLS(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, request(t, rt, server.URL))
 	})
+	t.Run("REST CA data and CA file can both be provided", func(t *testing.T) {
+		caFile := t.TempDir() + "/ca.pem"
+		require.NoError(t, os.WriteFile(caFile, caData, 0600))
+		rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData, CAFile: caFile,
+		}}, AuthModeHeader, true, false)
+		require.NoError(t, err)
+		require.NoError(t, request(t, rt, server.URL))
+	})
+	t.Run("missing REST CA file fails even with valid CA data", func(t *testing.T) {
+		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData, CAFile: t.TempDir() + "/missing.pem",
+		}}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "failed to read REST config CA file")
+	})
+	t.Run("invalid REST CA file fails even with valid CA data", func(t *testing.T) {
+		caFile := t.TempDir() + "/ca.pem"
+		require.NoError(t, os.WriteFile(caFile, []byte("invalid"), 0600))
+		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData, CAFile: caFile,
+		}}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "failed to parse REST config CA file")
+	})
 	t.Run("invalid CA fails closed", func(t *testing.T) {
 		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{CAData: []byte("invalid")}}, AuthModeHeader, true, false)
 		require.ErrorContains(t, err, "CAData")
