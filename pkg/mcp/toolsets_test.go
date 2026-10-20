@@ -331,29 +331,31 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 }
 
 func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
-	//https://github.com/containers/kubernetes-mcp-server/issues/340
+	// https://github.com/containers/kubernetes-mcp-server/issues/340
+	// A no-argument tool must still emit properties so OpenAI accepts the schema.
+	// configuration_contexts_list stays argument-free; a single cluster hides it.
 	s.Run("InputSchema for no-arg tool is object with empty properties", func() {
-		s.Handle(test.NewInOpenShiftHandler())
+		kubeconfig := s.Kubeconfig()
+		kubeconfig.Contexts["extra-cluster"] = clientcmdapi.NewContext()
+		s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
 		s.InitMcpClient()
 		tools, err := s.ListTools()
-		s.Run("ListTools returns tools", func() {
-			s.NotNil(tools, "Expected tools from ListTools")
-			s.NoError(err, "Expected no error from ListTools")
-		})
-		var projectsList *mcp.Tool
+		s.Require().NoError(err, "Expected no error from ListTools")
+		s.Require().NotNil(tools, "Expected tools from ListTools")
+		var contextsList *mcp.Tool
 		for _, t := range tools.Tools {
-			if t.Name == "projects_list" {
-				projectsList = t
+			if t.Name == "configuration_contexts_list" {
+				contextsList = t
 				break
 			}
 		}
-		s.Require().NotNil(projectsList, "Expected projects_list from ListTools")
-		schema, ok := projectsList.InputSchema.(map[string]any)
+		s.Require().NotNil(contextsList, "Expected configuration_contexts_list from ListTools")
+		schema, ok := contextsList.InputSchema.(map[string]any)
 		s.Require().True(ok, "Expected InputSchema to be map[string]any")
-		s.NotNil(schema["properties"], "Expected projects_list.InputSchema.properties not to be nil")
+		s.NotNil(schema["properties"], "Expected configuration_contexts_list.InputSchema.properties not to be nil")
 		properties, ok := schema["properties"].(map[string]any)
 		s.Require().True(ok, "Expected properties to be map[string]any")
-		s.Empty(properties, "Expected projects_list.InputSchema.properties to be empty")
+		s.Empty(properties, "Expected configuration_contexts_list.InputSchema.properties to be empty")
 	})
 	// https://github.com/containers/kubernetes-mcp-server/issues/717
 	// Verifies ALL tools have Properties initialized (not just cluster-aware ones)

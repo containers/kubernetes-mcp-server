@@ -38,7 +38,9 @@ Their round tripper is [`NewBackendResponseRoundTripper`](../../pkg/kubernetes/r
 
 A list whose body exceeds the cap is that error.
 There is no partial page.
-Pagination so a large cluster can still be listed is deferred to [kubernetes-mcp-server#1473](https://github.com/containers/kubernetes-mcp-server/issues/1473).
+`resources_list`, `pods_list`, `pods_list_in_namespace`, `pods_top`, `nodes_top`, `namespaces_list`, `projects_list`, and `events_list` take `limit` and `continue` so the client can request the next Kubernetes list page.
+`helm_list` takes `limit` and `offset`.
+Helm applies those after it has loaded the release secrets, so a secret list that exceeds this cap still fails.
 
 In [`PodsExec`](../../pkg/kubernetes/pods.go), share one counter across stdout and stderr.
 At the cap, cancel the exec context, keep the bytes already stored, and append a truncation notice.
@@ -98,7 +100,7 @@ Reject with a JSON-RPC error when a slot is not available.
 For tools that is `Content` plus the JSON form of `StructuredContent`, or the `ContentBlocks` bytes when those are set, including when text and structured content are the same data twice.
 (The limit exists to protect the server, which must hold both fields in memory regardless of what the client uses or cares about.)
 
-The client can see less than the backend cap because an over-cap list, get, log, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager call becomes an error, because NetObserv flow export and exec return one prefix plus a notice, and because `limit` and `tail` still apply.
+The client can see less than the backend cap because an over-cap list, get, log, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager call becomes an error, because NetObserv flow export and exec return one prefix plus a notice, and because `limit`, `continue`, and `tail` still apply.
 The measured result can be larger than the backend cap because YAML can be larger than the JSON that was counted, because text and structured content are added together, and because several under-cap reads can be combined until the result cap.
 A collector stops the next fetch once that cap is reached.
 MCP JSON framing adds more on the wire.

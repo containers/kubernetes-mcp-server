@@ -17,10 +17,10 @@ func initEvents() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "events_list",
-			Description: "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces",
+			Description: "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces." + listPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
+				Properties: pageProperties(map[string]*jsonschema.Schema{
 					"namespace": {
 						Type:        "string",
 						Description: "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
@@ -30,7 +30,7 @@ func initEvents() []api.ServerTool {
 						Description: "Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     REGEX_FIELDSELECTOR,
 					},
-				},
+				}),
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Events: List",
@@ -52,12 +52,12 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	namespace := p.OptionalString("namespace", "")
 	options := api.ListOptions{}
 	options.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := p.Err(); err != nil {
+	if err := applyListPage(p, &options.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}
-	eventMap, err := kubernetes.NewCore(params).EventsList(params, namespace, options)
+	eventMap, meta, err := kubernetes.NewCore(params).EventsList(params, namespace, options)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", listErr(err))), nil
 	}
 	rows := make([]map[string]any, 0, len(eventMap))
 	for _, event := range eventMap {
@@ -71,16 +71,14 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		"columns": []string{"Namespace", "Timestamp", "Type", "Reason", "InvolvedObject", "Message"},
 		"items":   rows,
 	}
-	if len(eventMap) == 0 {
-		return api.NewToolCallResultFull("# No events found", structured, nil), nil
+	text := "# No events found"
+	if len(eventMap) > 0 {
+		yamlEvents, marshalErr := output.MarshalYaml(eventMap)
+		if marshalErr != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", marshalErr)), nil
+		}
+		text = fmt.Sprintf("# The following events (YAML format) were found:\n%s", yamlEvents)
 	}
-	yamlEvents, err := output.MarshalYaml(eventMap)
-	if err != nil {
-		err = fmt.Errorf("failed to list events in all namespaces: %w", err)
-	}
-	return api.NewToolCallResultFull(
-		fmt.Sprintf("# The following events (YAML format) were found:\n%s", yamlEvents),
-		structured,
-		err,
-	), nil
+	text, paged := attachContinue(text, structured, meta.Continue, meta.RemainingItemCount)
+	return api.NewToolCallResultFull(text, paged, nil), nil
 }

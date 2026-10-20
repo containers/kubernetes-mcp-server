@@ -40,7 +40,8 @@ app flattens only for display. `columns` is optional and controls column order;
 any remaining columns are inferred from the rows. Empty lists must use
 `items: []`. `resources_list` preserves its existing structured output, including
 complete objects with YAML output; the tool's text still follows the configured
-output format. Metrics aggregate
+output format. A paged list may also include `continue` and `remainingItemCount`
+next to `items`. Apps ignore those fields. Metrics aggregate
 CPU and memory per pod and sort resource quantities numerically. Resource apps
 show an overview, labels, conditions, and Pod container details. Specification,
 status, annotations, and the complete raw JSON are available in expandable

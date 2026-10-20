@@ -481,7 +481,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 	_ = b.Sections(
 		func(b *api.BuilderWithBudget) error {
 			// Server-side filter: events whose involvedObject.name exactly matches the VM name.
-			vmEvents, err := core.EventsList(ctx, namespace, api.ListOptions{
+			vmEvents, _, err := core.EventsList(ctx, namespace, api.ListOptions{
 				ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + vmName},
 			})
 			if err != nil {
@@ -497,7 +497,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 		func(b *api.BuilderWithBudget) error {
 			// Prefix matches (virt-launcher pods, vmName-suffixed objects) are not a
 			// field selector. List the namespace only when the budget still has room.
-			allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
+			allEvents, _, err := core.EventsList(ctx, namespace, api.ListOptions{})
 			if err != nil {
 				problems = append(problems, fmt.Sprintf("*Error listing events: %v*", err))
 				return nil
