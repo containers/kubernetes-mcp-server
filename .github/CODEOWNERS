@@ -37,12 +37,12 @@
 /docs/kubevirt.md          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: observability/logs
-/pkg/toolsets/logs/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/obs/logs/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/logs/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/logs/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: observability/metrics
-/pkg/toolsets/metrics/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/obs/metrics/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/metrics/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/metrics/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: netobserv
 /pkg/toolsets/netobserv/   @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
@@ -52,7 +52,7 @@
 /evals/tasks/netobserv/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: observability/otelcol
-/pkg/toolsets/otelcol/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/otelcol/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: tekton
 /pkg/toolsets/tekton/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
@@ -61,16 +61,16 @@
 /evals/tasks/tekton/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: observability/traces
-/pkg/toolsets/traces/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/obs/traces/           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/traces/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/traces/           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # shared: observability/logs, observability/metrics, observability/traces
-/pkg/obs/auth/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/obs/auth/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # shared: observability/logs, observability/traces
-/pkg/obs/instrumentation/  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/obs/openshift/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/obs/instrumentation/  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/openshift/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # shared: observability/logs, observability/metrics, observability/otelcol, observability/traces
-/pkg/obs/tools/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/obs/toolcfg/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/obs/tools/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/toolcfg/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
