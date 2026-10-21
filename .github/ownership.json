@@ -38,7 +38,8 @@
         "/evals/tasks/kiali/",
         "/docs/KIALI.md"
       ],
-      "reviewers": ["@aljesusg", "@josunect"]
+      "reviewers": [],
+      "approvers": ["@aljesusg", "@josunect"]
     },
     {
       "toolset": "kubevirt",

@@ -21,12 +21,12 @@
 /pkg/kcp/                  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: kiali
-/pkg/toolsets/kiali/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/kiali/                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/mcp/kiali*            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/build/kiali.mk            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/evals/tasks/kiali/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/docs/KIALI.md             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/kiali/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/pkg/kiali/                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/pkg/mcp/kiali*            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/build/kiali.mk            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/evals/tasks/kiali/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/docs/KIALI.md             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
 
 # toolset: kubevirt
 /pkg/toolsets/kubevirt/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
