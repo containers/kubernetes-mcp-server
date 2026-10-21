@@ -295,11 +295,6 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 ### Tools
 
-The `show_timeseries` tool in `observability/metrics` requires at least one
-`perses.dev/v1alpha2` Perses resource instance in a configured cluster.
-Detection requires permission to list Perses resources across namespaces.
-This requirement applies regardless of `experimental_enable_target_compatibility_tool_filters`.
-
 In case multi-cluster support is enabled (default) and you have access to multiple clusters, all applicable tools will include an additional `context` argument to specify the Kubernetes context (cluster) to use for that operation.
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-START -->
@@ -1045,7 +1040,7 @@ query: "{ <filters joined by &&> }"
 
 Filters:
 - service name:     resource.service.name="<value>" (string, use quotes)
-- HTTP status code: span.http.response.status_code=<code> (number, no quotes)
+- HTTP status code: span.http.response.status_code=&lt;code&gt; (number, no quotes)
 - duration:         duration><value like 100ms, 2s, 5m> (no quotes)
 - error status:     status=error (keyword, NO quotes — do NOT write status="error")
 
@@ -1173,6 +1168,10 @@ Use tempo_search_tags to discover available tag names.
 
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-END -->
+
+<br>
+
+Some tools require additional cluster APIs, resource instances, or permissions. See [Tool requirements](docs/tool-requirements.md) for availability prerequisites.
 
 ### Prompts
 

@@ -20,6 +20,7 @@ Choose the guide that matches your needs:
 
 - **[Configuration Reference](configuration.md)** - Complete reference for TOML configuration files, including all options, drop-in configuration, and dynamic reload
 - **[Configuration Changes](configuration-changes.md)** - Versioned record of configuration migrations between releases
+- **[Tool Requirements](tool-requirements.md)** - Cluster APIs, resources, and permissions required for tool availability
 
 ## Toolset Guides
 

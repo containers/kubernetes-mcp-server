@@ -174,7 +174,7 @@ func main() {
 				if slices.Contains(tool.Tool.InputSchema.Required, propName) {
 					toolsetTools.WriteString(" **(required)**")
 				}
-				fmt.Fprintf(&toolsetTools, " - %s\n", property.Description)
+				fmt.Fprintf(&toolsetTools, " - %s\n", strings.ReplaceAll(property.Description, "<code>", "&lt;code&gt;"))
 			}
 			toolsetTools.WriteString("\n")
 		}
