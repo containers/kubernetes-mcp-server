@@ -337,8 +337,7 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 func (s *HelmSuite) TestHelmListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("helm_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()

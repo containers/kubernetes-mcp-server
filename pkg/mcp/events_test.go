@@ -22,7 +22,14 @@ type EventsSuite struct {
 func (s *EventsSuite) TestEventsList() {
 	s.InitMcpClient()
 	s.Run("events_list (no events)", func() {
-		toolResult, err := s.CallTool("events_list", map[string]interface{}{})
+		// A fresh namespace has no Events. The cluster-wide list does not: envtest's
+		// apiserver writes a Warning for the default kubernetes Service.
+		client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+		ns, nsErr := client.CoreV1().Namespaces().Create(s.T().Context(), &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{GenerateName: "events-empty-"},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(nsErr)
+		toolResult, err := s.CallTool("events_list", map[string]interface{}{"namespace": ns.Name})
 		s.Run("no error", func() {
 			s.Nilf(err, "call tool failed %v", err)
 			s.Falsef(toolResult.IsError, "call tool failed")
@@ -63,29 +70,10 @@ func (s *EventsSuite) TestEventsList() {
 			s.Run("has yaml content", func() {
 				s.Nilf(err, "unmarshal failed %v", err)
 			})
-			s.Run("returns all events", func() {
-				s.YAMLEqf(""+
-					"- InvolvedObject:\n"+
-					"    Kind: Pod\n"+
-					"    Name: a-pod\n"+
-					"    apiVersion: v1\n"+
-					"  Message: The event message\n"+
-					"  Namespace: default\n"+
-					"  Reason: \"\"\n"+
-					"  Timestamp: 0001-01-01 00:00:00 +0000 UTC\n"+
-					"  Type: Normal\n"+
-					"- InvolvedObject:\n"+
-					"    Kind: Pod\n"+
-					"    Name: a-pod\n"+
-					"    apiVersion: v1\n"+
-					"  Message: The event message\n"+
-					"  Namespace: ns-1\n"+
-					"  Reason: \"\"\n"+
-					"  Timestamp: 0001-01-01 00:00:00 +0000 UTC\n"+
-					"  Type: Normal\n",
-					toolResult.Content[0].(*mcp.TextContent).Text,
-					"unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
-
+			s.Run("includes the created events", func() {
+				events := decodeEvents(s.T(), toolResult)
+				s.Contains(events, createdEvent("default"))
+				s.Contains(events, createdEvent("ns-1"))
 			})
 		})
 		s.Run("events_list(namespace=ns-1)", func() {
@@ -147,9 +135,7 @@ func (s *EventsSuite) TestEventsListDenied() {
 func (s *EventsSuite) TestEventsListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("events_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -219,19 +205,16 @@ func (s *EventsSuite) TestEventsListWithFieldSelector() {
 		s.Run("has yaml content", func() {
 			s.Nil(err, "unmarshal failed %v", err)
 		})
-		s.Run("returns only warning event", func() {
-			s.YAMLEq(""+
-				"- InvolvedObject:\n"+
-				"    Kind: Pod\n"+
-				"    Name: crashing-pod\n"+
-				"    apiVersion: v1\n"+
-				"  Message: Back-off restarting failed container\n"+
-				"  Namespace: default\n"+
-				"  Reason: BackOff\n"+
-				"  Timestamp: 0001-01-01 00:00:00 +0000 UTC\n"+
-				"  Type: Warning\n",
-				toolResult.Content[0].(*mcp.TextContent).Text,
-				"unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Run("includes the crashing-pod warning", func() {
+			s.Contains(decodeEvents(s.T(), toolResult), crashingPodWarning())
+		})
+		s.Run("excludes the normal event", func() {
+			s.excludeInvolved(decodeEvents(s.T(), toolResult), "healthy-pod")
+		})
+		s.Run("returns only warnings", func() {
+			for _, event := range decodeEvents(s.T(), toolResult) {
+				s.Equal("Warning", event["Type"], "event %#v", event)
+			}
 		})
 	})
 
@@ -278,19 +261,17 @@ func (s *EventsSuite) TestEventsListWithFieldSelector() {
 		s.Run("has yaml content", func() {
 			s.Nil(err, "unmarshal failed %v", err)
 		})
-		s.Run("returns only warning event from default namespace", func() {
-			s.YAMLEq(""+
-				"- InvolvedObject:\n"+
-				"    Kind: Pod\n"+
-				"    Name: crashing-pod\n"+
-				"    apiVersion: v1\n"+
-				"  Message: Back-off restarting failed container\n"+
-				"  Namespace: default\n"+
-				"  Reason: BackOff\n"+
-				"  Timestamp: 0001-01-01 00:00:00 +0000 UTC\n"+
-				"  Type: Warning\n",
-				toolResult.Content[0].(*mcp.TextContent).Text,
-				"unexpected result %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Run("includes the crashing-pod warning", func() {
+			s.Contains(decodeEvents(s.T(), toolResult), crashingPodWarning())
+		})
+		s.Run("excludes the normal event", func() {
+			s.excludeInvolved(decodeEvents(s.T(), toolResult), "healthy-pod")
+		})
+		s.Run("returns only warnings from default", func() {
+			for _, event := range decodeEvents(s.T(), toolResult) {
+				s.Equal("Warning", event["Type"], "event %#v", event)
+				s.Equal("default", event["Namespace"], "event %#v", event)
+			}
 		})
 	})
 
@@ -311,4 +292,50 @@ func (s *EventsSuite) TestEventsListWithFieldSelector() {
 
 func TestEvents(t *testing.T) {
 	suite.Run(t, new(EventsSuite))
+}
+
+func decodeEvents(t *testing.T, toolResult *mcp.CallToolResult) []map[string]any {
+	t.Helper()
+	var events []map[string]any
+	if err := yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &events); err != nil {
+		t.Fatalf("unmarshal events: %v", err)
+	}
+	return events
+}
+
+func (s *EventsSuite) excludeInvolved(events []map[string]any, name string) {
+	for _, event := range events {
+		involved, _ := event["InvolvedObject"].(map[string]any)
+		s.NotEqual(name, involved["Name"], "unexpected event %#v", event)
+	}
+}
+
+func createdEvent(namespace string) map[string]any {
+	return map[string]any{
+		"InvolvedObject": map[string]any{
+			"Kind":       "Pod",
+			"Name":       "a-pod",
+			"apiVersion": "v1",
+		},
+		"Message":   "The event message",
+		"Namespace": namespace,
+		"Reason":    "",
+		"Timestamp": "0001-01-01 00:00:00 +0000 UTC",
+		"Type":      "Normal",
+	}
+}
+
+func crashingPodWarning() map[string]any {
+	return map[string]any{
+		"InvolvedObject": map[string]any{
+			"Kind":       "Pod",
+			"Name":       "crashing-pod",
+			"apiVersion": "v1",
+		},
+		"Message":   "Back-off restarting failed container",
+		"Namespace": "default",
+		"Reason":    "BackOff",
+		"Timestamp": "0001-01-01 00:00:00 +0000 UTC",
+		"Type":      "Warning",
+	}
 }

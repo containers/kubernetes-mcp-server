@@ -17,7 +17,8 @@ import (
 )
 
 type Manager struct {
-	kubernetes *Kubernetes
+	kubernetes  *Kubernetes
+	schemaCache *openAPISchemaCache
 
 	config atomic.Pointer[config.Config]
 }
@@ -148,14 +149,14 @@ func NewManager(ctx context.Context, cfg *config.Config, restConfig *rest.Config
 
 	applyRateLimit(restConfig, cfg)
 
-	m := &Manager{}
+	m := &Manager{schemaCache: newOpenAPISchemaCache()}
 	m.config.Store(cfg)
 	var err error
 	// TODO: Won't work because not all client-go clients use the shared context (e.g. discovery client uses context.TODO())
 	//k8s.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 	//	return &impersonateRoundTripper{original}
 	//})
-	m.kubernetes, err = newKubernetesFromLive(ctx, &m.config, clientCmdConfig, restConfig)
+	m.kubernetes, err = newKubernetesFromLive(ctx, &m.config, clientCmdConfig, restConfig, m.schemaCache)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +227,7 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
-	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg)
+	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg, m.schemaCache)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create derived client: %w", err)
 	}

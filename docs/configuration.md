@@ -21,6 +21,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
 - [Configuration Reference](#configuration-reference-1)
   - [Server Settings](#server-settings)
   - [HTTP Server Security](#http-server-security)
+  - [Memory Bounds](#memory-bounds)
   - [Kubernetes Connection](#kubernetes-connection)
     - [Client Limits and Watcher Timing](#client-limits-and-watcher-timing)
     - [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod)
@@ -157,7 +158,7 @@ pkill -HUP kubernetes-mcp-server
 
 SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change.
 
-Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, and so on). Toolset registries are rebuilt.
+Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, `max_backend_response_bytes`, `max_in_flight`, `max_result_bytes`, and so on). Toolset registries are rebuilt.
 
 If the new files fail to parse (including unknown keys), a non-reloadable option would change, or Validate fails, the process exits. When Validate fails, the rejected configuration is dumped first. `toolset_configs` parsers see the `require_tls` value from this load; a would-be `require_tls` change fails before those parsers run.
 
@@ -191,7 +192,7 @@ SIGHUP is not available on Windows; restart the process.
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
-| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, OAuth, token exchange, well-known metadata). |
+| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata). |
 | `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
 
 The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case.
@@ -235,14 +236,14 @@ tls_cipher_suites = [
 
 `TLS_MIN_VERSION` and `TLS_CIPHER_SUITES` configure TLS for **both** inbound and outbound connections. They are applied at load time (startup and SIGHUP) and override the corresponding TOML values when set:
 
-| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, OAuth, token exchange, well-known metadata) |
+| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata) |
 |---------|----------------------|-------------------------------------------------------------------------|
 | `tls_min_version` / `tls_cipher_suites` (TOML) | ✅ | ✅ |
 | `TLS_MIN_VERSION` / `TLS_CIPHER_SUITES` (env) | ✅ overrides TOML | ✅ overrides TOML |
 
 When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
 
-Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali and NetObserv re-read TLS settings on each tool invocation.
+Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali, NetObserv, and observability backends re-read TLS settings on each tool invocation. Observability backends verify certificates and hostnames using the combined system trust store, Kubernetes REST config CA data and CA file (when configured), and mounted service CA (when present); an unreadable or invalid CA source fails the connection. Setting an observability toolset's `insecure = true` is rejected.
 
 ```bash
 # Example: Enforce TLS 1.3 minimum version (inbound + outbound)
@@ -266,7 +267,7 @@ Configure HTTP server settings to protect against denial-of-service attacks.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `http.read_header_timeout` | duration | `"10s"` | Maximum duration for reading request headers. Primary defense against Slowloris attacks. |
-| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). |
+| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). One term in the [pod memory floor](scaling.md). Stdio frames use the same number. |
 | `http.rate_limit_rps` | float | `0` | Maximum requests per second per session. When `0` (default), rate limiting is disabled. |
 | `http.rate_limit_burst` | integer | `0` (effective `10`) | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. `0` uses the built-in burst of 10. |
 
@@ -284,6 +285,54 @@ read_header_timeout = "10s"
 max_body_bytes = 16777216    # 16 MB
 rate_limit_rps = 5           # 5 requests per second per session
 rate_limit_burst = 10        # allow bursts of up to 10 requests
+```
+
+### Memory Bounds
+
+Process-wide caps on work this server holds in memory.
+They apply to stdio and HTTP.
+`0` disables a limit.
+Each option is reloadable.
+[Scaling](scaling.md) turns these caps into a pod memory floor.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_backend_response_bytes` | integer | `4194304` | Maximum bytes read from one Kubernetes API, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager response. `pods_exec` counts stdout and stderr together. An exact fit is allowed. The next byte closes the body and the call returns an error. `0` disables the cap. HTTP `101` upgrades are not capped. The schema fetch skips the cap so the aggregated spec can be parsed whole. Every other request stays capped. `pods_exec` keeps the bytes already stored and appends a truncation notice even if the exec library returns a stream error after the cap. A stream error before the cap drops that output. |
+| `max_result_bytes` | integer | `16777216` | Maximum bytes of one tool, prompt, or resource result. A tool counts `Content` plus the JSON size of `StructuredContent` when that field is set. When `ContentBlocks` is set, those block bytes replace `Content`, including image data. A tool error counts the error text. A prompt counts message text. A resource counts its text or blob. Log and event assembly stops at the cap and appends a truncation notice. The notice may make the result longer than the cap by the length of that notice. A result larger than the cap plus that notice is rejected and is not sent. |
+| `max_in_flight` | integer | `64` | Maximum number of `tools/call`, `prompts/get`, and `resources/read` requests running at once in this process. When every slot is in use, another of those requests is rejected with JSON-RPC error `-32030` (`max_in_flight limit exceeded`). Other methods are not counted. Every session shares one pool. |
+
+`max_backend_response_bytes` is read from the live config on each backend call.
+Kubernetes, Prometheus, and Alertmanager apply it on the round tripper, so the client stops reading and does not decode the rest.
+Kiali, NetObserv, Loki, and Tempo apply it when they read the body.
+An exact fit is allowed.
+The next byte closes the body and returns an error, so client-go does not decode the rest.
+A list over that cap is the same error, with no partial page.
+Pagination is deferred to [kubernetes-mcp-server#1473](https://github.com/containers/kubernetes-mcp-server/issues/1473).
+NetObserv flow export is the exception: it keeps the bytes already read and appends a truncation notice.
+`0` leaves that read uncapped.
+Switching-protocol (`101`) responses and the (internal-only) openapi schema retrieval are skipped.
+Every other request, including a namespace or object named `openapi`, stays capped.
+Clients of one cluster share one parsed OpenAPI model, including when several calls fetch it at once.
+A failed fetch is not kept.
+`pods_exec` shares one counter across stdout and stderr; at the cap it cancels the exec, keeps the bytes already stored, and appends a truncation notice, including when the exec library reports a stream error instead of `context.Canceled`.
+A stream error before the cap drops those buffers.
+
+`max_result_bytes` is read on each call.
+An exact fit is allowed.
+`0` disables the check.
+Lowering it does not change a call already running.
+A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length.
+A collector that keeps several backend reads stops before the next read once that budget is exhausted.
+
+A running call keeps its slot until the handler returns, including a call that started while the limit was `0`.
+Lowering `max_in_flight`, or raising it from `0`, does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap.
+Raising a positive limit, or setting `0`, takes effect on the next acquire.
+
+**Example:**
+```toml
+max_backend_response_bytes = 4194304
+max_result_bytes = 16777216
+max_in_flight = 64
 ```
 
 ### Kubernetes Connection
@@ -952,6 +1001,9 @@ log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 bind_address = "0.0.0.0"
 list_output = "table"
+max_backend_response_bytes = 4194304
+max_result_bytes = 16777216
+max_in_flight = 64
 stateless = false
 disable_localhost_protection = false
 

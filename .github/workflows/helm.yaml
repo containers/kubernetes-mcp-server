@@ -13,6 +13,7 @@ on:
       - 'charts/**'
       - 'build/helm.mk'
       - '.github/workflows/helm.yaml'
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

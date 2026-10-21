@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -45,6 +46,7 @@ func newTestParams(t *testing.T, cfg *Config, dynamicClient *dynamicfake.FakeDyn
 	}
 	return api.ToolHandlerParams{
 		Context:          ctx,
+		Config:           config.BaseDefault(),
 		KubernetesClient: &mockKubernetesClient{restConfig: &rest.Config{}, dynamicClient: dynamicClient},
 		Request:          &mockToolCallRequest{arguments: args},
 	}
@@ -112,4 +114,17 @@ func TestQueryRangeHandlerDefaults(t *testing.T) {
 	require.NoError(t, result.Error)
 	output := result.StructuredContent.(QueryRangeOutput)
 	require.Equal(t, "streams", output.ResultType)
+}
+
+func TestQueryRangeHandler_BackendCap(t *testing.T) {
+	const body = `{"status":"success","data":{"resultType":"streams","result":[]}}`
+	srv := lokiServer(t, map[string]mockResponse{
+		"query_range": {body: body},
+	})
+	params := handlerParams(t, srv.URL, map[string]any{"query": `{job="x"}`})
+	params.Config.MaxBackendResponseBytes.SetForTest(int64(len(body) - 1))
+
+	result, err := queryRangeHandler(params)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.Error, "max_backend_response_bytes")
 }

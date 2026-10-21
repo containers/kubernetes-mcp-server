@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -224,22 +225,28 @@ func (s *TroubleshootToolSuite) TestCloudInitData() {
 }
 
 func (s *TroubleshootToolSuite) TestRedactLogSecrets() {
+	redacted := func(logs string) string {
+		b := api.NewBuilderWithBudget(0)
+		writeRedactedLines(b, logs)
+		return b.String()
+	}
+
 	s.Run("redacts bearer token in logs", func() {
 		input := "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.abc"
-		result := redactLogSecrets(input)
+		result := redacted(input)
 		s.Contains(result, "Bearer <REDACTED>")
 		s.NotContains(result, "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9")
 	})
 
 	s.Run("preserves normal log lines", func() {
 		input := "2026-07-20 10:00:00 INFO VM started successfully"
-		result := redactLogSecrets(input)
+		result := redacted(input)
 		s.Equal(input, result)
 	})
 
 	s.Run("redacts password= in logs", func() {
 		input := "connecting with password=mysecret123"
-		result := redactLogSecrets(input)
+		result := redacted(input)
 		s.Contains(result, "password=<REDACTED>")
 		s.NotContains(result, "mysecret123")
 	})

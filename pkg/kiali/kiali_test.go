@@ -12,6 +12,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -35,6 +36,11 @@ func (s *KialiSuite) mustNewKiali() *Kiali {
 	k, err := NewKiali(s.Config, s.MockServer.Config())
 	s.Require().NoError(err)
 	return k
+}
+
+func (s *KialiSuite) TestBackendLimitRequiresConfig() {
+	_, err := (&Kiali{}).backendLimit()
+	s.ErrorIs(err, kubernetes.ErrBackendLimitUnavailable)
 }
 
 func (s *KialiSuite) TestNewKiali_NilConfig() {
@@ -290,13 +296,16 @@ func (s *KialiSuite) TestExecuteRequest() {
 		s.Equal("ok", out, "Unexpected response body")
 	})
 	s.Run("returns error when response exceeds maximum allowed size", func() {
+		s.Config.MaxBackendResponseBytes.SetForTest(8)
+		defer s.Config.MaxBackendResponseBytes.SetForTest(config.DefaultMaxBackendResponseBytes)
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBodySize+1)))
+			_, _ = w.Write([]byte(strings.Repeat("x", 9)))
 		}))
 		_, err := k.ExecuteRequest(s.T().Context(), "/api/large", nil)
-		s.Require().Error(err, "Expected error for oversized response")
-		s.ErrorContains(err, fmt.Sprintf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize))
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		s.Require().ErrorAs(err, &tooLarge)
+		s.Equal(int64(8), tooLarge.Limit)
 	})
 	s.Run("returns error including response body for non-2xx status", func() {
 		s.MockServer.ResetHandlers()

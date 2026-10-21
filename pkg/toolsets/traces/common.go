@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -58,7 +59,7 @@ func getTempoClient(params api.ToolHandlerParams) (tempoclient.Loader, error) {
 	}
 
 	tls := strings.HasPrefix(url, "https://")
-	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
+	rt, err := auth.BuildRoundTripper(params.Context, params.Config, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
@@ -69,7 +70,7 @@ func getTempoClient(params api.ToolHandlerParams) (tempoclient.Loader, error) {
 		Timeout:   tempoclient.RequestTimeout,
 		Transport: rt,
 	}
-	return tempoclient.NewTempoLoader(httpClient, url), nil
+	return tempoclient.NewTempoLoader(httpClient, url, kubernetes.LiveBackendLimit(params.Config)), nil
 }
 
 func resolveTempoURL(params api.ToolHandlerParams) (string, error) {

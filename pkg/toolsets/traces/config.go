@@ -24,7 +24,8 @@ type Config struct {
 	// Valid values: "header" (default), "kubeconfig".
 	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
 
-	// Insecure controls whether to skip TLS certificate verification.
+	// Insecure is retained for configuration compatibility but rejected when a client is created.
+	// Configure a trusted CA instead of disabling certificate verification.
 	Insecure bool `toml:"insecure,omitempty"`
 
 	// TempoURL is the URL of the Tempo API endpoint.

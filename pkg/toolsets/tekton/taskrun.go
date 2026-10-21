@@ -17,8 +17,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-const maxLogBytesPerContainer = 1 << 20 // 1 MiB
-
 func taskRunTools() []api.ServerTool {
 	return []api.ServerTool{
 		{
@@ -191,21 +189,19 @@ func getTaskRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to convert TaskRun from unstructured: %w", err)), nil
 	}
 
-	var sb strings.Builder
-	collectTaskRunLogs(params, &sb, namespace, &tr, stepName, tailInt)
-
-	if sb.Len() == 0 {
-		return api.NewToolCallResult(fmt.Sprintf("No logs available for TaskRun '%s' in namespace '%s'", name, namespace), nil), nil
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
+	collectTaskRunLogs(params, b, namespace, &tr, stepName, tailInt)
+	if b.Len() == 0 {
+		b.WriteString(fmt.Sprintf("No logs available for TaskRun '%s' in namespace '%s'", name, namespace))
 	}
-
-	return api.NewToolCallResult(sb.String(), nil), nil
+	return api.NewToolCallResult(b.String(), nil), nil
 }
 
-func collectTaskRunLogs(params api.ToolHandlerParams, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
+func collectTaskRunLogs(params api.ToolHandlerParams, sb *api.BuilderWithBudget, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
 	collectTaskRunLogsWithClient(params.Context, params.KubernetesClient, sb, namespace, tr, stepName, tailLines)
 }
 
-func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
+func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClient, sb *api.BuilderWithBudget, namespace string, tr *tektonv1.TaskRun, stepName string, tailLines int64) {
 	hasStep := stepName == ""
 	for _, step := range tr.Status.Steps {
 		if step.Name == stepName {
@@ -217,41 +213,91 @@ func collectTaskRunLogsWithClient(ctx context.Context, client api.KubernetesClie
 		return
 	}
 	if tr.Status.PodName == "" {
-		fmt.Fprintf(sb, "TaskRun '%s' in namespace '%s' has not started a pod yet\n", tr.Name, namespace)
+		sb.WriteString(fmt.Sprintf("TaskRun '%s' in namespace '%s' has not started a pod yet\n", tr.Name, namespace))
 		return
 	}
+	var steps []api.Step
 	for _, step := range tr.Status.Steps {
 		if stepName == "" || step.Name == stepName {
-			collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+			steps = append(steps, func(b *api.BuilderWithBudget) error {
+				collectContainerLogs(ctx, client, b, tr.Status.PodName, namespace, "step", step.Name, step.Container, tailLines)
+				return nil
+			})
 		}
 	}
 	if stepName == "" {
 		for _, sidecar := range tr.Status.Sidecars {
-			collectContainerLogs(ctx, client, sb, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+			steps = append(steps, func(b *api.BuilderWithBudget) error {
+				collectContainerLogs(ctx, client, b, tr.Status.PodName, namespace, "sidecar", sidecar.Name, sidecar.Container, tailLines)
+				return nil
+			})
 		}
 	}
+	_ = sb.Sections(steps...)
 }
 
-func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *strings.Builder, podName, namespace, kind, name, container string, tailLines int64) {
+func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *api.BuilderWithBudget, podName, namespace, kind, name, container string, tailLines int64) {
+	// Sections decides whether this stream starts.
+	// See docs/specs/memory-bounds.md#retention.
+	if sb == nil {
+		return
+	}
+
 	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: container,
 		TailLines: &tailLines,
 	})
 	stream, err := req.Stream(ctx)
 	if err != nil {
-		fmt.Fprintf(sb, "[%s: %s] error retrieving logs: %v\n", kind, name, err)
+		sb.WriteString(fmt.Sprintf("[%s: %s] error retrieving logs: %v\n", kind, name, err))
 		return
 	}
 	defer func() {
 		_ = stream.Close()
 	}()
 
-	bytes, err := io.ReadAll(io.LimitReader(stream, maxLogBytesPerContainer))
+	// Read at most the bytes sb can still hold. The header added below is
+	// cut by WriteString. An uncapped builder (Remaining < 0) reads the
+	// stream; that read is still bounded by max_backend_response_bytes on
+	// the cluster client. See docs/specs/memory-bounds.md#retention.
+	body := io.Reader(stream)
+	if rem := sb.Remaining(); rem > 0 {
+		body = io.LimitReader(stream, rem)
+	}
+	logBytes, err := io.ReadAll(body)
 	if err != nil {
-		fmt.Fprintf(sb, "[%s: %s] error reading logs: %v\n", kind, name, err)
+		sb.WriteString(fmt.Sprintf("[%s: %s] error reading logs: %v\n", kind, name, err))
 		return
 	}
-	if len(bytes) > 0 {
-		fmt.Fprintf(sb, "[%s: %s]\n%s\n", kind, name, string(bytes))
+	if len(logBytes) > 0 {
+		sb.WriteString(fmt.Sprintf("[%s: %s]\n%s\n", kind, name, string(logBytes)))
 	}
+}
+
+// appendTaskBlock collects one task into a scratch capped at the bytes dst can
+// still accept, then writes that block once. An empty collection drops the
+// header. suffix follows the logs (the prompt adds a blank line).
+//
+// The scratch is how a TaskRun's steps stay inside max_result_bytes:
+// collect stops when the scratch is truncated, and the next container is not
+// read. See docs/specs/memory-bounds.md#retention.
+func appendTaskBlock(dst *api.BuilderWithBudget, header, suffix string, collect func(*api.BuilderWithBudget)) bool {
+	if dst == nil || dst.Truncated() {
+		return false
+	}
+	// +1 reserves the newline this function inserts when the block has none.
+	inner := dst.Scratch(len(header) + len(suffix) + 1)
+	if inner.Truncated() {
+		return false
+	}
+	collect(inner)
+	body, cut := inner.Prefix()
+	if strings.TrimSpace(body) == "" {
+		return !cut
+	}
+	block := header + body
+	if !strings.HasSuffix(block, "\n") {
+		block += "\n"
+	}
+	return dst.WriteCut(block+suffix, cut)
 }

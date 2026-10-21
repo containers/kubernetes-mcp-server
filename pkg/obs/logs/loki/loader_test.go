@@ -2,11 +2,16 @@ package loki
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
+
+func uncapped() (int64, error) { return 0, nil }
 
 func TestLabelNames(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +22,7 @@ func TestLabelNames(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewHTTPLoader(server.Client(), server.URL, "")
+	loader := NewHTTPLoader(server.Client(), server.URL, "", uncapped)
 
 	labels, err := loader.LabelNames(context.Background(), time.Now().Add(-time.Hour), time.Now())
 	if err != nil {
@@ -37,7 +42,7 @@ func TestLabelValues(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewHTTPLoader(server.Client(), server.URL, "")
+	loader := NewHTTPLoader(server.Client(), server.URL, "", uncapped)
 
 	values, err := loader.LabelValues(context.Background(), "namespace", time.Now().Add(-time.Hour), time.Now())
 	if err != nil {
@@ -68,7 +73,7 @@ func TestQueryRange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewHTTPLoader(server.Client(), server.URL, "")
+	loader := NewHTTPLoader(server.Client(), server.URL, "", uncapped)
 
 	result, err := loader.QueryRange(context.Background(), QueryRangeInput{
 		Query:     `{namespace="default"}`,
@@ -104,7 +109,7 @@ func TestQueryRangeSetsTenantHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewHTTPLoader(server.Client(), server.URL, "network")
+	loader := NewHTTPLoader(server.Client(), server.URL, "network", uncapped)
 
 	_, err := loader.QueryRange(context.Background(), QueryRangeInput{
 		Query:     `{job="test"}`,
@@ -115,5 +120,41 @@ func TestQueryRangeSetsTenantHeader(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("QueryRange failed: %v", err)
+	}
+}
+
+func TestLabelNamesBackendCap(t *testing.T) {
+	const body = `{"status":"success","data":["namespace"]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	names := func(limit func() (int64, error)) ([]string, error) {
+		loader := NewHTTPLoader(server.Client(), server.URL, "", limit)
+		return loader.LabelNames(context.Background(), time.Time{}, time.Time{})
+	}
+
+	labels, err := names(func() (int64, error) { return int64(len(body)), nil })
+	if err != nil {
+		t.Fatalf("exact cap: %v", err)
+	}
+	if len(labels) != 1 || labels[0] != "namespace" {
+		t.Fatalf("exact cap labels: %v", labels)
+	}
+
+	_, err = names(func() (int64, error) { return int64(len(body) - 1), nil })
+	var tooLarge *kubernetes.BackendResponseTooLargeError
+	if !errors.As(err, &tooLarge) {
+		t.Fatalf("over cap: got %v", err)
+	}
+
+	if _, err = names(uncapped); err != nil {
+		t.Fatalf("disabled cap: %v", err)
+	}
+
+	_, err = names(nil)
+	if !errors.Is(err, kubernetes.ErrBackendLimitUnavailable) {
+		t.Fatalf("nil limit: got %v", err)
 	}
 }

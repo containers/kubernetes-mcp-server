@@ -66,13 +66,8 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 		return nil, err
 	}
 
-	logsContent := fetchKialiData(kiali, params, tools.KialiGetLogsEndpoint,
-		map[string]any{"namespace": namespace, "name": logTarget})
-
-	istioContent := fetchKialiData(kiali, params, tools.KialiManageIstioConfigReadEndpoint,
-		map[string]any{"namespace": namespace, "action": "list"})
-
-	promptText := buildServiceTroubleshootPrompt(namespace, service, logsContent, istioContent)
+	b := api.NewPromptBudget(params.Context, serviceTroubleshootAssistantText)
+	writeServiceTroubleshootPrompt(kiali, params, namespace, service, logTarget, b)
 
 	return api.NewPromptCallResult(
 		"Service troubleshooting data gathered successfully",
@@ -81,14 +76,14 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 				Role: "user",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: promptText,
+					Text: b.String(),
 				},
 			},
 			{
 				Role: "assistant",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: "I'll analyze the collected data to diagnose the service issues systematically.",
+					Text: serviceTroubleshootAssistantText,
 				},
 			},
 		},
@@ -96,20 +91,13 @@ func serviceTroubleshootHandler(params api.PromptHandlerParams) (*api.PromptCall
 	), nil
 }
 
-// fetchKialiData calls a Kiali endpoint and returns the response body.
-// On error it returns a placeholder string instead of failing the prompt,
-// allowing other sections to still render useful data.
-func fetchKialiData(kiali *kialiclient.Kiali, params api.PromptHandlerParams, endpoint string, args map[string]any) string {
-	content, err := kiali.ExecuteRequest(params.Context, endpoint, args)
-	if err != nil {
-		klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to fetch data from endpoint", klogutil.Field("endpoint", endpoint), klogutil.Err(err))
-		return fmt.Sprintf("(data unavailable: %v)", err)
-	}
-	return content
-}
+const serviceTroubleshootAssistantText = "I'll analyze the collected data to diagnose the service issues systematically."
 
-func buildServiceTroubleshootPrompt(namespace, service, logsData, istioData string) string {
-	return fmt.Sprintf(`# Service Troubleshooting Guide
+// writeServiceTroubleshootPrompt writes the guide into one prompt budget.
+// The Istio config request does not start once that budget is spent.
+func writeServiceTroubleshootPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespace, service, logTarget string, b *api.BuilderWithBudget) {
+	_ = b.Sections(
+		api.Text(fmt.Sprintf(`# Service Troubleshooting Guide
 
 ## Target: %s in namespace %s
 
@@ -121,7 +109,13 @@ Use this guide to diagnose issues with the service. The relevant data has been c
 
 Review the workload logs for error messages, stack traces, or unusual patterns:
 
-%s
+`, service, namespace)),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiGetLogsEndpoint,
+				map[string]any{"namespace": namespace, "name": logTarget})
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -129,7 +123,13 @@ Review the workload logs for error messages, stack traces, or unusual patterns:
 
 Review the Istio configuration (VirtualServices, DestinationRules, etc.) for routing issues, fault injection, or misconfiguration:
 
-%s
+`),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
+				map[string]any{"namespace": namespace, "action": "list"})
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -141,5 +141,22 @@ Based on the data above, provide:
 2. **Istio Impact**: Are there any Istio configurations (fault injection, traffic routing, retries) that could cause or contribute to the errors?
 3. **Root Cause**: What is the most likely root cause?
 4. **Recommendations**: What actions should be taken to resolve the issue?
-`, service, namespace, logsData, istioData)
+`),
+	)
+}
+
+// writeKialiData calls a Kiali endpoint and writes the body into b.
+// On error it writes a placeholder instead of failing the prompt.
+// Sections decides whether this call starts.
+func writeKialiData(b *api.BuilderWithBudget, kiali *kialiclient.Kiali, params api.PromptHandlerParams, endpoint string, args map[string]any) {
+	if b == nil {
+		return
+	}
+	content, err := kiali.ExecuteRequest(params.Context, endpoint, args)
+	if err != nil {
+		klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to fetch data from endpoint", klogutil.Field("endpoint", endpoint), klogutil.Err(err))
+		b.WriteString(fmt.Sprintf("(data unavailable: %v)", err))
+		return
+	}
+	b.WriteString(content)
 }

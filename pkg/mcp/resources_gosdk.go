@@ -52,12 +52,11 @@ func ServerResourceToGoSdkResource(s *Server, res api.ServerResource) (*mcp.Reso
 		MIMEType:    res.Resource.MIMEType,
 	}
 	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		cfg := s.configuration.Load()
-		params, err := newHandlerParams(s, ctx, cfg, api.ResourceCallRequest(&resourceCallRequestAdapter{request: req}), s.p.GetDefaultTarget())
+		limit, params, err := resourceHandlerParams(s, ctx, req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
+			return nil, err
 		}
-		content, err := res.Handler(api.ResourceHandlerParams(params))
+		content, err := res.Handler(params)
 		if err != nil {
 			return nil, err
 		}
@@ -65,6 +64,9 @@ func ServerResourceToGoSdkResource(s *Server, res api.ServerResource) (*mcp.Reso
 			return nil, errors.New("resource handler returned nil content")
 		}
 		if err := validateResourceContent(content); err != nil {
+			return nil, err
+		}
+		if err := resourceWithinLimit(limit, content); err != nil {
 			return nil, err
 		}
 		mimeType := res.Resource.MIMEType
@@ -106,12 +108,11 @@ func ServerResourceTemplateToGoSdkResourceTemplate(s *Server, rt api.ServerResou
 		MIMEType:    rt.ResourceTemplate.MIMEType,
 	}
 	handler := func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		cfg := s.configuration.Load()
-		params, err := newHandlerParams(s, ctx, cfg, api.ResourceCallRequest(&resourceCallRequestAdapter{request: req}), s.p.GetDefaultTarget())
+		limit, params, err := resourceHandlerParams(s, ctx, req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
+			return nil, err
 		}
-		content, err := rt.Handler(api.ResourceHandlerParams(params))
+		content, err := rt.Handler(params)
 		if err != nil {
 			return nil, err
 		}
@@ -119,6 +120,9 @@ func ServerResourceTemplateToGoSdkResourceTemplate(s *Server, rt api.ServerResou
 			return nil, errors.New("resource template handler returned nil content")
 		}
 		if err := validateResourceContent(content); err != nil {
+			return nil, err
+		}
+		if err := resourceWithinLimit(limit, content); err != nil {
 			return nil, err
 		}
 		mimeType := rt.ResourceTemplate.MIMEType
@@ -135,6 +139,22 @@ func ServerResourceTemplateToGoSdkResourceTemplate(s *Server, rt api.ServerResou
 		}, nil
 	}
 	return mcpTemplate, handler, nil
+}
+
+// resourceHandlerParams builds the handler environment. A nil server disables
+// the result-size limit and skips the Kubernetes client.
+func resourceHandlerParams(s *Server, ctx context.Context, req *mcp.ReadResourceRequest) (int64, api.ResourceHandlerParams, error) {
+	ctx, limit := withResultBudget(s, ctx)
+	request := api.ResourceCallRequest(&resourceCallRequestAdapter{request: req})
+	if s == nil {
+		return limit, api.ResourceHandlerParams{Context: ctx, Request: request}, nil
+	}
+	cfg := s.configuration.Load()
+	params, err := newHandlerParams(s, ctx, cfg, request, s.p.GetDefaultTarget())
+	if err != nil {
+		return limit, api.ResourceHandlerParams{}, fmt.Errorf("failed to get kubernetes client: %w", err)
+	}
+	return limit, api.ResourceHandlerParams(params), nil
 }
 
 // validateResourceContent enforces the api.ResourceContent invariant:

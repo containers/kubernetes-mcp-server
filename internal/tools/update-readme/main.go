@@ -48,6 +48,12 @@ func (i *documentationInspector) GetDefaultTarget() string { return "" }
 
 func (i *documentationInspector) GetTargetParameterName() string { return "" }
 
+func (i *documentationInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, i, func(ctx context.Context, s string) (string, error) {
+		return "", nil
+	})
+}
+
 var _ api.ClusterInspector = (*documentationInspector)(nil)
 var _ api.AggregateDiscovery = (*documentationInspector)(nil)
 var _ api.TargetProvider = (*documentationInspector)(nil)

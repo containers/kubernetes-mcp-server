@@ -56,6 +56,7 @@ type Kubernetes struct {
 	rawDiscoveryClient discovery.DiscoveryInterface
 	dynamicClient      dynamic.Interface
 	metricsV1beta1     *metricsv1beta1.MetricsV1beta1Client
+	schemaCache        *openAPISchemaCache
 }
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
@@ -68,7 +69,7 @@ func NewKubernetes(
 ) (*Kubernetes, error) {
 	live := &atomic.Pointer[config.Config]{}
 	live.Store(cfg)
-	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig)
+	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig, nil)
 }
 
 func newKubernetesFromLive(
@@ -76,15 +77,20 @@ func newKubernetesFromLive(
 	live *atomic.Pointer[config.Config],
 	clientCmdConfig clientcmd.ClientConfig,
 	restConfig *rest.Config,
+	schemaCache *openAPISchemaCache,
 ) (*Kubernetes, error) {
 	if live == nil || live.Load() == nil {
 		return nil, errors.New("config cannot be nil")
+	}
+	if schemaCache == nil {
+		schemaCache = newOpenAPISchemaCache()
 	}
 	cfg := live.Load()
 	k := &Kubernetes{
 		cfg:             live,
 		clientCmdConfig: clientCmdConfig,
 		restConfig:      rest.CopyConfig(restConfig),
+		schemaCache:     schemaCache,
 	}
 	if k.restConfig.UserAgent == "" {
 		k.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
@@ -103,10 +109,18 @@ func newKubernetesFromLive(
 			ValidationEnabled:    cfg.ValidationEnabled.Get(),
 			ConfirmationRules:    cfg.ConfirmationRules.Get(),
 			ConfirmationFallback: cfg.ConfirmationFallback.Get(),
+			SchemaCache:          k.schemaCache,
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &UserAgentRoundTripper{delegate: original}
+	})
+	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
+		// Read the live config on each request. newKubernetesFromLive stores
+		// one before this client serves traffic.
+		return NewBackendResponseRoundTripper(original, func() (int64, error) {
+			return BackendLimit(k.Config())
+		})
 	})
 	var err error
 	k.httpClient, err = rest.HTTPClientFor(k.restConfig)

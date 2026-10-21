@@ -3,7 +3,6 @@ package tekton
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
@@ -227,30 +226,28 @@ func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to list TaskRuns for PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
 	if len(taskRuns) == 0 {
+		var msg string
 		if pipelineTaskName != "" {
-			return api.NewToolCallResult(fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s' matching pipeline task '%s'", name, namespace, pipelineTaskName), nil), nil
+			msg = fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s' matching pipeline task '%s'", name, namespace, pipelineTaskName)
+		} else {
+			msg = fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s'", name, namespace)
 		}
-		return api.NewToolCallResult(fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s'", name, namespace), nil), nil
+		return api.NewToolCallResult(api.LimitString(params.Context, msg), nil), nil
 	}
 
-	var sb strings.Builder
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
 	for _, taskRun := range taskRuns {
-		var taskLogs strings.Builder
-		collectTaskRunLogs(params, &taskLogs, namespace, &taskRun, stepName, tailLines)
-		taskLogsText := taskLogs.String()
-		if strings.TrimSpace(taskLogsText) == "" {
-			continue
-		}
-		fmt.Fprintf(&sb, "# TaskRun: %s\n", taskRun.Name)
-		sb.WriteString(taskLogsText)
-		if !strings.HasSuffix(taskLogsText, "\n") {
-			sb.WriteString("\n")
+		header := fmt.Sprintf("# TaskRun: %s\n", taskRun.Name)
+		if !appendTaskBlock(b, header, "", func(taskLogs *api.BuilderWithBudget) {
+			collectTaskRunLogs(params, taskLogs, namespace, &taskRun, stepName, tailLines)
+		}) {
+			break
 		}
 	}
-	if sb.Len() == 0 {
-		return api.NewToolCallResult(fmt.Sprintf("No logs available for PipelineRun '%s' in namespace '%s'", name, namespace), nil), nil
+	if b.Len() == 0 {
+		b.WriteString(fmt.Sprintf("No logs available for PipelineRun '%s' in namespace '%s'", name, namespace))
 	}
-	return api.NewToolCallResult(sb.String(), nil), nil
+	return api.NewToolCallResult(b.String(), nil), nil
 }
 
 func pipelineRunTaskRuns(ctx context.Context, dynamicClient dynamic.Interface, namespace, pipelineRunName, pipelineTaskName string) ([]tektonv1.TaskRun, error) {
