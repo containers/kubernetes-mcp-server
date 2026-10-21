@@ -17,10 +17,10 @@ func initEvents() []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "events_list",
-			Description: "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces." + listPageSentence,
+			Description: "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"namespace": {
 						Type:        "string",
 						Description: "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
@@ -52,12 +52,12 @@ func eventsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	namespace := p.OptionalString("namespace", "")
 	options := api.ListOptions{}
 	options.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := applyListPage(p, &options.ListOptions); err != nil {
+	if err := ApplyListPage(p, &options.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", err)), nil
 	}
 	eventMap, meta, err := kubernetes.NewCore(params).EventsList(params, namespace, options)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list events in all namespaces: %w", ListErr(err))), nil
 	}
 	rows := make([]map[string]any, 0, len(eventMap))
 	for _, event := range eventMap {

@@ -18,10 +18,10 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "namespaces_list",
-			Description: "List all the Kubernetes namespaces in the current cluster." + listPageSentence,
+			Description: "List all the Kubernetes namespaces in the current cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"fieldSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
@@ -46,10 +46,10 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "projects_list",
-			Description: "List all the OpenShift projects in the current cluster." + listPageSentence,
+			Description: "List all the OpenShift projects in the current cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type:       "object",
-				Properties: pageProperties(nil),
+				Properties: PageProperties(nil),
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Projects: List",
@@ -84,34 +84,34 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
 	options := api.ListOptions{AsTable: params.ListOutput.AsTable()}
 	options.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := applyListPage(p, &options.ListOptions); err != nil {
+	if err := ApplyListPage(p, &options.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).NamespacesList(params, options)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to render namespaces: %w", err)), nil
 	}
-	text, structured := withListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
+	text, structured := WithListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	options := api.ListOptions{AsTable: params.ListOutput.AsTable()}
-	if err := applyListPage(api.WrapParams(params), &options.ListOptions); err != nil {
+	if err := ApplyListPage(api.WrapParams(params), &options.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).ProjectsList(params, options)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to render projects: %w", err)), nil
 	}
-	text, structured := withListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
+	text, structured := WithListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }

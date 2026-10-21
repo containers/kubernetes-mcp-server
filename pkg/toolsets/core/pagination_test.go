@@ -35,13 +35,13 @@ func (s *PaginationSuite) params(args map[string]any) *api.Params {
 func (s *PaginationSuite) TestApplyListPage() {
 	s.Run("omitted arguments leave the list uncapped", func() {
 		opts := metav1.ListOptions{}
-		s.NoError(applyListPage(s.params(map[string]any{}), &opts))
+		s.NoError(ApplyListPage(s.params(map[string]any{}), &opts))
 		s.Equal(int64(0), opts.Limit)
 		s.Empty(opts.Continue)
 	})
 	s.Run("copies limit and continue", func() {
 		opts := metav1.ListOptions{}
-		s.NoError(applyListPage(s.params(map[string]any{
+		s.NoError(ApplyListPage(s.params(map[string]any{
 			"limit":    float64(2),
 			"continue": "next",
 		}), &opts))
@@ -50,21 +50,21 @@ func (s *PaginationSuite) TestApplyListPage() {
 	})
 	s.Run("rejects a negative limit", func() {
 		opts := metav1.ListOptions{}
-		err := applyListPage(s.params(map[string]any{"limit": float64(-1)}), &opts)
+		err := ApplyListPage(s.params(map[string]any{"limit": float64(-1)}), &opts)
 		s.EqualError(err, "limit must be greater than or equal to 0")
 		s.Equal(int64(0), opts.Limit)
 	})
 	s.Run("rejects a limit that is not an integer", func() {
-		err := applyListPage(s.params(map[string]any{"limit": "2"}), &metav1.ListOptions{})
+		err := ApplyListPage(s.params(map[string]any{"limit": "2"}), &metav1.ListOptions{})
 		s.ErrorContains(err, "limit parameter must be an integer")
 	})
 }
 
 func (s *PaginationSuite) TestListErrHintsAtLimit() {
-	err := listErr(&kubernetes.BackendResponseTooLargeError{Limit: 8})
+	err := ListErr(&kubernetes.BackendResponseTooLargeError{Limit: 8})
 	s.ErrorContains(err, "retry with a smaller limit")
 	s.True(kubernetes.IsResponseTooLarge(err))
-	s.EqualError(listErr(errSentinel), errSentinel.Error())
+	s.EqualError(ListErr(errSentinel), errSentinel.Error())
 }
 
 var errSentinel = errString("list failed")
@@ -92,7 +92,7 @@ func (s *PaginationSuite) TestAttachContinue() {
 	})
 	s.Run("adds the token to an existing object", func() {
 		rows := map[string]any{"items": items, "columns": []string{"Name"}}
-		text, structured := withListPage("table", rows, &unstructured.UnstructuredList{
+		text, structured := WithListPage("table", rows, &unstructured.UnstructuredList{
 			Object: map[string]any{"metadata": map[string]any{"continue": "tok"}},
 		})
 		s.Equal("# continue: tok\ntable", text)
@@ -102,7 +102,7 @@ func (s *PaginationSuite) TestAttachContinue() {
 }
 
 func (s *PaginationSuite) TestPageProperties() {
-	props := pageProperties(nil)
+	props := PageProperties(nil)
 	s.Equal("integer", props["limit"].Type)
 	s.Equal("string", props["continue"].Type)
 	s.Contains(props["limit"].Description, "max_backend_response_bytes")

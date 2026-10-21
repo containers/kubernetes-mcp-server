@@ -100,10 +100,10 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 		), Handler: nodesStatsSummary},
 		{Tool: api.Tool{
 			Name:        "nodes_top",
-			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster." + listPageSentence,
+			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"name": {
 						Type:        "string",
 						Description: "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
@@ -191,13 +191,13 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["label_selector"].(string); ok {
 		nodesTopOptions.LabelSelector = v
 	}
-	if err := applyListPage(api.WrapParams(params), &nodesTopOptions.ListOptions); err != nil {
+	if err := ApplyListPage(api.WrapParams(params), &nodesTopOptions.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %w", err)), nil
 	}
 
 	nodeMetrics, err := kubernetes.NewCore(params).NodesTop(params, nodesTopOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %w", ListErr(err))), nil
 	}
 
 	availableResources := make(map[string]v1.ResourceList)
@@ -217,7 +217,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			LabelSelector: nodesTopOptions.LabelSelector,
 		})
 		if nodesErr != nil {
-			return api.NewToolCallResult("", fmt.Errorf("failed to list nodes: %w", listErr(nodesErr))), nil
+			return api.NewToolCallResult("", fmt.Errorf("failed to list nodes: %w", ListErr(nodesErr))), nil
 		}
 		for _, n := range nodeList.Items {
 			addNodeAllocatable(availableResources, n)
@@ -239,7 +239,7 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			"Memory": node.Usage.Memory().String(),
 		})
 	}
-	text, structured := withListPage(buf.String(), map[string]any{"columns": []string{"Name", "CPU", "Memory"}, "items": items}, nodeMetrics)
+	text, structured := WithListPage(buf.String(), map[string]any{"columns": []string{"Name", "CPU", "Memory"}, "items": items}, nodeMetrics)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 

@@ -21,10 +21,10 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
-			Description: "List all the Kubernetes pods in the current cluster from all namespaces." + listPageSentence,
+			Description: "List all the Kubernetes pods in the current cluster from all namespaces." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"labelSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
@@ -51,10 +51,10 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 			App: mcpapps.Table("ui://kubernetes-mcp-server/pods-list", "Pods list", mcpapps.WithDescription("Interactive table of Kubernetes pods"))},
 		{Tool: api.Tool{
 			Name:        "pods_list_in_namespace",
-			Description: "List all the Kubernetes pods in the specified namespace in the current cluster." + listPageSentence,
+			Description: "List all the Kubernetes pods in the specified namespace in the current cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"namespace": {
 						Type:        "string",
 						Description: "Namespace to list pods from",
@@ -160,10 +160,10 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 		), Handler: podsDelete},
 		{Tool: api.Tool{
 			Name:        "pods_top",
-			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace." + listPageSentence,
+			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"all_namespaces": {
 						Type:        "boolean",
 						Description: "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
@@ -370,18 +370,18 @@ func podsListInAllNamespaces(params api.ToolHandlerParams) (*api.ToolCallResult,
 	}
 	resourceListOptions.LabelSelector = p.OptionalString("labelSelector", "")
 	resourceListOptions.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := applyListPage(p, &resourceListOptions.ListOptions); err != nil {
+	if err := ApplyListPage(p, &resourceListOptions.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsListInAllNamespaces(params, resourceListOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in all namespaces: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to render pods: %w", err)), nil
 	}
-	text, structured := withListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
+	text, structured := WithListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 
@@ -393,18 +393,18 @@ func podsListInNamespace(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	}
 	resourceListOptions.LabelSelector = p.OptionalString("labelSelector", "")
 	resourceListOptions.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := applyListPage(p, &resourceListOptions.ListOptions); err != nil {
+	if err := ApplyListPage(p, &resourceListOptions.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsListInNamespace(params, ns, resourceListOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list pods in namespace %s: %w", ns, ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to render pods: %w", err)), nil
 	}
-	text, structured := withListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
+	text, structured := WithListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 
@@ -448,12 +448,12 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		Name:          p.OptionalString("name", ""),
 	}
 	podsTopOptions.LabelSelector = p.OptionalString("label_selector", "")
-	if err := applyListPage(p, &podsTopOptions.ListOptions); err != nil {
+	if err := ApplyListPage(p, &podsTopOptions.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsTop(params, podsTopOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get pods top: %w", ListErr(err))), nil
 	}
 	buf := new(bytes.Buffer)
 	printer := metricsutil.NewTopCmdPrinter(buf, true)
@@ -476,7 +476,7 @@ func podsTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			"Memory":    memory.String(),
 		})
 	}
-	text, structured := withListPage(buf.String(), map[string]any{"columns": []string{"Namespace", "Name", "CPU", "Memory"}, "items": items}, ret)
+	text, structured := WithListPage(buf.String(), map[string]any{"columns": []string{"Namespace", "Name", "CPU", "Memory"}, "items": items}, ret)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 

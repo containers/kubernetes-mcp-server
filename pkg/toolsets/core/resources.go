@@ -34,10 +34,10 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "resources_list",
-			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector." + listPageSentence + "\n" + commonApiVersion,
+			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector." + ListPageSentence + "\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: pageProperties(map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"apiVersion": {
 						Type:        "string",
 						Description: "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -259,7 +259,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 		resourceListOptions.FieldSelector = f
 	}
-	if err := applyListPage(api.WrapParams(params), &resourceListOptions.ListOptions); err != nil {
+	if err := ApplyListPage(api.WrapParams(params), &resourceListOptions.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
 	}
 	gvk, err := parseGroupVersionKind(params.GetArguments())
@@ -274,7 +274,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	ret, err := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", listErr(err))), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
@@ -287,7 +287,7 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 			printed.Structured = map[string]any{"items": []map[string]any{}}
 		}
 	}
-	text, structured := withListPage(printed.Text, printed.Structured, ret)
+	text, structured := WithListPage(printed.Text, printed.Structured, ret)
 	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 
