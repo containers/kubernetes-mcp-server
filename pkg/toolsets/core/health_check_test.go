@@ -260,6 +260,7 @@ func (healthCoreClient) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 func (healthCoreClient) RESTConfig() *rest.Config                            { return nil }
 func (healthCoreClient) RESTMapper() meta.ResettableRESTMapper               { return nil }
 func (healthCoreClient) DiscoveryClient() discovery.CachedDiscoveryInterface { return nil }
+func (healthCoreClient) RawDiscoveryClient() discovery.DiscoveryInterface    { return nil }
 func (healthCoreClient) DynamicClient() dynamic.Interface                    { return nil }
 func (healthCoreClient) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
 	return nil

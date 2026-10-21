@@ -171,6 +171,9 @@ func (c eventListClient) RESTMapper() meta.ResettableRESTMapper {
 func (eventListClient) DiscoveryClient() discovery.CachedDiscoveryInterface {
 	return staticEventDiscovery{}
 }
+func (eventListClient) RawDiscoveryClient() discovery.DiscoveryInterface {
+	return staticEventDiscovery{}
+}
 func (c eventListClient) DynamicClient() dynamic.Interface { return c.dyn }
 func (eventListClient) AuthorizationV1() authv1client.AuthorizationV1Interface {
 	return nil

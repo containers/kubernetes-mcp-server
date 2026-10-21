@@ -206,6 +206,7 @@ func (coreClient) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 func (coreClient) RESTConfig() *rest.Config                            { return nil }
 func (coreClient) RESTMapper() meta.ResettableRESTMapper               { return nil }
 func (coreClient) DiscoveryClient() discovery.CachedDiscoveryInterface { return nil }
+func (coreClient) RawDiscoveryClient() discovery.DiscoveryInterface    { return nil }
 func (coreClient) DynamicClient() dynamic.Interface                    { return nil }
 func (coreClient) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
 	return nil
