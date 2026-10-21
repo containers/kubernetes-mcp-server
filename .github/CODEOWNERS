@@ -55,10 +55,10 @@
 /pkg/toolsets/otelcol/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: tekton
-/pkg/toolsets/tekton/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/mcp/tekton*           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/build/tekton.mk           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/evals/tasks/tekton/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/tekton/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/pkg/mcp/tekton*           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/build/tekton.mk           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/evals/tasks/tekton/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
 
 # toolset: observability/traces
 /pkg/toolsets/traces/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo

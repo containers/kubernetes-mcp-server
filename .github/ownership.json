@@ -100,7 +100,8 @@
         "/build/tekton.mk",
         "/evals/tasks/tekton/"
       ],
-      "reviewers": ["@ksimon1"]
+      "reviewers": [],
+      "approvers": ["@ksimon1"]
     },
     {
       "toolset": "observability/traces",
