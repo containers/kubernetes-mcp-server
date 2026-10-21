@@ -366,7 +366,7 @@ func writeHCOEvents(ctx context.Context, client api.KubernetesClient, namespace 
 	}
 	core := kubernetes.NewCore(client)
 
-	allEvents, err := core.EventsList(ctx, namespace, api.ListOptions{})
+	allEvents, _, err := core.EventsList(ctx, namespace, api.ListOptions{})
 	if err != nil {
 		b.WriteString(fmt.Sprintf("### Events\n\n*Error listing events: %v*", err))
 		return

@@ -62,13 +62,22 @@
       "readOnlyHint": true,
       "title": "Events: List"
     },
-    "description": "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces",
+    "description": "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
       "properties": {
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
           "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         },
         "namespace": {
           "description": "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
@@ -107,13 +116,22 @@
       "readOnlyHint": true,
       "title": "Namespaces: List"
     },
-    "description": "List all the Kubernetes namespaces in the current cluster",
+    "description": "List all the Kubernetes namespaces in the current cluster. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
       "properties": {
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
           "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -276,6 +294,7 @@
                 }
               },
               "verbs": [
+                "get",
                 "list"
               ]
             }
@@ -291,13 +310,22 @@
       "readOnlyHint": true,
       "title": "Nodes: Top"
     },
-    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
+    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
       "properties": {
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         },
         "name": {
           "description": "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
@@ -558,9 +586,13 @@
       "readOnlyHint": true,
       "title": "Pods: List"
     },
-    "description": "List all the Kubernetes pods in the current cluster from all namespaces",
+    "description": "List all the Kubernetes pods in the current cluster from all namespaces. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
       "properties": {
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
           "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
@@ -570,6 +602,11 @@
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -607,9 +644,13 @@
       "readOnlyHint": true,
       "title": "Pods: List in Namespace"
     },
-    "description": "List all the Kubernetes pods in the specified namespace in the current cluster",
+    "description": "List all the Kubernetes pods in the specified namespace in the current cluster. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
       "properties": {
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
         "fieldSelector": {
           "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
           "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
@@ -619,6 +660,11 @@
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         },
         "namespace": {
           "description": "Namespace to list pods from",
@@ -837,7 +883,7 @@
       "readOnlyHint": true,
       "title": "Pods: Top"
     },
-    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace",
+    "description": "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
       "properties": {
         "all_namespaces": {
@@ -845,10 +891,19 @@
           "description": "If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace",
           "type": "boolean"
         },
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
         "label_selector": {
           "description": "Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         },
         "name": {
           "description": "Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)",
@@ -892,9 +947,19 @@
       "readOnlyHint": true,
       "title": "Projects: List"
     },
-    "description": "List all the OpenShift projects in the current cluster",
+    "description": "List all the OpenShift projects in the current cluster. Use limit and continue to retrieve a large list one page at a time.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "name": "projects_list",
@@ -1107,11 +1172,15 @@
       "readOnlyHint": true,
       "title": "Resources: List"
     },
-    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
+    "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector. Use limit and continue to retrieve a large list one page at a time.\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)",
     "inputSchema": {
       "properties": {
         "apiVersion": {
           "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+          "type": "string"
+        },
+        "continue": {
+          "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
           "type": "string"
         },
         "fieldSelector": {
@@ -1127,6 +1196,11 @@
           "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label",
           "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
           "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+          "minimum": 0,
+          "type": "integer"
         },
         "namespace": {
           "description": "Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces",

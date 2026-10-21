@@ -307,7 +307,11 @@ Kiali, NetObserv, Loki, and Tempo apply it when they read the body.
 An exact fit is allowed.
 The next byte closes the body and returns an error, so client-go does not decode the rest.
 A list over that cap is the same error, with no partial page.
-Pagination is deferred to [kubernetes-mcp-server#1473](https://github.com/containers/kubernetes-mcp-server/issues/1473).
+`resources_list`, `pods_list`, `pods_list_in_namespace`, `pods_top`, `nodes_top`, `namespaces_list`, `projects_list`, and `events_list` take `limit` and `continue`.
+Omit `limit` to list everything.
+Set it, and send the `continue` token from the previous page with the same selectors, to retrieve the next Kubernetes list page.
+`helm_list` takes `limit` and `offset`.
+Helm applies those after it has loaded the release secrets, so a secret list that exceeds this cap still fails.
 NetObserv flow export is the exception: it keeps the bytes already read and appends a truncation notice.
 `0` leaves that read uncapped.
 Switching-protocol (`101`) responses and the (internal-only) openapi schema retrieval are skipped.

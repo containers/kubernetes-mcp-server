@@ -78,6 +78,15 @@ The project uses a toolset-based architecture:
 4. Register the toolset in `pkg/toolsets/` if it's a new toolset.
 5. Run `make update-readme-tools` to update the auto-generated toolset tables.
 
+Toolset ownership, PR labels, and reviewer notifications are defined in
+`.github/ownership.json`. When changing ownership or toolset paths, update that
+file and run `make update-codeowners` to regenerate `.github/CODEOWNERS`.
+Run `make check-codeowners` to validate the JSON and check for drift; CI runs
+this target as well.
+Use identical path patterns for shared areas. Nested or overlapping patterns
+are rejected because CODEOWNERS uses the last matching rule, which could
+otherwise hide an area's approvers.
+
 ### Dependencies
 
 When introducing new modules, run `make tidy` so that `go.mod` and `go.sum` remain clean.

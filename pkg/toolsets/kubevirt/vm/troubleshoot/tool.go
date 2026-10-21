@@ -467,7 +467,7 @@ func fetchEvents(ctx context.Context, client api.KubernetesClient, namespace, vm
 			continue
 		}
 		steps = append(steps, func(b *api.BuilderWithBudget) error {
-			events, err := core.EventsList(ctx, namespace, api.ListOptions{
+			events, _, err := core.EventsList(ctx, namespace, api.ListOptions{
 				ListOptions: metav1.ListOptions{FieldSelector: "involvedObject.name=" + objName},
 			})
 			if err != nil {

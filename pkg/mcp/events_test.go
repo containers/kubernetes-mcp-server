@@ -290,6 +290,56 @@ func (s *EventsSuite) TestEventsListWithFieldSelector() {
 	})
 }
 
+func (s *EventsSuite) TestEventsListPagination() {
+	s.InitMcpClient()
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	ns, err := client.CoreV1().Namespaces().Create(s.T().Context(), &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "events-page-"},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	for _, name := range []string{"event-a", "event-b", "event-c"} {
+		_, createErr := client.CoreV1().Events(ns.Name).Create(s.T().Context(), &v1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			InvolvedObject: v1.ObjectReference{
+				APIVersion: "v1",
+				Kind:       "Pod",
+				Name:       name,
+				Namespace:  ns.Name,
+			},
+			Type:    "Normal",
+			Reason:  "Paging",
+			Message: name,
+		}, metav1.CreateOptions{})
+		s.Require().NoError(createErr)
+	}
+
+	seen := map[string]bool{}
+	cont := ""
+	for page := 0; page < 5; page++ {
+		args := map[string]interface{}{"namespace": ns.Name, "limit": 1}
+		if cont != "" {
+			args["continue"] = cont
+		}
+		toolResult, callErr := s.CallTool("events_list", args)
+		s.Require().NoError(callErr)
+		s.Require().False(toolResult.IsError, "page %d", page)
+		events := decodeEvents(s.T(), toolResult)
+		s.Require().Len(events, 1)
+		message, _ := events[0]["Message"].(string)
+		s.False(seen[message])
+		seen[message] = true
+		structured, ok := toolResult.StructuredContent.(map[string]interface{})
+		s.Require().True(ok)
+		next, _ := structured["continue"].(string)
+		if next == "" {
+			break
+		}
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "# continue: "+next)
+		cont = next
+	}
+	s.Equal(map[string]bool{"event-a": true, "event-b": true, "event-c": true}, seen)
+}
+
 func TestEvents(t *testing.T) {
 	suite.Run(t, new(EventsSuite))
 }
