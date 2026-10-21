@@ -45,11 +45,11 @@
 /pkg/obs/metrics/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: netobserv
-/pkg/toolsets/netobserv/   @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/netobserv/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/mcp/netobserv*        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/build/netobserv.mk        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/evals/tasks/netobserv/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/netobserv/   @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/pkg/netobserv/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/pkg/mcp/netobserv*        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/build/netobserv.mk        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/evals/tasks/netobserv/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
 
 # toolset: observability/otelcol
 /pkg/toolsets/otelcol/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo

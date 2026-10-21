@@ -85,7 +85,8 @@
         "/build/netobserv.mk",
         "/evals/tasks/netobserv/"
       ],
-      "reviewers": []
+      "reviewers": ["@jotak"],
+      "approvers": ["@jpinsonneau"]
     },
     {
       "toolset": "observability/otelcol",
