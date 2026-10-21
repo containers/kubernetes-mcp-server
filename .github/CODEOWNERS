@@ -29,12 +29,12 @@
 /docs/KIALI.md             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: kubevirt
-/pkg/toolsets/kubevirt/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/kubevirt/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/mcp/kubevirt*         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/build/kubevirt.mk         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/evals/tasks/kubevirt/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/docs/kubevirt.md          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/kubevirt/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/pkg/kubevirt/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/pkg/mcp/kubevirt*         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/build/kubevirt.mk         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/evals/tasks/kubevirt/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/docs/kubevirt.md          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
 
 # toolset: observability/logs
 /pkg/toolsets/logs/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo

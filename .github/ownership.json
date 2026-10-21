@@ -50,7 +50,8 @@
         "/evals/tasks/kubevirt/",
         "/docs/kubevirt.md"
       ],
-      "reviewers": ["@ksimon1", "@lyarwood"]
+      "reviewers": [],
+      "approvers": ["@ksimon1", "@lyarwood"]
     },
     {
       "toolset": "observability/logs",
