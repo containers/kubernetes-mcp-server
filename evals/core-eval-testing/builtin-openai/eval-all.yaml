@@ -93,3 +93,14 @@ config:
             toolPattern: ".*"
         minToolCalls: 1
         maxToolCalls: 20
+
+    # Guest Observability tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: guest-observability
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "guest-observability_.*"
+        minToolCalls: 1
+        maxToolCalls: 20
