@@ -146,7 +146,16 @@ func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpRelo
 		})
 	}
 	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
+	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallbackWithInvalidate(p.invalidateManager))
+}
+
+// invalidateManager resets the cached discovery of the manager.
+func (p *singleClusterProvider) invalidateManager() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.manager != nil {
+		p.manager.Invalidate()
+	}
 }
 
 func (p *singleClusterProvider) Close() {

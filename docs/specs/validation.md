@@ -26,6 +26,8 @@ The validation layer catches these types of issues:
 
 Validation is **disabled by default**. Schema and RBAC validators run together when enabled. Resource existence is always checked as part of access control.
 
+Resource existence is resolved from cached API discovery. When a request names a resource the cached REST mapper does not know, the mapper is reset and the lookup retried, at most once every 30 seconds per context or workspace, so resources added after the server started (a CRD, a new version or kind in an existing API group, or an aggregated API such as Metrics Server), on any context or workspace, are found without a restart. A resource added within 30 seconds of the previous reset is found after the next one. Clients created per request for an OAuth bearer token build a fresh mapper and never reset it. In addition, when the cluster state watcher detects a new API group on the default cluster (context or workspace), the REST mappers of all initialized contexts or workspaces are reset within `cluster_state_poll_interval` plus `cluster_state_debounce_window` (30s + 5s by default).
+
 ```toml
 # Enable all validation (default: false)
 validation_enabled = true

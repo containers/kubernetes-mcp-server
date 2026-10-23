@@ -340,7 +340,18 @@ func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes
 		})
 	}
 	p.workspaceWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
+	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallbackWithInvalidate(p.invalidateManagers))
+}
+
+// invalidateManagers resets the cached discovery of every initialized workspace.
+func (p *kcpClusterProvider) invalidateManagers() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.Invalidate()
+		}
+	}
 }
 
 func (p *kcpClusterProvider) Close() {
