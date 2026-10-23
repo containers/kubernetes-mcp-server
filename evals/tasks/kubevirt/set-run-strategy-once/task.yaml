@@ -1,0 +1,87 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "set-run-strategy-once"
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-run-once
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-run-once
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: batch-job-vm
+          namespace: vm-test-run-once
+        spec:
+          runStrategy: Halted
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+                memory:
+                  guest: 2Gi
+              terminationGracePeriodSeconds: 0
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+
+          NS="vm-test-run-once"
+          VM="batch-job-vm"
+
+          run_strategy=$(kubectl get virtualmachine "$VM" -n "$NS" -o jsonpath='{.spec.runStrategy}')
+
+          if [[ "$run_strategy" != "Once" ]]; then
+            echo "ERROR: Expected runStrategy 'Once', got '$run_strategy'"
+            kubectl get virtualmachine "$VM" -n "$NS" -o yaml
+            exit 1
+          fi
+
+          echo "Verification passed: runStrategy is 'Once'"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-run-once
+        ignoreNotFound: true
+  prompt:
+    inline: |-
+      A VirtualMachine named batch-job-vm exists in the vm-test-run-once namespace.
+      It is currently stopped.
+
+      I want to start it, but I only want it to run one time. Once it finishes or is stopped
+      for any reason — whether it crashes, is shut down from inside the guest, or is stopped
+      from the management system — it should stay stopped and not be restarted automatically.
+
+      Please start the VM with those settings.
