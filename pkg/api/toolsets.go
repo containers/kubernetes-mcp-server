@@ -42,6 +42,11 @@ func NewImageToolContent(data []byte, mimeType string) *ToolContent {
 	return &ToolContent{Data: dataCopy, MIMEType: mimeType}
 }
 
+// TargetCompatibilityFilter reports whether a ServerTool should be exposed.
+// With more than one filter on a tool, the filters run together and this context
+// is canceled as soon as any of them returns false.
+type TargetCompatibilityFilter func(context.Context) bool
+
 type ServerTool struct {
 	Tool    Tool
 	RBAC    *RBACMetadata
@@ -53,8 +58,8 @@ type ServerTool struct {
 	ClusterAware       *bool
 	TargetListProvider *bool
 	// TargetCompatibilityFilters is a slice of closures, each of which answers whether the ServerTool
-	// should be exposed (true) or not (false).
-	TargetCompatibilityFilters []func() bool
+	// should be exposed (true) or not (false). Every filter must accept the tool.
+	TargetCompatibilityFilters []TargetCompatibilityFilter
 }
 
 // ToolApp describes the UI resource rendered for a tool result.

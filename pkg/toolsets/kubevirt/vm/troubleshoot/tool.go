@@ -19,7 +19,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func Tools(inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -108,8 +108,8 @@ func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool
 					Namespace: &api.RBACNamespace{Argument: "namespace"},
 				},
 			),
-			TargetCompatibilityFilters: []func() bool{
-				kubevirt.HasVirtualMachine(ctx, inspector),
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				kubevirt.HasVirtualMachine(inspector),
 			},
 			Handler: troubleshoot,
 		},

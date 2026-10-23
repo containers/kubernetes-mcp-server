@@ -13,7 +13,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 )
 
-func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func initNamespaces(inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
@@ -66,8 +66,8 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 			}},
 		}),
 		Handler: projectsList,
-		TargetCompatibilityFilters: []func() bool{
-			func() bool {
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+			func(ctx context.Context) bool {
 				return api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"})
 			},
 		},

@@ -1,7 +1,6 @@
 package create
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"strings"
@@ -19,7 +18,7 @@ import (
 //go:embed vm.yaml.tmpl
 var vmYamlTemplate string
 
-func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func Tools(inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -143,8 +142,8 @@ func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool
 				},
 			),
 			Handler: create,
-			TargetCompatibilityFilters: []func() bool{
-				kubevirt.HasVirtualMachine(ctx, inspector),
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				kubevirt.HasVirtualMachine(inspector),
 			},
 		},
 	}

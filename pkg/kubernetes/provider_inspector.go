@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
@@ -83,9 +84,10 @@ func (p *providerInspector) ServerResourcesForGroupVersion(
 			return nil, err
 		}
 
-		// client-go discovery does not accept a context, so an Any/All short-circuit
-		// cannot cancel a ServerResourcesForGroupVersion request already in flight.
-		return client.discoveryClient.ServerResourcesForGroupVersion(groupVersion)
+		// ServerResourcesForGroupVersion drops the context. The cached client
+		// implements the context-aware method, so cancellation aborts the request.
+		return discovery.ToDiscoveryInterfaceWithContext(client.DiscoveryClient()).
+			ServerResourcesForGroupVersionWithContext(ctx, groupVersion)
 	})
 }
 

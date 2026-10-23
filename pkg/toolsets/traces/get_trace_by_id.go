@@ -59,7 +59,7 @@ Narrows the time range to improve query performance.`,
 		},
 		Handler: getTraceByIDHandler,
 		RBAC:    rbacTempoDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasTempoStackCRD(p),
 		},
 	}
