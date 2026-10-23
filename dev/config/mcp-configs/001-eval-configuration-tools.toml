@@ -1,0 +1,4 @@
+# Re-expose `configuration_view` over HTTP for the eval/CI environment.
+#
+# `opt_in_tools` enables additional tools on top of the defaults.
+opt_in_tools = ["configuration_view"]
