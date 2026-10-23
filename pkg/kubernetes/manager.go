@@ -20,7 +20,8 @@ type Manager struct {
 	kubernetes  *Kubernetes
 	schemaCache *openAPISchemaCache
 
-	config atomic.Pointer[config.Config]
+	config      atomic.Pointer[config.Config]
+	caRefresher *caRefresher
 }
 
 var (
@@ -55,7 +56,31 @@ func NewKubeconfigManager(ctx context.Context, cfg *config.Config, kubeconfigCon
 		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %w", err)
 	}
 
-	return NewManager(ctx, cfg, restConfig, clientCmdConfig)
+	// A cluster entry may serve its CA over HTTPS via the caURL kubeconfig
+	// extension. Fetch it into a cache file so client-go reloads the CA when
+	// it rotates, then keep the cache fresh in the background. RawConfig
+	// reuses the kubeconfig already loaded by ClientConfig above instead of
+	// parsing the file a third time.
+	rawConfig, err := clientCmdConfig.RawConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+	caRefresher, err := applyClusterCAURL(ctx, cfg, &rawConfig, resolvedContext, restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	manager, err := NewManager(ctx, cfg, restConfig, clientCmdConfig)
+	if err != nil {
+		return nil, err
+	}
+	// Start the refresher only once the manager is fully built so a
+	// construction error leaves no goroutine behind to stop.
+	if caRefresher != nil {
+		caRefresher.start()
+	}
+	manager.caRefresher = caRefresher
+	return manager, nil
 }
 
 // resolveKubeconfigContext determines which kubeconfig context to use.
@@ -235,10 +260,30 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 	return derived, nil
 }
 
-// Close releases HTTP transport resources held by this manager.
+// RESTConfig returns the REST config this manager's clients are built from.
+func (m *Manager) RESTConfig() *rest.Config {
+	return m.kubernetes.RESTConfig()
+}
+
+// RefreshCAs fetches the cluster CA now and rewrites the cache file when the
+// served CA changed (no-op without a refresher). SIGHUP config reload calls
+// this so a rotated CA can be picked up without waiting out
+// ca_refresh_interval or restarting the process. A failed fetch keeps the
+// previous CA; refreshes never fail closed.
+func (m *Manager) RefreshCAs() {
+	if m != nil && m.caRefresher != nil {
+		m.caRefresher.refreshOnce()
+	}
+}
+
+// Close releases HTTP transport resources held by this manager and stops
+// any background CA refresh loop.
 func (m *Manager) Close() {
 	if m != nil {
 		m.kubernetes.close()
+		if m.caRefresher != nil {
+			m.caRefresher.Close()
+		}
 	}
 }
 

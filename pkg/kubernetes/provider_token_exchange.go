@@ -206,6 +206,10 @@ func (p *tokenExchangingProvider) Close() {
 	p.provider.Close()
 }
 
+func (p *tokenExchangingProvider) RefreshCAs() {
+	p.provider.RefreshCAs()
+}
+
 // tokenExchangeConfigCache owns synchronization and lifecycle management for
 // the memoized config and its HTTP client's idle connections.
 type tokenExchangeConfigCache struct {
