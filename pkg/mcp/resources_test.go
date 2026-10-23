@@ -212,6 +212,23 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesListForbiddenStructuredStatus() {
+	s.InitMcpClient()
+	defer restoreAuth(s.T().Context())
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+
+	s.Run("resources_list (forbidden) returns Forbidden status", func() {
+		result, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
+		s.Require().True(result.IsError, "call tool should fail")
+		structured, ok := result.StructuredContent.(map[string]interface{})
+		s.Require().Truef(ok, "expected structured Status, got %T", result.StructuredContent)
+		s.Equal("Status", structured["kind"])
+		s.Equal("Forbidden", structured["reason"])
+		s.EqualValues(403, structured["code"])
+	})
+}
+
 func (s *ResourcesSuite) TestResourcesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
@@ -402,6 +419,47 @@ func (s *ResourcesSuite) TestResourcesGet() {
 			s.Require().True(ok, "expected metadata map in structured content")
 			s.Equal("default", metadata["name"], "structured metadata.name should be default")
 		})
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesStructuredStatusErrors() {
+	s.InitMcpClient()
+	status := func(result *mcp.CallToolResult) map[string]interface{} {
+		s.Require().True(result.IsError, "call tool should fail")
+		s.NotEmpty(result.Content, "text content is retained")
+		structured, ok := result.StructuredContent.(map[string]interface{})
+		s.Require().Truef(ok, "expected structured Status, got %T", result.StructuredContent)
+		s.Equal("Status", structured["kind"])
+		s.Equal("v1", structured["apiVersion"])
+		s.Equal("Failure", structured["status"])
+		return structured
+	}
+	s.Run("resources_get on missing resource returns NotFound status", func() {
+		result, _ := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "namespace": "default", "name": "missing"})
+		st := status(result)
+		s.Equal("NotFound", st["reason"])
+		s.EqualValues(404, st["code"])
+		s.Equal("missing", st["details"].(map[string]interface{})["name"])
+	})
+	s.Run("resources_delete on missing resource returns NotFound status", func() {
+		result, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "namespace": "default", "name": "missing"})
+		s.Equal("NotFound", status(result)["reason"])
+	})
+	s.Run("resources_create_or_update with invalid resource returns Invalid status with causes", func() {
+		result, _ := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": "apiVersion: v1\nkind: Service\nmetadata:\n  name: invalid-svc\n  namespace: default\nspec:\n  type: NotAType\n"})
+		st := status(result)
+		s.Equal("Invalid", st["reason"])
+		s.EqualValues(422, st["code"])
+		s.NotEmpty(st["details"].(map[string]interface{})["causes"])
+	})
+	s.Run("resources_create_or_update with stale resourceVersion returns Conflict status", func() {
+		kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+		_, err := kc.CoreV1().ConfigMaps("default").Create(s.T().Context(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "conflict-cm"}}, metav1.CreateOptions{})
+		s.Require().NoError(err)
+		result, _ := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: conflict-cm\n  namespace: default\n  resourceVersion: \"1\"\ndata:\n  a: b\n"})
+		st := status(result)
+		s.Equal("Conflict", st["reason"])
+		s.EqualValues(409, st["code"])
 	})
 }
 
