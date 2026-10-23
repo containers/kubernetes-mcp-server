@@ -1,38 +1,32 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // emptySchema is an empty JSON Schema (equivalent to JSON Schema `true`) that allows any additional properties.
 var emptySchema = &jsonschema.Schema{}
 
+const (
+	pipelineKind    = "Pipeline"
+	pipelineRunKind = "PipelineRun"
+	taskKind        = "Task"
+	taskRunKind     = "TaskRun"
+)
+
 // GroupVersionResource definitions for Tekton resources
 var (
-	pipelineGVR = schema.GroupVersionResource{
-		Group:    "tekton.dev",
-		Version:  "v1",
-		Resource: "pipelines",
-	}
-	pipelineRunGVR = schema.GroupVersionResource{
-		Group:    "tekton.dev",
-		Version:  "v1",
-		Resource: "pipelineruns",
-	}
-	taskGVR = schema.GroupVersionResource{
-		Group:    "tekton.dev",
-		Version:  "v1",
-		Resource: "tasks",
-	}
-	taskRunGVR = schema.GroupVersionResource{
-		Group:    "tekton.dev",
-		Version:  "v1",
-		Resource: "taskruns",
-	}
+	pipelineGVR      = tektonv1.SchemeGroupVersion.WithResource("pipelines")
+	pipelineRunGVR   = tektonv1.SchemeGroupVersion.WithResource("pipelineruns")
+	taskGVR          = tektonv1.SchemeGroupVersion.WithResource("tasks")
+	taskRunGVR       = tektonv1.SchemeGroupVersion.WithResource("taskruns")
 	pacRepositoryGVR = schema.GroupVersionResource{
 		Group:    "pipelinesascode.tekton.dev",
 		Version:  "v1alpha1",
@@ -44,6 +38,27 @@ var (
 		Resource: "tektonconfigs",
 	}
 )
+
+func hasTektonKinds(ctx context.Context, inspector api.ClusterInspector, kinds ...string) func() bool {
+	return func() bool {
+		if inspector == nil {
+			return true
+		}
+		hasKinds, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, tektonv1.SchemeGroupVersion.String()).Any(func(list *metav1.APIResourceList) bool {
+			available := make(map[string]struct{}, len(list.APIResources))
+			for _, resource := range list.APIResources {
+				available[resource.Kind] = struct{}{}
+			}
+			for _, kind := range kinds {
+				if _, ok := available[kind]; !ok {
+					return false
+				}
+			}
+			return true
+		})
+		return hasKinds || (err != nil && !api.IsNotFound(err))
+	}
+}
 
 // parseParams converts a map[string]interface{} from a tool call argument into Tekton Params.
 // Each map entry becomes a Param whose value type is inferred from the Go value:

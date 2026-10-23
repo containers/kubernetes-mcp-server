@@ -358,6 +358,19 @@ func (h *DiscoveryClientHandler) AddAPIResourceList(resourceList metav1.APIResou
 	h.APIResourceLists = append(h.APIResourceLists, resourceList)
 }
 
+// SetAPIResourceList replaces the resources for a group/version, or adds it when absent.
+func (h *DiscoveryClientHandler) SetAPIResourceList(resourceList metav1.APIResourceList) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := range h.APIResourceLists {
+		if h.APIResourceLists[i].GroupVersion == resourceList.GroupVersion {
+			h.APIResourceLists[i] = resourceList
+			return
+		}
+	}
+	h.APIResourceLists = append(h.APIResourceLists, resourceList)
+}
+
 // NewInOpenShiftHandler creates a DiscoveryClientHandler configured for OpenShift clusters.
 // It includes the OpenShift project.openshift.io API group by default.
 // Additional API resource lists can be passed to extend the handler.
