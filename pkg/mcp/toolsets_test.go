@@ -330,6 +330,39 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	}
 }
 
+// TestAllCapabilitiesDeclareRBACMetadata fails when a registered toolset ships a tool, prompt,
+// resource or resource template without RBAC metadata, or with RBAC metadata that doesn't validate.
+// https://github.com/containers/kubernetes-mcp-server/issues/1435
+func (s *ToolsetsSuite) TestAllCapabilitiesDeclareRBACMetadata() {
+	// Keep target compatibility filters off so toolsets that filter on cluster state
+	// (e.g. kiali) return every capability they can provide.
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
+	provider, err := kubernetes.NewProvider(s.T().Context(), s.Cfg)
+	s.Require().NoError(err, "Expected no error creating kubernetes target provider")
+	s.T().Cleanup(provider.Close)
+	toolsetContext := api.ToolsetContext{
+		Inspector: kubernetes.NewClusterInspector(provider),
+		Config:    s.Cfg,
+	}
+	for _, toolset := range s.originalToolsets {
+		s.Run("Toolset "+toolset.GetName(), func() {
+			// Validate also rejects nil, so a capability that forgot RBAC fails here too.
+			for _, tool := range toolset.GetTools(s.T().Context(), toolsetContext) {
+				s.NoErrorf(tool.RBAC.Validate(), "tool %s: missing or invalid RBAC metadata", tool.Tool.Name)
+			}
+			for _, prompt := range toolset.GetPrompts(s.T().Context(), toolsetContext) {
+				s.NoErrorf(prompt.RBAC.Validate(), "prompt %s: missing or invalid RBAC metadata", prompt.Prompt.Name)
+			}
+			for _, resource := range toolset.GetResources(s.T().Context(), toolsetContext) {
+				s.NoErrorf(resource.RBAC.Validate(), "resource %s: missing or invalid RBAC metadata", resource.Resource.URI)
+			}
+			for _, template := range toolset.GetResourceTemplates(s.T().Context(), toolsetContext) {
+				s.NoErrorf(template.RBAC.Validate(), "resource template %s: missing or invalid RBAC metadata", template.ResourceTemplate.URITemplate)
+			}
+		})
+	}
+}
+
 func (s *ToolsetsSuite) TestInputSchemaEdgeCases() {
 	// https://github.com/containers/kubernetes-mcp-server/issues/340
 	// A no-argument tool must still emit properties so OpenAI accepts the schema.
