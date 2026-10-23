@@ -189,7 +189,8 @@ func (c hcoClient) RESTMapper() meta.ResettableRESTMapper { return c.mapper }
 func (hcoClient) DiscoveryClient() discovery.CachedDiscoveryInterface {
 	return hcoEventDiscovery{}
 }
-func (c hcoClient) DynamicClient() dynamic.Interface { return c.dyn }
+func (hcoClient) RawDiscoveryClient() discovery.DiscoveryInterface { return hcoEventDiscovery{} }
+func (c hcoClient) DynamicClient() dynamic.Interface               { return c.dyn }
 func (hcoClient) AuthorizationV1() authv1client.AuthorizationV1Interface {
 	return nil
 }
