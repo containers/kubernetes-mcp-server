@@ -274,6 +274,39 @@ func collectContainerLogs(ctx context.Context, client api.KubernetesClient, sb *
 	}
 }
 
+func readContainerLog(ctx context.Context, client api.KubernetesClient, namespace, podName, container string, maxBytes, tailLines int64) (string, bool, error) {
+	stream, err := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: container,
+		TailLines: &tailLines,
+	}).Stream(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() {
+		_ = stream.Close()
+	}()
+
+	logText, truncated, err := readLogTail(stream, maxBytes)
+	if err != nil {
+		return "", false, fmt.Errorf("error reading logs for container %s: %w", container, err)
+	}
+	return logText, truncated, nil
+}
+
+func readLogTail(reader io.Reader, maxBytes int64) (string, bool, error) {
+	if maxBytes <= 0 {
+		return "", false, fmt.Errorf("invalid byte limit %d", maxBytes)
+	}
+	logBytes, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
+	if err != nil {
+		return "", false, err
+	}
+	if int64(len(logBytes)) > maxBytes {
+		return string(logBytes[:maxBytes]), true, nil
+	}
+	return string(logBytes), false, nil
+}
+
 // appendTaskBlock collects one task into a scratch capped at the bytes dst can
 // still accept, then writes that block once. An empty collection drops the
 // header. suffix follows the logs (the prompt adds a blank line).

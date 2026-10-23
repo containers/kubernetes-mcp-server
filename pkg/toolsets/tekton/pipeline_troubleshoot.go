@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func pipelineTroubleshootPrompts() []api.ServerPrompt {
@@ -160,7 +161,11 @@ Analyze the collected data and use these exact section headings in the response:
 		},
 		api.Text("\n\n---\n\n## Events\n\n"),
 		func(b *api.BuilderWithBudget) error {
-			fetchPipelineRunEventsForPrompt(params, namespace, name, taskRuns, b)
+			var pipelineRunObject metav1.Object
+			if pipelineRun != nil {
+				pipelineRunObject = pipelineRun
+			}
+			fetchPipelineRunEventsForPrompt(params, namespace, name, pipelineRunObject, taskRuns, b)
 			return nil
 		},
 		api.Text(`
@@ -282,7 +287,7 @@ func fetchPipelineRunTaskRunsForPrompt(params api.PromptHandlerParams, namespace
 	if b == nil {
 		return nil
 	}
-	taskRuns, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "")
+	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, pipelineRunName, "", metav1.ListOptions{})
 	if err != nil {
 		b.WriteString(fmt.Sprintf("*Error listing TaskRuns: %v*", err))
 		return nil
@@ -359,37 +364,65 @@ func failedOrErroredStep(step tektonv1.StepState) bool {
 type pipelineEventTarget struct {
 	kind string
 	name string
+	uid  types.UID
+}
+
+func (t pipelineEventTarget) fieldSelector() string {
+	selector := fields.Set{
+		"involvedObject.kind": t.kind,
+		"involvedObject.name": t.name,
+		"type":                corev1.EventTypeWarning,
+	}
+	if t.uid != "" {
+		selector["involvedObject.uid"] = string(t.uid)
+	}
+	return fields.SelectorFromSet(selector).String()
+}
+
+func pipelineRunEventTargets(pipelineRunName string, pipelineRun metav1.Object, taskRuns []tektonv1.TaskRun) []pipelineEventTarget {
+	targets := make([]pipelineEventTarget, 0, 1+2*len(taskRuns))
+	seen := make(map[pipelineEventTarget]struct{})
+	add := func(target pipelineEventTarget) {
+		if target.name == "" {
+			return
+		}
+		if _, exists := seen[target]; exists {
+			return
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+
+	if pipelineRun != nil && pipelineRun.GetUID() != "" {
+		add(pipelineEventTarget{kind: "PipelineRun", name: pipelineRunName, uid: pipelineRun.GetUID()})
+	}
+	for i := range taskRuns {
+		if pipelineRun != nil && !metav1.IsControlledBy(&taskRuns[i], pipelineRun) {
+			continue
+		}
+		if taskRuns[i].UID != "" {
+			add(pipelineEventTarget{kind: "TaskRun", name: taskRuns[i].Name, uid: taskRuns[i].UID})
+		}
+		add(pipelineEventTarget{kind: "Pod", name: taskRuns[i].Status.PodName})
+	}
+	return targets
 }
 
 // fetchPipelineRunEventsForPrompt writes warning events into b and does not
 // start the next List once b is truncated. Events are not accumulated into a
 // slice first. See docs/specs/memory-bounds.md#retention.
-func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, taskRuns []tektonv1.TaskRun, b *api.BuilderWithBudget) {
+func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, pipelineRunName string, pipelineRun metav1.Object, taskRuns []tektonv1.TaskRun, b *api.BuilderWithBudget) {
 	if b == nil || b.Truncated() {
 		return
 	}
-	targets := []pipelineEventTarget{{kind: "PipelineRun", name: pipelineRunName}}
-	for _, taskRun := range taskRuns {
-		targets = append(targets, pipelineEventTarget{kind: "TaskRun", name: taskRun.Name})
-		if taskRun.Status.PodName != "" {
-			targets = append(targets, pipelineEventTarget{kind: "Pod", name: taskRun.Status.PodName})
-		}
-	}
-
+	targets := pipelineRunEventTargets(pipelineRunName, pipelineRun, taskRuns)
 	seen := make(map[string]struct{})
 	wrote := false
 	for _, target := range targets {
 		if b.Truncated() {
 			break
 		}
-		if target.name == "" {
-			continue
-		}
-		selector := fields.SelectorFromSet(fields.Set{
-			"involvedObject.kind": target.kind,
-			"involvedObject.name": target.name,
-		}).String()
-		events, err := params.CoreV1().Events(namespace).List(params.Context, metav1.ListOptions{FieldSelector: selector})
+		events, err := params.CoreV1().Events(namespace).List(params.Context, metav1.ListOptions{FieldSelector: target.fieldSelector()})
 		if err != nil {
 			klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to list events for PipelineRun troubleshoot target",
 				klogutil.Field("kind", target.kind), klogutil.Field("name", target.name), klogutil.Err(err))
@@ -406,7 +439,7 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 			if key == "" {
 				key = event.GetNamespace() + "/" + event.GetName()
 			}
-			if _, ok := seen[key]; ok {
+			if _, exists := seen[key]; exists {
 				continue
 			}
 			seen[key] = struct{}{}
@@ -424,7 +457,6 @@ func fetchPipelineRunEventsForPrompt(params api.PromptHandlerParams, namespace, 
 				}
 			}
 			b.WriteString(yaml)
-			// No-op if b.Truncated()
 			b.WriteString("\n")
 		}
 	}
