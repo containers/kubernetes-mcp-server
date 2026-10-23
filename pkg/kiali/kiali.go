@@ -29,6 +29,25 @@ type Kiali struct {
 	requireTLS           func() bool
 }
 
+// bearerTokenFromRESTConfig returns the bearer token from an in-cluster or kubeconfig
+// REST config (inline token or projected service account token file).
+func bearerTokenFromRESTConfig(restConfig *rest.Config) string {
+	if restConfig == nil {
+		return ""
+	}
+	if token := strings.TrimSpace(restConfig.BearerToken); token != "" {
+		return token
+	}
+	if path := strings.TrimSpace(restConfig.BearerTokenFile); path != "" {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(contents))
+	}
+	return ""
+}
+
 // NewKiali creates a new Kiali instance
 func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 	if cfg == nil {
@@ -42,7 +61,7 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
-		bearerToken:     kubernetes.BearerToken,
+		bearerToken:     bearerTokenFromRESTConfig(kubernetes),
 	}
 	if tc, ok := cfg.GetToolsetConfig("kiali"); ok {
 		if kc, ok := tc.(*Config); ok && kc != nil {
@@ -50,6 +69,9 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 			kiali.kialiInsecure = kc.Insecure
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
+	}
+	if strings.TrimSpace(kiali.kialiURL) == "" {
+		kiali.kialiURL = getDiscoveredURL()
 	}
 	return kiali, nil
 }
