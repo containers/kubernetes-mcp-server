@@ -41,9 +41,9 @@ var (
 	}
 )
 
-func hasTempoStackCRD(p api.ClusterInspector) func() bool {
-	return func() bool {
-		return api.AnyTargetHasGVK(context.TODO(), p, tempoStackGVK)
+func hasTempoStackCRD(p api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return api.AnyTargetHasGVK(ctx, p, tempoStackGVK)
 	}
 }
 

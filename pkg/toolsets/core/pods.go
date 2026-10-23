@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 
@@ -17,7 +16,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
-func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func initPods(inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "pods_list",
@@ -202,8 +201,8 @@ func initPods(ctx context.Context, inspector api.ClusterInspector) []api.ServerT
 			Namespace: &api.RBACNamespace{AllNamespaces: true},
 		}), Handler: podsTop,
 			App: mcpapps.Metrics("ui://kubernetes-mcp-server/pods-top", "Pod metrics", mcpapps.WithDescription("Interactive CPU and memory metrics for Kubernetes pods")),
-			TargetCompatibilityFilters: []func() bool{
-				kubernetes.HasPodMetrics(ctx, inspector),
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				kubernetes.HasPodMetrics(inspector),
 			},
 		},
 		{Tool: api.Tool{

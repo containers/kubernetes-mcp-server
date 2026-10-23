@@ -56,14 +56,14 @@ func (s *MetricsToolsSuite) findTool(tools []api.ServerTool, name string) *api.S
 
 func (s *MetricsToolsSuite) TestNodesTopRegistration() {
 	s.Run("nodes_top has TargetCompatibilityFilter", func() {
-		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{available: true}), "nodes_top")
+		tool := s.findTool(initNodes(&fakeInspector{available: true}), "nodes_top")
 		s.Require().NotNil(tool, "expected nodes_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
-		s.True(tool.TargetCompatibilityFilters[0](), "Filter should return true when metrics GVK is available")
+		s.True(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return true when metrics GVK is available")
 	})
 
 	s.Run("nodes_top declares get and list on core nodes", func() {
-		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{available: true}), "nodes_top")
+		tool := s.findTool(initNodes(&fakeInspector{available: true}), "nodes_top")
 		s.Require().NotNil(tool)
 		s.Require().NotNil(tool.RBAC)
 		s.Require().NotNil(tool.RBAC.Bounded)
@@ -77,16 +77,16 @@ func (s *MetricsToolsSuite) TestNodesTopRegistration() {
 	})
 
 	s.Run("nodes_top filter returns false without metrics GVK", func() {
-		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{available: false}), "nodes_top")
+		tool := s.findTool(initNodes(&fakeInspector{available: false}), "nodes_top")
 		s.Require().NotNil(tool, "expected nodes_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1)
-		s.False(tool.TargetCompatibilityFilters[0](), "Filter should return false when metrics GVK is unavailable")
+		s.False(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return false when metrics GVK is unavailable")
 	})
 
 	s.Run("nodes_top fails open when discovery is unavailable", func() {
-		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{err: errors.New("discovery unavailable")}), "nodes_top")
+		tool := s.findTool(initNodes(&fakeInspector{err: errors.New("discovery unavailable")}), "nodes_top")
 		s.Require().NotNil(tool)
-		s.True(tool.TargetCompatibilityFilters[0]())
+		s.True(tool.TargetCompatibilityFilters[0](s.T().Context()))
 	})
 
 	s.Run("nodes_top stays unavailable when discovery confirms absence", func() {
@@ -94,26 +94,26 @@ func (s *MetricsToolsSuite) TestNodesTopRegistration() {
 			apierrors.NewNotFound(schema.GroupResource{Resource: "metrics.k8s.io"}, "v1beta1"),
 			memory.ErrCacheNotFound,
 		} {
-			tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{err: err}), "nodes_top")
+			tool := s.findTool(initNodes(&fakeInspector{err: err}), "nodes_top")
 			s.Require().NotNil(tool)
-			s.False(tool.TargetCompatibilityFilters[0]())
+			s.False(tool.TargetCompatibilityFilters[0](s.T().Context()))
 		}
 	})
 }
 
 func (s *MetricsToolsSuite) TestPodsTopRegistration() {
 	s.Run("pods_top has TargetCompatibilityFilter", func() {
-		tool := s.findTool(initPods(s.T().Context(), &fakeInspector{available: true}), "pods_top")
+		tool := s.findTool(initPods(&fakeInspector{available: true}), "pods_top")
 		s.Require().NotNil(tool, "expected pods_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
-		s.True(tool.TargetCompatibilityFilters[0](), "Filter should return true when metrics GVK is available")
+		s.True(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return true when metrics GVK is available")
 	})
 
 	s.Run("pods_top filter returns false without metrics GVK", func() {
-		tool := s.findTool(initPods(s.T().Context(), &fakeInspector{available: false}), "pods_top")
+		tool := s.findTool(initPods(&fakeInspector{available: false}), "pods_top")
 		s.Require().NotNil(tool, "expected pods_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1)
-		s.False(tool.TargetCompatibilityFilters[0](), "Filter should return false when metrics GVK is unavailable")
+		s.False(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return false when metrics GVK is unavailable")
 	})
 }
 

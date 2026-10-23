@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 
@@ -18,7 +17,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 )
 
-func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func initNodes(inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "nodes_log",
@@ -137,8 +136,8 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 			},
 		), Handler: nodesTop,
 			App: mcpapps.Metrics("ui://kubernetes-mcp-server/nodes-top", "Node metrics", mcpapps.WithDescription("Interactive CPU and memory metrics for Kubernetes nodes")),
-			TargetCompatibilityFilters: []func() bool{
-				kubernetes.HasNodeMetrics(ctx, inspector),
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				kubernetes.HasNodeMetrics(inspector),
 			},
 		},
 	}

@@ -36,8 +36,8 @@ func (f *fakeInspector) GetTargetParameterName() string               { return "
 func TestHasVirtualMachineTemplate(t *testing.T) {
 	t.Run("queries for VirtualMachineTemplate GVK", func(t *testing.T) {
 		p := &fakeInspector{available: true}
-		filter := HasVirtualMachineTemplate(t.Context(), p)
-		filter()
+		filter := HasVirtualMachineTemplate(p)
+		filter(t.Context())
 
 		if p.queriedGroupVersion != VirtualMachineTemplateGVK.GroupVersion().String() {
 			t.Errorf("expected query for %v, got %v", VirtualMachineTemplateGVK.GroupVersion(), p.queriedGroupVersion)
@@ -45,15 +45,15 @@ func TestHasVirtualMachineTemplate(t *testing.T) {
 	})
 
 	t.Run("returns true when provider has VirtualMachineTemplate GVK", func(t *testing.T) {
-		filter := HasVirtualMachineTemplate(t.Context(), &fakeInspector{available: true})
-		if !filter() {
+		filter := HasVirtualMachineTemplate(&fakeInspector{available: true})
+		if !filter(t.Context()) {
 			t.Error("expected HasVirtualMachineTemplate to return true")
 		}
 	})
 
 	t.Run("returns false when provider does not have VirtualMachineTemplate GVK", func(t *testing.T) {
-		filter := HasVirtualMachineTemplate(t.Context(), &fakeInspector{available: false})
-		if filter() {
+		filter := HasVirtualMachineTemplate(&fakeInspector{available: false})
+		if filter(t.Context()) {
 			t.Error("expected HasVirtualMachineTemplate to return false")
 		}
 	})
@@ -62,8 +62,8 @@ func TestHasVirtualMachineTemplate(t *testing.T) {
 func TestHasVirtualMachine(t *testing.T) {
 	t.Run("queries for VirtualMachine GVK", func(t *testing.T) {
 		p := &fakeInspector{available: true}
-		filter := HasVirtualMachine(t.Context(), p)
-		filter()
+		filter := HasVirtualMachine(p)
+		filter(t.Context())
 
 		if p.queriedGroupVersion != VirtualMachineGVK.GroupVersion().String() {
 			t.Errorf("expected query for %v, got %v", VirtualMachineGVK.GroupVersion(), p.queriedGroupVersion)
@@ -71,15 +71,15 @@ func TestHasVirtualMachine(t *testing.T) {
 	})
 
 	t.Run("returns true when provider has VirtualMachine GVK", func(t *testing.T) {
-		filter := HasVirtualMachine(t.Context(), &fakeInspector{available: true})
-		if !filter() {
+		filter := HasVirtualMachine(&fakeInspector{available: true})
+		if !filter(t.Context()) {
 			t.Error("expected HasVirtualMachine to return true")
 		}
 	})
 
 	t.Run("returns false when provider does not have VirtualMachine GVK", func(t *testing.T) {
-		filter := HasVirtualMachine(t.Context(), &fakeInspector{available: false})
-		if filter() {
+		filter := HasVirtualMachine(&fakeInspector{available: false})
+		if filter(t.Context()) {
 			t.Error("expected HasVirtualMachine to return false")
 		}
 	})

@@ -29,9 +29,9 @@ var (
 	}
 )
 
-func hasLokiStackCRD(p api.ClusterInspector) func() bool {
-	return func() bool {
-		return api.AnyTargetHasGVK(context.TODO(), p, lokiStackGVK)
+func hasLokiStackCRD(p api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return api.AnyTargetHasGVK(ctx, p, lokiStackGVK)
 	}
 }
 
@@ -55,7 +55,7 @@ Call this first when using Loki Operator managed stacks so you can pass lokiName
 		},
 		Handler: listInstancesHandler,
 		RBAC:    rbacLokiDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasLokiStackCRD(p),
 		},
 	}
@@ -93,7 +93,7 @@ func initLabelNames(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: labelNamesHandler,
 		RBAC:    rbacLokiDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasLokiStackCRD(p),
 		},
 	}
@@ -136,7 +136,7 @@ func initLabelValues(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: labelValuesHandler,
 		RBAC:    rbacLokiDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasLokiStackCRD(p),
 		},
 	}
@@ -192,7 +192,7 @@ func initQueryRange(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: queryRangeHandler,
 		RBAC:    rbacLokiDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasLokiStackCRD(p),
 		},
 	}

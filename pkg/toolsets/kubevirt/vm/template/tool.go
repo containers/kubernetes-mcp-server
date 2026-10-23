@@ -1,7 +1,6 @@
 package template
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -13,7 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func Tools(inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
@@ -55,8 +54,8 @@ func Tools(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool
 				ResourceName: &api.RBACResourceName{Argument: "template_name"},
 			}),
 			Handler: createFromTemplate,
-			TargetCompatibilityFilters: []func() bool{
-				kubevirt.HasVirtualMachineTemplate(ctx, inspector),
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				kubevirt.HasVirtualMachineTemplate(inspector),
 			},
 		},
 	}
