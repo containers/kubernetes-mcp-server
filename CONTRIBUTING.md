@@ -189,6 +189,121 @@ Keep an eye on the CI results. If something fails, check the logs to see if it's
 
 If changes are requested, amend them into the relevant commit rather than adding extra "fix" commits. Use `git commit --amend` and force-push to your branch. This keeps the git history clean.
 
+## Contribution Ladder
+
+We welcome all community members to become contributors and over time grow into larger roles within the project! The table describes the general
+responsiblities expected by indivudals in each role. A detailed description of the responsibilities and requirements for each role is provided
+below the table.
+
+| **Role**           | **Responsibilities**                                                    |
+| ------------------ | ----------------------------------------------------------------------- |
+| Contributor        | Follow the Code of Conduct and contribute to the project                |
+| Toolset Reviewer   | Review PRs for a specific Toolset                                       |
+| Toolset Maintainer | Review and approve PRs and general direction for a specific Toolset     |
+| Core Reviewer      | Review PRs for the project as a whole                                   |
+| Core Maintainer    | Review and approve PRs and general direction for the project as a whole |
+
+### Contributor
+
+This role describes people who have just started contributing, or who contribute but don't participate in project governance or
+have defined resposibilities.
+
+A Contributor contributes directly to the project and adds value to it. Contributions need not be code.
+
+#### Requirements
+
+Contributors should be familiar with the project and its processes, and should contribute the project in one or more of the following ways:
+- Report and sometimes resolve issues
+- Submit PRs
+- Contribute to documentation
+- Submit feedback on issues and PRs
+- Test releases and PRs and submit reviews
+
+### Toolset Reviewer
+
+This role describes people who review and give feedback and direction on a specific toolset. These are often contributors to existing toolsets
+who have not yet met the criteria to be a Toolset Maintainer, or contributors to a newly added toolset who have not engaged with the community
+for long enough to be trusted as a Toolset Maintainer yet.
+
+It is worth noting that anyone can review PRs to a toolset (or to any other part of the project) without being a Toolset Reviwer. The Toolset
+Reviewer role is meant to denote people who are a technical authority in the area and who are willing to be pinged to provide reviews within
+that area.
+
+#### Requirements
+
+Toolset Reviewers should exhibit strong judgement within the area of the toolset that they are a reviewer for. To become a reviewer, one should:
+- Make multiple contributions to the toolset, through PR reviews and/or PRs
+- Receive endorsement from a Maintainer of the same toolset or from a core Maintainer
+
+#### Responsibilites and Privileges
+
+Toolset Reviewers are expected to:
+- Demonstrate sound judgement
+- Ensure toolset quality via reviews
+
+### Toolset Maintainer
+
+This role describes people who are trusted to approve and merge code within a specific toolset. Beyond just code review, they are expected
+to also take a holistic view on the overall quality and direction of the toolset.
+
+#### Requirements
+
+Toolset Maintainers must exhibit sustained contributions and good judgement within the community. Generally speaking, contributors should aim
+to be a Toolset Reviewer first. A Toolset Maintainer must at a minimum:
+- Review other people's contributions to the toolset for about 3 months
+- Review and/or contribute to non-trivial PRs
+- Be nominated by an existing maintainer of the same toolset, or a Core Maintainer, with no objections from other maintainers
+
+#### Responsibilities and Privileges
+
+Toolset Maintainers are given the privilege of being able to merge PRs within their toolset. As such they are expected to:
+- Demonstrate sound judgement
+- Ensure toolset quality via reviews
+- Mentor new contributors and reviewers within their toolset
+- Work to ensure that the toolset is moving in a good direction
+
+### Core Reviewer
+
+This role describes people who review and give feedback and direction across the project as a whole.
+
+It is worth noting that anyone can review PRs without being a Core Reviwer. The Core Reviewer role is meant to denote people who are a 
+technical authority in the area and who are willing to be pinged to provide reviews within that area.
+
+#### Requirements
+
+Core Reviewers should exhibit technical prowess across the whole project. To become a reviewer, one should:
+- Make multiple contributions to the MCP server as a whole, through PR reviews and/or PRs
+- Receive endorsement from a core Maintainer
+
+#### Responsibilites and Privileges
+
+Core Reviewers are expected to:
+- Demonstrate sound judgement
+- Ensure project quality via reviews
+
+### Core Maintainer
+
+This role describes people who are trusted to approve and merge code across the whole project. Beyond just code review, they are expected
+to also take a holistic view on the overall quality and direction of the project. Where possible, Core Maintainers should defer to Toolset
+Maintainers on changes affecting individual toolsets, however Core Maintainers ultimately have the ability to merge code across the whole
+project.
+
+#### Requirements
+
+Core Maintainers must exhibit sustained contributions and good judgement within the community. Generally speaking, contributors should aim
+to be a Core Reviewer first. A Core Maintainer must at a minimum:
+- Review other people's contributions to the project for about 3 months (beyond a single toolset)
+- Review and/or contribute to non-trivial PRs (beyond a single toolset)
+- Be nominated by a Core Maintainer, with no objections from other maintainers
+
+#### Responsibilities and privileges
+
+Core Maintainers are given the privilege of being able to merge PRs across the full project. As such they are expected to:
+- Demonstrate sound judgement
+- Ensure toolset quality via reviews
+- Mentor new contributors and reviewers
+- Work to ensure that the toolset is moving in a good direction
+
 ## Communication
 
 - [Slack](https://cloud-native.slack.com/archives/C0AHQJVR725) -- `#kubernetes-mcp-server` channel on the CNCF Slack workspace ([request an invitation](https://slack.cncf.io)).
