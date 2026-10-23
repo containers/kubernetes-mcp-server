@@ -10,7 +10,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-logr/logr v1.4.4
 	github.com/go-openapi/runtime v0.33.3
-	github.com/go-openapi/strfmt v0.27.3
+	github.com/go-openapi/strfmt v0.27.4
 	github.com/google/gnostic-models v0.7.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
