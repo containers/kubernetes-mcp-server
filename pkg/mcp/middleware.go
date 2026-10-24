@@ -21,6 +21,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcplog" //nolint:staticcheck // MCP logging deprecated (SEP-2577)
+	"github.com/containers/kubernetes-mcp-server/pkg/metrics"
 	"github.com/containers/kubernetes-mcp-server/pkg/telemetry"
 )
 
@@ -298,6 +299,31 @@ func tracingMiddleware(tracerName string) func(mcp.MethodHandler) mcp.MethodHand
 			}
 
 			return result, err
+		}
+	}
+}
+
+// methodSubscriptionsListen is the SEP-2575 long-poll that stays open for the
+// whole client session when list-changed notifications are enabled.
+const methodSubscriptionsListen = "subscriptions/listen"
+
+// inFlightRequestsMiddleware tracks the number of MCP requests currently being
+// handled, labeled by method. The count is decremented when the handler returns,
+// including on error, panic or cancellation, so it can drive horizontal
+// autoscaling (e.g. KEDA). subscriptions/listen is not counted: it is held open
+// until the client disconnects and would keep the gauge above zero on idle servers.
+func inFlightRequestsMiddleware(collector metrics.Collector) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method == methodSubscriptionsListen {
+				return next(ctx, method, req)
+			}
+			// Both updates ignore cancellation so a cancelled context can never
+			// drop the increment and still apply the decrement.
+			recordCtx := context.WithoutCancel(ctx)
+			collector.RecordInFlightRequest(recordCtx, method, 1)
+			defer collector.RecordInFlightRequest(recordCtx, method, -1)
+			return next(ctx, method, req)
 		}
 	}
 }

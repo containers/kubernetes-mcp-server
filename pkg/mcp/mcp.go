@@ -186,6 +186,7 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
 	s.server.AddReceivingMiddleware(protocolReceivingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
+	s.server.AddReceivingMiddleware(inFlightRequestsMiddleware(s.metrics))
 	// Outbound (server-initiated) frames — log notifications, list_changed
 	// notifications, progress, server-side pings — bypass the receiving
 	// path entirely; protocolSendingMiddleware makes them visible at V(6).
