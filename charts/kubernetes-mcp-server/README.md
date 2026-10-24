@@ -23,6 +23,10 @@ Install the Chart using the following command from the root of this directory:
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
 ```
 
+### Chart versions
+
+Each release publishes a new chart version: major and minor come from `Chart.yaml`, the patch from the release tag (release `v0.0.70` → chart `0.1.70`, app version `0.0.70`). Published versions are not overwritten, so a given `--version` always resolves to the same chart content. Earlier releases all republished the chart as `0.1.0`; the new versions sort above it, so semver-based tooling picks them up without manual steps.
+
 ### Gateway API (HTTPRoute)
 
 If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (optional `matches`, `filters`, and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values. `httpRoute.parentRefs` is required when `httpRoute.enabled=true`; leaving it empty fails at `helm template` / `helm install` time.

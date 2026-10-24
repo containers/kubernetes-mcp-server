@@ -109,8 +109,31 @@ helm-package: helm-lint helm-template ## Package the Helm chart (supports HELM_C
 	@mv $(HELM_CHART_DIR)/Chart.yaml.bak $(HELM_CHART_DIR)/Chart.yaml
 	@echo "Chart packaged as version $(HELM_CHART_VERSION)"
 
+# OCI tags are mutable, but Helm clients and GitOps tools (Flux, Argo CD) cache charts by version
+# and never re-pull an existing one, so republishing a version silently leaves consumers on stale content.
+.PHONY: helm-check-version-unpublished
+helm-check-version-unpublished: helm ## Fail if HELM_CHART_VERSION already exists in the OCI registry or is not above its latest stable version
+	@output=$$($(HELM) show chart oci://$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts/$(HELM_CHART_NAME) \
+		--version $(HELM_CHART_VERSION) 2>&1); rc=$$?; \
+	if [ $$rc -eq 0 ]; then \
+		echo "Error: chart $(HELM_CHART_NAME) version $(HELM_CHART_VERSION) is already published, refusing to overwrite it"; exit 1; \
+	fi; \
+	if ! echo "$$output" | grep -q -F '$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts/$(HELM_CHART_NAME):$(HELM_CHART_VERSION): not found'; then \
+		echo "Error: could not determine whether chart version $(HELM_CHART_VERSION) exists:"; echo "$$output"; exit 1; \
+	fi; \
+	echo "Chart version $(HELM_CHART_VERSION) is not yet published"; \
+	case "$(HELM_CHART_VERSION)" in *-*) exit 0;; esac; \
+	latest=$$($(HELM) show chart oci://$(HELM_REGISTRY)/$(HELM_REGISTRY_ORG)/charts/$(HELM_CHART_NAME) 2>&1) || { \
+		echo "Error: could not determine the latest published chart version:"; echo "$$latest"; exit 1; }; \
+	latest=$$(echo "$$latest" | awk '/^version:/ {print $$2}'); \
+	if [ -z "$$latest" ]; then echo "Error: latest published chart has no version field"; exit 1; fi; \
+	if [ "$$(printf '%s\n' "$$latest" "$(HELM_CHART_VERSION)" | sort -V | tail -n 1)" != "$(HELM_CHART_VERSION)" ]; then \
+		echo "Error: chart version $(HELM_CHART_VERSION) is lower than the latest published version $$latest;"; \
+		echo "installs without --version would keep resolving to $$latest. Bump the minor version in Chart.yaml."; exit 1; \
+	fi
+
 .PHONY: helm-push
-helm-push: helm-package ## Push Helm chart to OCI registry (assumes helm registry login has been performed)
+helm-push: helm-check-version-unpublished helm-package ## Push Helm chart to OCI registry (assumes helm registry login has been performed)
 	@chart_package=$$(ls $(HELM_PACKAGE_DIR)/$(HELM_CHART_NAME)-*.tgz 2>/dev/null | head -n 1); \
 	if [ -z "$$chart_package" ]; then echo "Error: No chart package found in $(HELM_PACKAGE_DIR)"; exit 1; fi; \
 	echo "Pushing chart package: $$chart_package"; \
@@ -124,7 +147,7 @@ helm-verify: helm ## Verify chart installation from OCI registry
 		--set ingress.host=localhost --version $(HELM_CHART_VERSION) --debug
 
 .PHONY: helm-publish
-helm-publish: helm-package helm-push helm-verify ## Package, push, and verify Helm chart release
+helm-publish: helm-check-version-unpublished helm-package helm-push helm-verify ## Package, push, and verify Helm chart release
 	@echo "Helm chart $(HELM_CHART_NAME) version $(HELM_CHART_VERSION) published successfully"
 
 # Print the Helm chart version

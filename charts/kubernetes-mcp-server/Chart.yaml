@@ -10,5 +10,8 @@ maintainers:
     email: ablock@redhat.com
   - name: Marc Nuri
     email: marc.nuri@redhat.com
+# Major and minor of the published chart. Stable releases take the patch from the release tag
+# (v0.0.70 -> 0.1.70), see .github/workflows/release-helm.yaml. Bump the minor when the
+# application's major or minor version changes, so chart versions keep increasing.
 version: 0.1.0
 appVersion: "latest"
