@@ -2,8 +2,10 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"runtime"
 	"testing"
 	"time"
@@ -245,31 +247,17 @@ func (s *OtelStatsCollectorSuite) TestRecordInFlightRequest() {
 				collector.RecordInFlightRequest(ctx, c.method, c.delta)
 			}
 
-			var rm metricdata.ResourceMetrics
-			s.Require().NoError(collector.reader.Collect(ctx, &rm))
-			actual := map[string]int64{}
-			var found bool
-			for _, scopeMetrics := range rm.ScopeMetrics {
-				for _, m := range scopeMetrics.Metrics {
-					if m.Name != "k8s_mcp.requests.in_flight" {
-						continue
-					}
-					found = true
-					sum, ok := m.Data.(metricdata.Sum[int64])
-					s.Require().True(ok, "k8s_mcp.requests.in_flight should be an int64 sum")
-					s.False(sum.IsMonotonic, "k8s_mcp.requests.in_flight should be an up-down counter")
-					for _, dp := range sum.DataPoints {
-						method, _ := dp.Attributes.Value("mcp.method.name")
-						actual[method.AsString()] = dp.Value
-					}
-				}
-			}
-			s.Require().True(found, "k8s_mcp.requests.in_flight should exist")
-			s.Equal(tt.expected, actual)
+			stats := collector.GetStats(s.T().Context())
+			s.Equal(tt.expected, stats.RequestsInFlight, "/stats in-flight requests")
 
 			rec := httptest.NewRecorder()
 			collector.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-			s.Contains(rec.Body.String(), "# TYPE k8s_mcp_requests_in_flight gauge")
+			body := rec.Body.String()
+			s.Contains(body, "# TYPE k8s_mcp_requests_in_flight gauge")
+			for method, value := range tt.expected {
+				pattern := fmt.Sprintf(`(?m)^k8s_mcp_requests_in_flight\{[^}]*mcp_method_name="%s"[^}]*\} %d$`, regexp.QuoteMeta(method), value)
+				s.Regexp(regexp.MustCompile(pattern), body, "Prometheus value for %s", method)
+			}
 		})
 	}
 }

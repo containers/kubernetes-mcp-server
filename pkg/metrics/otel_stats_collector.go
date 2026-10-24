@@ -39,6 +39,9 @@ type Statistics struct {
 	HTTPRequestsByStatus map[string]int64 `json:"http_requests_by_status"`
 	HTTPRequestsByMethod map[string]int64 `json:"http_requests_by_method"`
 
+	// MCP requests currently being handled, by MCP method
+	RequestsInFlight map[string]int64 `json:"requests_in_flight"`
+
 	// Uptime
 	UptimeSeconds int64 `json:"uptime_seconds"`
 	StartTime     int64 `json:"start_time_unix"`
@@ -345,6 +348,7 @@ func (c *OtelStatsCollector) GetStats(ctx context.Context) *Statistics {
 			HTTPRequestsByPath:   make(map[string]int64),
 			HTTPRequestsByStatus: make(map[string]int64),
 			HTTPRequestsByMethod: make(map[string]int64),
+			RequestsInFlight:     make(map[string]int64),
 			UptimeSeconds:        int64(time.Since(c.startTime).Seconds()),
 			StartTime:            c.startTime.Unix(),
 		}
@@ -356,6 +360,7 @@ func (c *OtelStatsCollector) GetStats(ctx context.Context) *Statistics {
 		HTTPRequestsByPath:   make(map[string]int64),
 		HTTPRequestsByStatus: make(map[string]int64),
 		HTTPRequestsByMethod: make(map[string]int64),
+		RequestsInFlight:     make(map[string]int64),
 		UptimeSeconds:        int64(time.Since(c.startTime).Seconds()),
 		StartTime:            c.startTime.Unix(),
 	}
@@ -420,6 +425,16 @@ func (c *OtelStatsCollector) processMetric(m metricdata.Metrics, stats *Statisti
 				}
 				if statusClass != "" {
 					stats.HTTPRequestsByStatus[statusClass] += value
+				}
+			}
+		}
+
+	case "k8s_mcp.requests.in_flight":
+		if sum, ok := m.Data.(metricdata.Sum[int64]); ok {
+			for _, dp := range sum.DataPoints {
+				method := c.getAttributeValue(dp.Attributes, "mcp.method.name")
+				if method != "" {
+					stats.RequestsInFlight[method] = dp.Value
 				}
 			}
 		}
