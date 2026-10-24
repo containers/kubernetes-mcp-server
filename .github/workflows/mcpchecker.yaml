@@ -234,8 +234,21 @@ jobs:
             "job-display-name":"Run MCP Multicluster Evaluation"
           }'
 
+          config_multicluster_entry='{
+            "suite":"config-multicluster",
+            "eval-config":"evals/core-eval-testing/builtin-openai/eval-config-multicluster.yaml",
+            "toolsets":"core,config",
+            "mcp-config-dir":"dev/config/mcp-configs",
+            "baseline-result":"openai-agent-config-multicluster-latest.json",
+            "job-display-name":"Run Config Multicluster Evaluation"
+          }'
+
           append_kiali_multicluster() {
             echo "$1" | jq -c --argjson mc "$kiali_multicluster_entry" '.include += [$mc]'
+          }
+
+          append_config_multicluster() {
+            echo "$1" | jq -c --argjson mc "$config_multicluster_entry" '.include += [$mc]'
           }
 
           case "$SUITE" in
@@ -248,6 +261,7 @@ jobs:
             {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
             {"suite":"kiali-multicluster","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali-multicluster.yaml","toolsets":"core,config,kiali","mcp-config-dir":"dev/config/mcp-configs-multicluster","baseline-result":"openai-agent-multicluster-latest.json","job-display-name":"Run MCP Multicluster Evaluation"},
+            {"suite":"config-multicluster","eval-config":"evals/core-eval-testing/builtin-openai/eval-config-multicluster.yaml","toolsets":"core,config","mcp-config-dir":"dev/config/mcp-configs","baseline-result":"openai-agent-config-multicluster-latest.json","job-display-name":"Run Config Multicluster Evaluation"},
             {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
             {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
             {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"}
@@ -316,13 +330,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Setup Minikube cluster
-        if: matrix.suite != 'kiali-multicluster'
+        if: matrix.suite != 'kiali-multicluster' && matrix.suite != 'config-multicluster'
         run: make minikube-create-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE"
 
       # Core tasks always run (every eval includes them) and the resize-pvc
       # task needs a resize-capable StorageClass, so always install the CSI driver.
       - name: Install CSI hostPath driver (resize-capable StorageClass)
-        if: matrix.suite != 'kiali-multicluster'
+        if: matrix.suite != 'kiali-multicluster' && matrix.suite != 'config-multicluster'
         run: make csi-hostpath-install
 
       - name: Setup Node
@@ -338,6 +352,10 @@ jobs:
       - name: Setup multicluster Kind + Istio/Kiali
         if: matrix.suite == 'kiali-multicluster'
         run: make setup-kiali-multicluster
+
+      - name: Setup multicluster Kind for config evals
+        if: matrix.suite == 'config-multicluster'
+        run: make setup-config-multicluster
 
       - name: Install Istio/Kiali and bookinfo demo
         if: matrix.suite != 'kiali-multicluster' && contains(matrix.toolsets, 'kiali')
@@ -363,6 +381,7 @@ jobs:
         env:
           TOOLSETS: ${{ matrix.toolsets }}
           MCP_CONFIG_DIR: ${{ matrix.mcp-config-dir || 'dev/config/mcp-configs' }}
+          MCP_EVAL_KUBECONFIG: ${{ matrix.suite == 'config-multicluster' && '_output/kubeconfig-multicluster' || '' }}
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
@@ -387,6 +406,13 @@ jobs:
           JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+          # The mcpchecker "kubernetes" extension (used by verify steps like
+          # kubernetes.listContexts) talks to the cluster independently of the
+          # MCP server under test, and otherwise falls back to the default
+          # ~/.kube/config. config-multicluster skips minikube and keeps its
+          # merged kubeconfig isolated (see build/config.mk), so it must be
+          # pointed here explicitly, matching MCP_EVAL_KUBECONFIG above.
+          KUBECONFIG: ${{ matrix.suite == 'config-multicluster' && '_output/kubeconfig-multicluster' || '' }}
 
       - name: Cleanup
         if: always()
@@ -394,6 +420,8 @@ jobs:
           make stop-server || true
           if [[ "${{ matrix.suite }}" == "kiali-multicluster" ]]; then
             make kind-delete-multicluster || true
+          elif [[ "${{ matrix.suite }}" == "config-multicluster" ]]; then
+            make config-multicluster-cleanup || true
           else
             make stop-netobserv || true
             make teardown-netobserv || true
