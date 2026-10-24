@@ -38,19 +38,28 @@ jobs:
       run: |
         BASE_VERSION=$(make helm-print-chart-version)
 
-        # Use development version for workflow_dispatch, stable version for tags
+        # Use development version for workflow_dispatch, stable version for tags.
+        # Stable charts take major.minor from Chart.yaml and the patch from the release tag
+        # (Chart.yaml 0.1.0 + tag v0.0.70 -> chart 0.1.70). Every release thus publishes a new
+        # version above the 0.1.0 that earlier releases overwrote, so Helm and GitOps tools,
+        # which cache charts by version, pick it up.
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          APP_VERSION=$(make print-git-tag-version)
           GIT_SHORT_SHA=$(git rev-parse --short HEAD)
           CHART_VERSION="${BASE_VERSION}-dev.${GIT_SHORT_SHA}"
           echo "::notice::Creating development release: ${CHART_VERSION}"
         else
-          CHART_VERSION="${BASE_VERSION}"
+          APP_VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "${APP_VERSION}" =~ ^[0-9]+\.[0-9]+\.([0-9]+)$ ]]; then
+            echo "::error::Release tag ${GITHUB_REF_NAME} is not of the form vX.Y.Z"
+            exit 1
+          fi
+          CHART_VERSION="${BASE_VERSION%.*}.${BASH_REMATCH[1]}"
           echo "::notice::Creating stable release: ${CHART_VERSION}"
         fi
         echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
         echo "Chart version: $CHART_VERSION"
 
-        APP_VERSION=$(make print-git-tag-version)
         echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
         echo "App version: $APP_VERSION"
 
@@ -72,6 +81,7 @@ jobs:
     - name: Package and push Helm chart
       env:
         HELM_CHART_VERSION: ${{ steps.versions.outputs.chart_version }}
+        GIT_TAG_VERSION: ${{ steps.versions.outputs.app_version }}
       run: make helm-push
 
     - name: Verify chart installation
