@@ -15,6 +15,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 )
 
 func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
@@ -99,10 +100,10 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 		), Handler: nodesStatsSummary},
 		{Tool: api.Tool{
 			Name:        "nodes_top",
-			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster",
+			Description: "List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"name": {
 						Type:        "string",
 						Description: "Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)",
@@ -112,7 +113,7 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 						Description: "Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)",
 						Pattern:     REGEX_LABELSELECTOR_VALID_CHARS,
 					},
-				},
+				}),
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Nodes: Top",
@@ -130,10 +131,12 @@ func initNodes(ctx context.Context, inspector api.ClusterInspector) []api.Server
 				}},
 			},
 			api.RBACRequirement{
-				Verbs:  []string{"list"},
+				// get covers the per-node allocatable lookup used when paging.
+				Verbs:  []string{"get", "list"},
 				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "nodes"}},
 			},
 		), Handler: nodesTop,
+			App: mcpapps.Metrics("ui://kubernetes-mcp-server/nodes-top", "Node metrics", mcpapps.WithDescription("Interactive CPU and memory metrics for Kubernetes nodes")),
 			TargetCompatibilityFilters: []func() bool{
 				kubernetes.HasNodeMetrics(ctx, inspector),
 			},
@@ -188,33 +191,39 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	if v, ok := params.GetArguments()["label_selector"].(string); ok {
 		nodesTopOptions.LabelSelector = v
 	}
-
-	nodeMetrics, err := kubernetes.NewCore(params).NodesTop(params, nodesTopOptions)
-	if err != nil {
+	if err := ApplyListPage(api.WrapParams(params), &nodesTopOptions.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %w", err)), nil
 	}
 
-	// Get the list of nodes to extract their allocatable resources
-	nodeList, err := params.CoreV1().Nodes().List(params, metav1.ListOptions{
-		LabelSelector: nodesTopOptions.LabelSelector,
-	})
+	nodeMetrics, err := kubernetes.NewCore(params).NodesTop(params, nodesTopOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list nodes: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to get nodes top: %w", ListErr(err))), nil
 	}
 
-	// Build availableResources map
 	availableResources := make(map[string]v1.ResourceList)
-	for _, n := range nodeList.Items {
-		availableResources[n.Name] = n.Status.Allocatable
-
-		// Handle swap if available
-		if n.Status.NodeInfo.Swap != nil && n.Status.NodeInfo.Swap.Capacity != nil {
-			swapCapacity := *n.Status.NodeInfo.Swap.Capacity
-			availableResources[n.Name]["swap"] = *resource.NewQuantity(swapCapacity, resource.BinarySI)
+	paging := nodesTopOptions.Limit > 0 || nodesTopOptions.Continue != ""
+	if paging {
+		// Allocatable data is per node on this page. Listing every node can
+		// exceed the backend cap on its own.
+		for _, node := range nodeMetrics.Items {
+			n, getErr := params.CoreV1().Nodes().Get(params, node.Name, metav1.GetOptions{})
+			if getErr != nil {
+				return api.NewToolCallResult("", fmt.Errorf("failed to get node %s: %w", node.Name, getErr)), nil
+			}
+			addNodeAllocatable(availableResources, *n)
+		}
+	} else {
+		nodeList, nodesErr := params.CoreV1().Nodes().List(params, metav1.ListOptions{
+			LabelSelector: nodesTopOptions.LabelSelector,
+		})
+		if nodesErr != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to list nodes: %w", ListErr(nodesErr))), nil
+		}
+		for _, n := range nodeList.Items {
+			addNodeAllocatable(availableResources, n)
 		}
 	}
 
-	// Print the metrics
 	buf := new(bytes.Buffer)
 	printer := metricsutil.NewTopCmdPrinter(buf, true)
 	err = printer.PrintNodeMetrics(nodeMetrics.Items, availableResources, false, "")
@@ -222,5 +231,22 @@ func nodesTop(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to print node metrics: %w", err)), nil
 	}
 
-	return api.NewToolCallResult(buf.String(), nil), nil
+	items := make([]map[string]any, 0, len(nodeMetrics.Items))
+	for _, node := range nodeMetrics.Items {
+		items = append(items, map[string]any{
+			"Name":   node.Name,
+			"CPU":    node.Usage.Cpu().String(),
+			"Memory": node.Usage.Memory().String(),
+		})
+	}
+	text, structured := WithListPage(buf.String(), map[string]any{"columns": []string{"Name", "CPU", "Memory"}, "items": items}, nodeMetrics)
+	return api.NewToolCallResultFull(text, structured, nil), nil
+}
+
+func addNodeAllocatable(available map[string]v1.ResourceList, n v1.Node) {
+	available[n.Name] = n.Status.Allocatable
+	if n.Status.NodeInfo.Swap != nil && n.Status.NodeInfo.Swap.Capacity != nil {
+		swapCapacity := *n.Status.NodeInfo.Swap.Capacity
+		available[n.Name]["swap"] = *resource.NewQuantity(swapCapacity, resource.BinarySI)
+	}
 }

@@ -27,7 +27,8 @@ type Config struct {
 	// LokiURL is the URL of the Loki API endpoint.
 	LokiURL string `toml:"loki_url,omitempty"`
 
-	// Insecure controls whether to skip TLS certificate verification.
+	// Insecure is retained for configuration compatibility but rejected when a client is created.
+	// Configure a trusted CA instead of disabling certificate verification.
 	Insecure bool `toml:"insecure,omitempty"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering LokiStack endpoints.

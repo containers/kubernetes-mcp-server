@@ -15,6 +15,7 @@ Each contains:
 - `eval-helm.yaml` — eval config for the `helm` task suite (+ core/config)
 - `eval-kubevirt.yaml` — eval config for the `kubevirt` task suite (+ core/config)
 - `eval-kiali.yaml` — eval config for the `kiali` task suite (+ core/config)
+- `eval-kiali-multicluster.yaml` — eval config for multicluster `kiali` tasks only (requires east/west Kind setup; see `docs/KIALI.md`)
 - `eval-tekton.yaml` — eval config for the `tekton` task suite (+ core/config)
 - `eval-netobserv.yaml` — eval config for the `netobserv` task suite (+ core/config)
 - `eval-all.yaml` — eval config that runs all task suites

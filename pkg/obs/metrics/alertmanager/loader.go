@@ -3,7 +3,6 @@ package alertmanager
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,6 +14,8 @@ import (
 	"github.com/prometheus/alertmanager/api/v2/client/silence"
 	"github.com/prometheus/alertmanager/api/v2/models"
 	"github.com/prometheus/client_golang/api"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 // Loader defines the interface for querying Alertmanager
@@ -90,11 +91,11 @@ func (a *RealLoader) GetAlerts(ctx context.Context, active, silenced, inhibited,
 	resp, err := a.client.Alert.GetAlerts(params)
 	duration := time.Since(start)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", "alertmanager", "operation", "alerts",
-			"duration_ms", duration.Milliseconds(), "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", "alertmanager", "operation", "alerts",
+			"duration_ms", duration.Milliseconds())
 		return nil, fmt.Errorf("error fetching alerts: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", "alertmanager", "operation", "alerts",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", "alertmanager", "operation", "alerts",
 		"duration_ms", duration.Milliseconds(), "result_count", len(resp.Payload))
 
 	return resp.Payload, nil
@@ -111,11 +112,11 @@ func (a *RealLoader) GetSilences(ctx context.Context, filter []string) (models.G
 	resp, err := a.client.Silence.GetSilences(params)
 	duration := time.Since(start)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", "alertmanager", "operation", "silences",
-			"duration_ms", duration.Milliseconds(), "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", "alertmanager", "operation", "silences",
+			"duration_ms", duration.Milliseconds())
 		return nil, fmt.Errorf("error fetching silences: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", "alertmanager", "operation", "silences",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", "alertmanager", "operation", "silences",
 		"duration_ms", duration.Milliseconds(), "result_count", len(resp.Payload))
 
 	return resp.Payload, nil

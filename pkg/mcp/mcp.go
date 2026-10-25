@@ -178,6 +178,9 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 			return rate.Limit(rps), burst
 		}),
 	)
+	s.server.AddReceivingMiddleware(inFlightMiddleware(func() int {
+		return s.configuration.Load().MaxInFlight.Get()
+	}))
 	s.server.AddReceivingMiddleware(tracingMiddleware(version.BinaryName + "/mcp"))
 	s.server.AddReceivingMiddleware(authHeaderPropagationMiddleware)
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
@@ -456,6 +459,7 @@ func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration)
 func (s *Server) toolsetContext(cfg *Configuration) api.ToolsetContext {
 	return api.ToolsetContext{
 		Inspector:                         internalk8s.NewClusterInspector(s.p),
+		Config:                            cfg.Config,
 		TargetCompatibilityFiltersEnabled: cfg.EnableTargetCompatibilityToolFilters.Get(),
 	}
 }

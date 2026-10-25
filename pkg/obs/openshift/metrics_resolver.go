@@ -2,10 +2,10 @@ package openshift
 
 import (
 	"context"
-	"log/slog"
 
 	"k8s.io/client-go/dynamic"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/metrics"
 )
 
@@ -27,7 +27,7 @@ func (r *MetricsRouteResolver) ResolveMetricsBackend(ctx context.Context, client
 	if err == nil {
 		return url, nil
 	}
-	slog.Info("Thanos route not found, falling back to prometheus", "error", err)
+	klogutil.FromContext(ctx).Info("Thanos route not found, falling back to prometheus", "error", err)
 	return r.resolveMonitoringRoute(ctx, client, PrometheusRouteName)
 }
 
@@ -38,9 +38,9 @@ func (r *MetricsRouteResolver) ResolveAlertmanager(ctx context.Context, client d
 func (r *MetricsRouteResolver) resolveMonitoringRoute(ctx context.Context, client dynamic.Interface, routeName string) (string, error) {
 	url, err := r.ResolveEndpoint(ctx, client, MonitoringNamespace, routeName)
 	if err != nil {
-		slog.Error("Failed to discover route", "route", routeName, "error", err)
+		klogutil.FromContext(ctx).Error(err, "Failed to discover route", "route", routeName)
 		return "", err
 	}
-	slog.Info("Successfully discovered route", "route", routeName, "url", url)
+	klogutil.FromContext(ctx).Info("Successfully discovered route", "route", routeName, "url", url)
 	return url, nil
 }

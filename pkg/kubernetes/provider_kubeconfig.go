@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -19,12 +18,11 @@ const KubeConfigTargetParameterName = "context"
 // Kubernetes clusters using different contexts from a kubeconfig file.
 // It lazily initializes managers for each context as they are requested.
 type kubeConfigClusterProvider struct {
-	mu                  sync.RWMutex
-	cfg                 *config.Config
-	defaultContext      string
-	managers            map[string]*Manager
-	kubeconfigWatcher   *watcher.Kubeconfig
-	clusterStateWatcher *watcher.ClusterState
+	mu             sync.RWMutex
+	cfg            *config.Config
+	defaultContext string
+	managers       map[string]*Manager
+	WatcherGroup
 }
 
 var _ Provider = &kubeConfigClusterProvider{}
@@ -39,6 +37,7 @@ func init() {
 // lazily when requested.
 func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Provider, error) {
 	ret := &kubeConfigClusterProvider{cfg: cfg}
+	ret.SetReset(ret.reset)
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
@@ -52,6 +51,10 @@ func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
 }
 
 func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
+	if err := p.ErrClosed(); err != nil {
+		return err
+	}
+
 	m, err := NewKubeconfigManager(ctx, p.cfg, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
@@ -99,12 +102,11 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 		p.managers[name] = nil
 	}
 
-	p.Close()
-	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
 	p.defaultContext = defaultContext
-
-	return nil
+	return p.Replace(
+		watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get()),
+		watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
+	)
 }
 
 // managerForWorkspace returns or creates a Manager for the specified kubeContext.
@@ -210,28 +212,6 @@ func (p *kubeConfigClusterProvider) PublishKubernetesConfig(cfg *config.Config) 
 	for _, m := range p.managers {
 		if m != nil {
 			m.SetConfig(cfg)
-		}
-	}
-}
-
-func (p *kubeConfigClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
-	reloadWithReset := func() error {
-		return reload.Run(func() error {
-			if err := p.reset(ctx); err != nil {
-				return err
-			}
-			p.WatchTargets(ctx, reload)
-			return reload.ApplyToolsets()
-		})
-	}
-	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
-}
-
-func (p *kubeConfigClusterProvider) Close() {
-	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
-		if !reflect.ValueOf(w).IsNil() {
-			w.Close()
 		}
 	}
 }

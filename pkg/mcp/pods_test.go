@@ -85,7 +85,7 @@ func (s *PodsSuite) TestPodsListInAllNamespacesUnauthorized() {
 		RoleRef:    rbacv1.RoleRef{Kind: "Role", Name: r.Name},
 	}, metav1.CreateOptions{})
 	// Deny cluster by removing cluster rule
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 	s.Run("pods_list returns pods list for default namespace only", func() {
 		toolResult, err := s.CallTool("pods_list", map[string]interface{}{})
 		s.Run("no error", func() {
@@ -198,9 +198,7 @@ func (s *PodsSuite) TestPodsListDenied() {
 func (s *PodsSuite) TestPodsListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("pods_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()

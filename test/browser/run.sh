@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 work="$root/_output/browser"
 apps="$work/ext-apps"
+host="$work/basic-host"
 playwright="$work/playwright"
 revision=82221c0c8ce7661efa6771c9d461511b1650495f
 host_port=${BASIC_HOST_PORT:-18080}
@@ -17,8 +18,9 @@ proxy_cert="$work/proxy-cert.pem"
 
 mkdir -p "$work"
 mkdir -p "$playwright"
+mkdir -p "$host"
 cp "$root/test/browser/package.json" "$playwright/package.json"
-cp "$root/test/browser/basic-host.spec.mjs" "$playwright/basic-host.spec.mjs"
+cp "$root/test/browser/"*.spec.mjs "$playwright/"
 if ! curl --cacert "$proxy_cert" -sS --connect-timeout 2 -o /dev/null "$MCP_SERVER_URL"; then
   echo "MCP_SERVER_URL is not reachable: $MCP_SERVER_URL" >&2
   exit 1
@@ -38,9 +40,10 @@ const replacements = [
   ["implementation.ts", '"http://localhost:8081/sandbox.html"', JSON.stringify(process.env.BROWSER_SANDBOX_URL)],
   ["sandbox.ts", "const ALLOWED_REFERRER_PATTERN = /^http:", "const ALLOWED_REFERRER_PATTERN = /^https:"],
   ["../serve.ts", 'import express from "express";', 'import https from "node:https";\nimport { readFileSync } from "node:fs";\nimport express from "express";\nconst tls = { key: readFileSync(process.env.BROWSER_PROXY_KEY!), cert: readFileSync(process.env.BROWSER_PROXY_CERT!) };'],
+  ["../vite.config.ts", 'import { viteSingleFile } from "vite-plugin-singlefile";', ""],
 ];
 for (const [file, original, replacement] of replacements) {
-  const relativePath = file === "../serve.ts" ? "examples/basic-host/serve.ts" : `examples/basic-host/src/${file}`;
+  const relativePath = file.startsWith("../") ? `examples/basic-host/${file.slice(3)}` : `examples/basic-host/src/${file}`;
   const path = `${process.argv[2]}/${relativePath}`;
   const source = execFileSync("git", ["-C", process.argv[2], "show", `${process.argv[3]}:${relativePath}`], { encoding: "utf8" });
   if (!source.includes(original)) throw new Error(`Basic host HTTPS setup has changed in ${file}`);
@@ -60,6 +63,14 @@ for (const [file, original, replacement] of replacements) {
 }).listen(${port}, "127.0.0.1", () => {`);
     }
     updated = updated.replaceAll("http://localhost:", "https://localhost:");
+    const notFound = "sandboxApp.use((_req, res) => {";
+    if (!updated.includes(notFound)) throw new Error("Basic host sandbox routes have changed");
+    updated = updated.replace(notFound, 'sandboxApp.use("/assets", express.static(join(DIRECTORY, "assets")));\n\n' + notFound);
+  }
+  if (file === "../vite.config.ts") {
+    const plugins = "plugins: [react(), viteSingleFile()]";
+    if (!updated.includes(plugins)) throw new Error("Basic host build plugins have changed");
+    updated = updated.replace(plugins, "plugins: [react()]");
   }
   writeFileSync(path, updated);
 }
@@ -67,10 +78,16 @@ JS
 
 npm install --prefix "$playwright"
 npx --prefix "$playwright" playwright install chromium
-npm install --prefix "$apps"
-npm --prefix "$apps/examples/basic-host" run build
+# Install only the host, not the SDK repository's unrelated example workspaces.
+# Use the published SDK and a locked, patched client. Vite serves local assets
+# instead of using the single-file plugin's vulnerable glob dependency.
+cp -R "$apps/examples/basic-host/src" "$host/"
+cp "$apps/examples/basic-host/"{index.html,sandbox.html,serve.ts,tsconfig.json,vite.config.ts} "$host/"
+cp "$root/test/browser/basic-host/"{package.json,package-lock.json} "$host/"
+npm ci --prefix "$host"
+npm --prefix "$host" run build
 
-SERVERS="[\"$proxy_url/mcp\"]" HOST_PORT="$host_port" SANDBOX_PORT=8081 BROWSER_PROXY_KEY="$proxy_key" BROWSER_PROXY_CERT="$proxy_cert" "$apps/node_modules/.bin/bun" --watch "$apps/examples/basic-host/serve.ts" &
+SERVERS="[\"$proxy_url/mcp\"]" HOST_PORT="$host_port" SANDBOX_PORT=8081 BROWSER_PROXY_KEY="$proxy_key" BROWSER_PROXY_CERT="$proxy_cert" "$host/node_modules/.bin/bun" --watch "$host/serve.ts" &
 host_pid=$!
 MCP_SERVER_URL="$MCP_SERVER_URL" BASIC_HOST_URL="$host_url" BROWSER_PROXY_PORT="$proxy_port" BROWSER_SANDBOX_PROXY_PORT="$sandbox_proxy_port" BROWSER_PROXY_KEY="$proxy_key" BROWSER_PROXY_CERT="$proxy_cert" node "$root/test/browser/proxy.mjs" &
 proxy_pid=$!
@@ -98,5 +115,5 @@ curl --cacert "$proxy_cert" -fsS "$proxy_url" >/dev/null || { echo "Browser-test
 curl --cacert "$proxy_cert" -fsS "$sandbox_proxy_url/sandbox.html" >/dev/null || { echo "Browser-test sandbox proxy did not become ready"; exit 1; }
 (
   cd "$playwright"
-  BROWSER_TEST_URL="$proxy_url" npx playwright test basic-host.spec.mjs
+  BROWSER_TEST_URL="$proxy_url" npx playwright test
 )

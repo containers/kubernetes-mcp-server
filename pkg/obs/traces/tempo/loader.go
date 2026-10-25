@@ -26,8 +26,8 @@ const MaxSpssLimit = 100
 const MaxTagNamesLimit = 500
 const MaxTagValuesLimit = 1000
 
-func NewTempoLoader(httpClient *http.Client, url string) Loader {
-	client := NewTempoClient(httpClient, url)
+func NewTempoLoader(httpClient *http.Client, url string, limit func() (int64, error)) Loader {
+	client := NewTempoClient(httpClient, url, limit)
 
 	return &RealLoader{
 		client: client,

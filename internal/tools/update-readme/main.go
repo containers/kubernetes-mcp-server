@@ -16,7 +16,10 @@ import (
 	_ "github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type documentationInspector struct{}
@@ -26,7 +29,35 @@ func (i *documentationInspector) Discovery() api.AggregateDiscovery {
 }
 
 func (i *documentationInspector) Unstructured() api.AggregateUnstructured {
-	return nil
+	return i
+}
+
+func (i *documentationInspector) Resource(resource schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
+	return &documentationResource{documentationInspector: i, resource: resource}
+}
+
+type documentationResource struct {
+	*documentationInspector
+	resource schema.GroupVersionResource
+}
+
+func (r *documentationResource) Namespace(_ string) api.AggregateResourceInterface {
+	return r
+}
+
+func (r *documentationResource) Get(ctx context.Context, name string, _ metav1.GetOptions, _ ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(ctx, r, func(context.Context, string) (*unstructured.Unstructured, error) {
+		return nil, apierrors.NewNotFound(r.resource.GroupResource(), name)
+	})
+}
+
+func (r *documentationResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
+	return api.NewResults(ctx, r, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+		// Report resource presence for tool catalog generation.
+		return &unstructured.UnstructuredList{
+			Items: []unstructured.Unstructured{{}},
+		}, nil
+	})
 }
 
 func (i *documentationInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
@@ -47,6 +78,12 @@ func (i *documentationInspector) GetTargets(context.Context) ([]string, error) {
 func (i *documentationInspector) GetDefaultTarget() string { return "" }
 
 func (i *documentationInspector) GetTargetParameterName() string { return "" }
+
+func (i *documentationInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, i, func(ctx context.Context, s string) (string, error) {
+		return "", nil
+	})
+}
 
 var _ api.ClusterInspector = (*documentationInspector)(nil)
 var _ api.AggregateDiscovery = (*documentationInspector)(nil)
@@ -137,7 +174,7 @@ func main() {
 				if slices.Contains(tool.Tool.InputSchema.Required, propName) {
 					toolsetTools.WriteString(" **(required)**")
 				}
-				fmt.Fprintf(&toolsetTools, " - %s\n", property.Description)
+				fmt.Fprintf(&toolsetTools, " - %s\n", strings.ReplaceAll(property.Description, "<code>", "&lt;code&gt;"))
 			}
 			toolsetTools.WriteString("\n")
 		}

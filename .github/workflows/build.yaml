@@ -13,6 +13,7 @@ on:
       - '.gitignore'
       - 'LICENSE'
       - '*.md'
+  merge_group:
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
@@ -62,8 +63,20 @@ jobs:
             exit 1
           fi
 
+  check-codeowners:
+    name: Check CODEOWNERS is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Validate ownership and check CODEOWNERS
+        run: make check-codeowners
+
   build:
-    needs: [check-format, check-readme]
+    needs: [check-format, check-readme, check-codeowners]
     name: Build on ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -87,7 +100,7 @@ jobs:
         run: make test
 
   cross-compile:
-    needs: [check-format, check-readme]
+    needs: [check-format, check-readme, check-codeowners]
     name: Cross-compile for linux/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:

@@ -155,6 +155,12 @@ make python-publish
 make update-readme-tools
 ```
 
+**Toolset ownership:** `.github/ownership.json` defines approvers, reviewer
+notifications, and the paths used for toolset PR labels. Edit it when ownership
+or toolset paths change, then run `make update-codeowners` to regenerate
+`.github/CODEOWNERS`. Run `make check-codeowners` to validate the JSON and check
+for drift; CI runs this target as well.
+
 Run `make help` to see all available targets with descriptions.
 
 ## Dependencies

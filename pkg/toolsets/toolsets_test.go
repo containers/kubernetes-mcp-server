@@ -6,7 +6,10 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ToolsetsSuite struct {
@@ -62,13 +65,43 @@ func (f *fakeProvider) GetDefaultTarget() string { return "" }
 func (f *fakeProvider) GetTargetParameterName() string { return "" }
 
 func (f *fakeProvider) Discovery() api.AggregateDiscovery       { return f }
-func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return f }
+func (f *fakeProvider) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
+}
 func (f *fakeProvider) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
 		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
 			{Kind: "Project"}, {Kind: "Route"}, {Kind: "NodeMetrics"}, {Kind: "PodMetrics"},
 			{Kind: "VirtualMachine"}, {Kind: "VirtualMachineTemplate"},
 		}}, nil
+	})
+}
+
+func (f *fakeProvider) Resource(resource schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
+	return &fakeInspectionResource{fakeProvider: f, resource: resource}
+}
+
+type fakeInspectionResource struct {
+	*fakeProvider
+	resource schema.GroupVersionResource
+}
+
+func (r *fakeInspectionResource) Namespace(_ string) api.AggregateResourceInterface {
+	return r
+}
+
+func (r *fakeInspectionResource) Get(ctx context.Context, name string, _ metav1.GetOptions, _ ...string) api.Results[*unstructured.Unstructured] {
+	return api.NewResults(ctx, r, func(context.Context, string) (*unstructured.Unstructured, error) {
+		return nil, apierrors.NewNotFound(r.resource.GroupResource(), name)
+	})
+}
+
+func (r *fakeInspectionResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
+	return api.NewResults(ctx, r, func(context.Context, string) (*unstructured.UnstructuredList, error) {
+		return &unstructured.UnstructuredList{
+			Items: []unstructured.Unstructured{{}},
+		}, nil
 	})
 }
 

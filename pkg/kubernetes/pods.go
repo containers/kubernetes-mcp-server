@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,8 +23,13 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/version"
 )
+
+// backendExecTruncationNotice is appended to pods_exec output when stdout and
+// stderr together reach max_backend_response_bytes.
+const backendExecTruncationNotice = "\n[truncated: max_backend_response_bytes]\n"
 
 // DefaultTailLines is the default number of lines to retrieve from the end of the logs
 const DefaultTailLines = int64(100)
@@ -117,6 +124,12 @@ func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, 
 }
 
 func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
+	return c.PodsLogLimited(ctx, namespace, name, container, previous, tail, 0)
+}
+
+// PodsLogLimited reads at most maxBytes of the log body. maxBytes <= 0 does
+// not add a limit; the cluster client still applies max_backend_response_bytes.
+func (c *Core) PodsLogLimited(ctx context.Context, namespace, name, container string, previous bool, tail, maxBytes int64) (string, error) {
 	namespace = c.NamespaceOrDefault(namespace)
 	pods := c.CoreV1().Pods(namespace)
 
@@ -142,15 +155,27 @@ func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, p
 	}
 
 	req := pods.GetLogs(name, logOptions)
-	res := req.Do(ctx)
-	if res.Error() != nil {
-		return "", res.Error()
+	if maxBytes <= 0 {
+		res := req.Do(ctx)
+		if res.Error() != nil {
+			return "", res.Error()
+		}
+		rawData, err := res.Raw()
+		if err != nil {
+			return "", err
+		}
+		return string(rawData), nil
 	}
-	rawData, err := res.Raw()
+	stream, err := req.Stream(ctx)
 	if err != nil {
 		return "", err
 	}
-	return string(rawData), nil
+	defer func() { _ = stream.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(stream, maxBytes))
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port int32) ([]*unstructured.Unstructured, error) {
@@ -263,7 +288,13 @@ func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metric
 	return convertedMetrics, metricsv1beta1api.Convert_v1beta1_PodMetricsList_To_metrics_PodMetricsList(versionedMetrics, convertedMetrics, nil)
 }
 
-func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, command []string) (string, string, error) {
+func (c *Core) PodsExec(ctx context.Context, cfg *config.Config, namespace, name, container string, command []string) (string, string, error) {
+	// Unreachable today: pods_exec passes params.Config, which the server sets
+	// on every handler. The error is defense against a future caller that omits it.
+	limit, err := BackendLimit(cfg)
+	if err != nil {
+		return "", "", err
+	}
 	namespace = c.NamespaceOrDefault(namespace)
 	pods := c.CoreV1().Pods(namespace)
 	pod, err := pods.Get(ctx, name, metav1.GetOptions{})
@@ -308,12 +339,85 @@ func (c *Core) PodsExec(ctx context.Context, namespace, name, container string, 
 	if err != nil {
 		return "", "", err
 	}
-	stdout := bytes.NewBuffer(make([]byte, 0))
-	stderr := bytes.NewBuffer(make([]byte, 0))
-	if err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdout: stdout, Stderr: stderr, Tty: false,
-	}); err != nil {
+	execCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	out := newExecOutput(limit, cancel)
+	err = executor.StreamWithContext(execCtx, remotecommand.StreamOptions{
+		Stdout: out.stdoutWriter(), Stderr: out.stderrWriter(), Tty: false,
+	})
+	return out.finish(err)
+}
+
+// execOutput counts stdout and stderr against one limit. The next byte past
+// the limit cancels the exec and keeps the bytes already stored.
+type execOutput struct {
+	stdout    bytes.Buffer
+	stderr    bytes.Buffer
+	limit     int64
+	used      int64
+	truncated bool
+	cancel    context.CancelFunc
+	mu        sync.Mutex
+}
+
+func newExecOutput(limit int64, cancel context.CancelFunc) *execOutput {
+	return &execOutput{limit: limit, cancel: cancel}
+}
+
+func (o *execOutput) stdoutWriter() io.Writer { return execStream{out: o, buf: &o.stdout} }
+func (o *execOutput) stderrWriter() io.Writer { return execStream{out: o, buf: &o.stderr} }
+
+type execStream struct {
+	out *execOutput
+	buf *bytes.Buffer
+}
+
+func (s execStream) Write(p []byte) (int, error) {
+	s.out.mu.Lock()
+	defer s.out.mu.Unlock()
+	if s.out.limit <= 0 || s.out.truncated {
+		if s.out.truncated {
+			return len(p), nil
+		}
+		return s.buf.Write(p)
+	}
+	room := s.out.limit - s.out.used
+	if room < 0 {
+		room = 0
+	}
+	if int64(len(p)) > room {
+		if room > 0 {
+			if _, err := s.buf.Write(p[:room]); err != nil {
+				return 0, err
+			}
+			s.out.used += room
+		}
+		s.out.truncated = true
+		if s.out.cancel != nil {
+			s.out.cancel()
+		}
+		return len(p), nil
+	}
+	n, err := s.buf.Write(p)
+	s.out.used += int64(n)
+	return n, err
+}
+
+func (o *execOutput) finish(err error) (string, string, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	// StreamWithContext selects between ctx.Done() and the exec error stream.
+	// Once the cap has been hit, either result is this cut: keep the prefix.
+	if o.truncated {
+		if o.stdout.Len() > 0 {
+			_, _ = o.stdout.WriteString(backendExecTruncationNotice)
+		} else {
+			_, _ = o.stderr.WriteString(backendExecTruncationNotice)
+		}
+		return o.stdout.String(), o.stderr.String(), nil
+	}
+	if err != nil {
 		return "", "", err
 	}
-	return stdout.String(), stderr.String(), nil
+	return o.stdout.String(), o.stderr.String(), nil
 }

@@ -15,7 +15,7 @@ func TestLoaderSearch_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewTempoLoader(server.Client(), server.URL)
+	loader := NewTempoLoader(server.Client(), server.URL, uncapped)
 	result, err := loader.Search(t.Context(), SearchOptions{
 		Query: "{}",
 	})
@@ -24,7 +24,7 @@ func TestLoaderSearch_Success(t *testing.T) {
 }
 
 func TestSearch_LimitExceedsMax(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.Search(t.Context(), SearchOptions{
 		Limit: MaxTraceLimit + 1,
 	})
@@ -32,31 +32,31 @@ func TestSearch_LimitExceedsMax(t *testing.T) {
 }
 
 func TestSearch_InvalidTimeRange(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.Search(t.Context(), SearchOptions{Start: 2000, End: 1000})
 	require.ErrorContains(t, err, "start is after end")
 }
 
 func TestSearch_NegativeLimit(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.Search(t.Context(), SearchOptions{Limit: -1})
 	require.ErrorContains(t, err, "non-negative")
 }
 
 func TestSearch_SpssExceedsMax(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.Search(t.Context(), SearchOptions{Spss: MaxSpssLimit + 1})
 	require.ErrorContains(t, err, "greater than max limit")
 }
 
 func TestSearch_NegativeSpss(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.Search(t.Context(), SearchOptions{Spss: -1})
 	require.ErrorContains(t, err, "non-negative")
 }
 
 func TestQueryV2_InvalidTimeRange(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.QueryV2(t.Context(), "traceid", QueryV2Options{Start: 5000, End: 1000})
 	require.ErrorContains(t, err, "start is after end")
 }
@@ -68,7 +68,7 @@ func TestLoaderQueryV2_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewTempoLoader(server.Client(), server.URL)
+	loader := NewTempoLoader(server.Client(), server.URL, uncapped)
 	result, err := loader.QueryV2(t.Context(), "abc123", QueryV2Options{})
 	require.NoError(t, err)
 	require.Equal(t, `{"trace":{}}`, result)
@@ -81,26 +81,26 @@ func TestLoaderSearchTagsV2_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewTempoLoader(server.Client(), server.URL)
+	loader := NewTempoLoader(server.Client(), server.URL, uncapped)
 	result, err := loader.SearchTagsV2(t.Context(), SearchTagsV2Options{Scope: "resource"})
 	require.NoError(t, err)
 	require.Equal(t, `{"scopes":[]}`, result)
 }
 
 func TestSearchTagsV2_LimitExceedsMax(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.SearchTagsV2(t.Context(), SearchTagsV2Options{Limit: MaxTagNamesLimit + 1})
 	require.ErrorContains(t, err, "greater than max limit")
 }
 
 func TestSearchTagsV2_InvalidTimeRange(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.SearchTagsV2(t.Context(), SearchTagsV2Options{Start: 2000, End: 1000})
 	require.ErrorContains(t, err, "start is after end")
 }
 
 func TestSearchTagsV2_NegativeMaxStaleValues(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.SearchTagsV2(t.Context(), SearchTagsV2Options{MaxStaleValues: -1})
 	require.ErrorContains(t, err, "non-negative")
 }
@@ -112,14 +112,14 @@ func TestLoaderSearchTagValuesV2_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	loader := NewTempoLoader(server.Client(), server.URL)
+	loader := NewTempoLoader(server.Client(), server.URL, uncapped)
 	result, err := loader.SearchTagValuesV2(t.Context(), "resource.service.name", SearchTagValuesV2Options{})
 	require.NoError(t, err)
 	require.Equal(t, `{"tagValues":{"string":["frontend"]}}`, result)
 }
 
 func TestSearchTagValuesV2_LimitExceedsMax(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.SearchTagValuesV2(t.Context(), "resource.service.name", SearchTagValuesV2Options{
 		Limit: MaxTagValuesLimit + 1,
 	})
@@ -127,7 +127,7 @@ func TestSearchTagValuesV2_LimitExceedsMax(t *testing.T) {
 }
 
 func TestSearchTagValuesV2_InvalidTimeRange(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.SearchTagValuesV2(t.Context(), "resource.service.name", SearchTagValuesV2Options{
 		Start: 3000, End: 1000,
 	})
@@ -135,7 +135,7 @@ func TestSearchTagValuesV2_InvalidTimeRange(t *testing.T) {
 }
 
 func TestSearchTagValuesV2_NegativeMaxStaleValues(t *testing.T) {
-	loader := NewTempoLoader(nil, "http://unused")
+	loader := NewTempoLoader(nil, "http://unused", uncapped)
 	_, err := loader.SearchTagValuesV2(t.Context(), "resource.service.name", SearchTagValuesV2Options{
 		MaxStaleValues: -1,
 	})

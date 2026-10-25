@@ -215,9 +215,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 func (s *ResourcesSuite) TestResourcesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -700,9 +698,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_create_or_update (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -1070,6 +1066,123 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
+}
+
+func (s *ResourcesSuite) TestResourcesListPagination() {
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	ns, err := kc.CoreV1().Namespaces().Create(s.T().Context(), &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "page-"},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	for _, name := range []string{"page-a", "page-b", "page-c"} {
+		_, createErr := kc.CoreV1().ConfigMaps(ns.Name).Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(createErr)
+	}
+
+	s.Run("pages through every configmap", func() {
+		seen := map[string]bool{}
+		cont := ""
+		for page := 0; page < 5; page++ {
+			args := map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"namespace":  ns.Name,
+				"limit":      1,
+			}
+			if cont != "" {
+				args["continue"] = cont
+			}
+			result, callErr := s.CallTool("resources_list", args)
+			s.Require().NoError(callErr)
+			s.Require().False(result.IsError, "page %d: %v", page, result.Content)
+			text := result.Content[0].(*mcp.TextContent).Text
+			var decoded []unstructured.Unstructured
+			s.Require().NoError(yaml.Unmarshal([]byte(text), &decoded))
+			s.Require().Len(decoded, 1)
+			s.False(seen[decoded[0].GetName()])
+			seen[decoded[0].GetName()] = true
+
+			structured, ok := result.StructuredContent.(map[string]interface{})
+			s.Require().True(ok)
+			items, ok := structured["items"].([]interface{})
+			s.Require().True(ok)
+			s.Len(items, 1)
+			next, _ := structured["continue"].(string)
+			if next == "" {
+				s.NotContains(text, "# continue:")
+				break
+			}
+			s.Contains(text, "# continue: "+next)
+			cont = next
+		}
+		s.Equal(map[string]bool{"page-a": true, "page-b": true, "page-c": true}, seen)
+	})
+
+	s.Run("rejects a negative limit", func() {
+		result, callErr := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"namespace":  ns.Name,
+			"limit":      -1,
+		})
+		s.Require().NoError(callErr)
+		s.True(result.IsError)
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "limit must be greater than or equal to 0")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesListPaginationAsTable() {
+	s.Cfg.ListOutput.SetForTest("table")
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	ns, err := kc.CoreV1().Namespaces().Create(s.T().Context(), &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "page-table-"},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	for _, name := range []string{"page-a", "page-b"} {
+		_, createErr := kc.CoreV1().ConfigMaps(ns.Name).Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(createErr)
+	}
+
+	first, err := s.CallTool("resources_list", map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"namespace":  ns.Name,
+		"limit":      1,
+	})
+	s.Require().NoError(err)
+	s.Require().False(first.IsError)
+	text := first.Content[0].(*mcp.TextContent).Text
+	structured, ok := first.StructuredContent.(map[string]interface{})
+	s.Require().True(ok)
+	items, ok := structured["items"].([]interface{})
+	s.Require().True(ok)
+	s.Len(items, 1)
+	cont, _ := structured["continue"].(string)
+	s.NotEmpty(cont)
+	s.Contains(text, "# continue: "+cont)
+	s.Regexp(`page-[ab]`, text)
+
+	second, err := s.CallTool("resources_list", map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"namespace":  ns.Name,
+		"limit":      1,
+		"continue":   cont,
+	})
+	s.Require().NoError(err)
+	s.Require().False(second.IsError)
+	secondStructured, ok := second.StructuredContent.(map[string]interface{})
+	s.Require().True(ok)
+	secondItems, ok := secondStructured["items"].([]interface{})
+	s.Require().True(ok)
+	s.Len(secondItems, 1)
+	s.NotEqual(items[0].(map[string]interface{})["Name"], secondItems[0].(map[string]interface{})["Name"])
 }
 
 func TestResources(t *testing.T) {

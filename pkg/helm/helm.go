@@ -74,14 +74,17 @@ func (h *Helm) Install(ctx context.Context, chart string, values map[string]inte
 	return string(ret), nil
 }
 
-// List lists all the releases for the specified namespace (or current namespace if). Or allNamespaces is true, it lists all releases across all namespaces.
-func (h *Helm) List(ctx context.Context, namespace string, allNamespaces bool) (string, error) {
+// List lists releases for the specified namespace, or across namespaces when allNamespaces is set.
+// limit and offset page the releases returned after Helm has loaded them. Zero limit returns every loaded release.
+func (h *Helm) List(ctx context.Context, namespace string, allNamespaces bool, limit, offset int) (string, error) {
 	cfg, err := h.newAction(ctx, namespace, allNamespaces)
 	if err != nil {
 		return "", err
 	}
 	list := action.NewList(cfg)
 	list.AllNamespaces = allNamespaces
+	list.Limit = limit
+	list.Offset = offset
 	releases, err := list.Run()
 	if err != nil {
 		return "", err
@@ -92,7 +95,22 @@ func (h *Helm) List(ctx context.Context, namespace string, allNamespaces bool) (
 	if err != nil {
 		return "", err
 	}
-	return string(ret), nil
+	out := string(ret)
+	if note := helmPageNote(limit, offset, len(releases)); note != "" {
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		out += note
+	}
+	return out, nil
+}
+
+// helmPageNote tells the caller the next offset when this page is full.
+func helmPageNote(limit, offset, count int) string {
+	if limit > 0 && count == limit {
+		return fmt.Sprintf("# More releases are available. Call again with the same limit and offset=%d.\n", int64(offset)+int64(limit))
+	}
+	return ""
 }
 
 func (h *Helm) Uninstall(ctx context.Context, name string, namespace string) (string, error) {

@@ -21,6 +21,9 @@ type fakeInspector struct {
 
 func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
 func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
+}
 func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
 		if f.err != nil {
@@ -57,6 +60,20 @@ func (s *MetricsToolsSuite) TestNodesTopRegistration() {
 		s.Require().NotNil(tool, "expected nodes_top tool")
 		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
 		s.True(tool.TargetCompatibilityFilters[0](), "Filter should return true when metrics GVK is available")
+	})
+
+	s.Run("nodes_top declares get and list on core nodes", func() {
+		tool := s.findTool(initNodes(s.T().Context(), &fakeInspector{available: true}), "nodes_top")
+		s.Require().NotNil(tool)
+		s.Require().NotNil(tool.RBAC)
+		s.Require().NotNil(tool.RBAC.Bounded)
+		var verbs []string
+		for _, req := range tool.RBAC.Bounded.Requirements {
+			if req.Target.Resource != nil && req.Target.Resource.APIGroup == "" && req.Target.Resource.Resource == "nodes" {
+				verbs = req.Verbs
+			}
+		}
+		s.ElementsMatch([]string{"get", "list"}, verbs)
 	})
 
 	s.Run("nodes_top filter returns false without metrics GVK", func() {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 )
 
@@ -37,23 +38,41 @@ func RandomPortAddress() (*net.TCPAddr, error) {
 	return tcpAddr, nil
 }
 
+// reachableAddr is the address to dial. Listening on "0.0.0.0:0" is dual-stack on
+// Darwin and Linux, so the listener address is "[::]:port". Connecting to that
+// wildcard fails on hosts that can bind "::" but cannot connect to it (Go issue
+// 18806), which showed up as "dial tcp [::]:port: connect: connection refused"
+// on macos-15-intel. Loopback reaches the same listener.
+func reachableAddr(tcpAddr *net.TCPAddr) string {
+	ip := tcpAddr.IP
+	if ip == nil || ip.IsUnspecified() {
+		ip = net.IPv4(127, 0, 0, 1)
+	}
+	return net.JoinHostPort(ip.String(), strconv.Itoa(tcpAddr.Port))
+}
+
+// WaitForServer waits up to 5 seconds for the server to accept TCP connections.
 func WaitForServer(tcpAddr *net.TCPAddr) error {
-	var conn *net.TCPConn
+	addr := reachableAddr(tcpAddr)
+	deadline := time.Now().Add(5 * time.Second)
 	var err error
-	for i := 0; i < 10; i++ {
-		conn, err = net.DialTCP("tcp", nil, tcpAddr)
+	for {
+		var conn net.Conn
+		conn, err = net.DialTimeout("tcp", addr, 100*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
-			break
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("server at %s did not start: %w", addr, err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return err
 }
 
 // WaitForHealthz waits for the /healthz endpoint to return a non-404 response
 func WaitForHealthz(tcpAddr *net.TCPAddr) error {
-	url := fmt.Sprintf("http://%s/healthz", tcpAddr.String())
+	url := fmt.Sprintf("http://%s/healthz", reachableAddr(tcpAddr))
 	var resp *http.Response
 	var err error
 	for i := 0; i < 100; i++ {

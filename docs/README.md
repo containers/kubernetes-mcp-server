@@ -20,6 +20,7 @@ Choose the guide that matches your needs:
 
 - **[Configuration Reference](configuration.md)** - Complete reference for TOML configuration files, including all options, drop-in configuration, and dynamic reload
 - **[Configuration Changes](configuration-changes.md)** - Versioned record of configuration migrations between releases
+- **[Tool Requirements](tool-requirements.md)** - Cluster APIs, resources, and permissions required for tool availability
 
 ## Toolset Guides
 
@@ -37,6 +38,7 @@ Living documentation for implemented and planned features:
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
 | **[Config Option Framework](specs/config.md)** | Unified `Option[T]` config: vectors, precedence, provenance | Implemented |
+| **[Memory bounds](specs/memory-bounds.md)** | Caps on Kubernetes responses, tool results, and in-flight calls | Implemented |
 | **[MCP Apps](mcp-apps.md)** | Interactive UI resources associated with MCP tools | Implemented |
 
 ## Advanced Topics

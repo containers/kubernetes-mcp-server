@@ -78,6 +78,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
+			s.Same(testManager.schemaCache, derived.schemaCache)
 			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
@@ -141,9 +142,11 @@ users:
 				derivedCfg := derived.RESTConfig()
 				s.Require().NotNil(derivedCfg.WrapTransport, "expected WrapTransport to be set")
 				transport := derivedCfg.WrapTransport(http.DefaultTransport)
-				// Outer layer: UserAgentRoundTripper
-				uaRT, ok := transport.(*UserAgentRoundTripper)
-				s.Require().True(ok, "expected outermost wrapper to be *UserAgentRoundTripper")
+				// Outer layer: backend response cap, then UserAgentRoundTripper.
+				limitRT, ok := transport.(*backendResponseRoundTripper)
+				s.Require().True(ok, "expected outermost wrapper to be *backendResponseRoundTripper")
+				uaRT, ok := limitRT.delegate.(*UserAgentRoundTripper)
+				s.Require().True(ok, "expected UserAgentRoundTripper under the response cap")
 				// Inner layer: AccessControlRoundTripper
 				acRT, ok := uaRT.delegate.(*AccessControlRoundTripper)
 				s.Require().True(ok, "expected inner wrapper to be *AccessControlRoundTripper")
@@ -304,6 +307,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
+			s.Same(testManager.schemaCache, derived.schemaCache)
 			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			derivedCfg := derived.RESTConfig()
