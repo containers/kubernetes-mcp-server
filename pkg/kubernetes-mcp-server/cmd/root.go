@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -58,6 +57,10 @@ const (
 	flagVersion   = "version"
 	flagConfig    = "config"
 	flagConfigDir = "config-dir"
+
+	// stdinConfigPath is the --config value that reads the main TOML config
+	// from stdin.
+	stdinConfigPath = "-"
 )
 
 type MCPServerOptions struct {
@@ -134,7 +137,7 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 	}
 
 	var err error
-	if m.ConfigPath == config.StdinConfigPath {
+	if m.ConfigPath == stdinConfigPath {
 		in := m.In
 		if in == nil {
 			in = os.Stdin
@@ -146,7 +149,7 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 	if m.ConfigPath != "" || m.ConfigDir != "" {
 		m.Config, err = m.readConfig(ctx)
 		if err != nil {
-			if m.ConfigPath == config.StdinConfigPath {
+			if m.ConfigPath == stdinConfigPath {
 				return fmt.Errorf("failed to read config from stdin: %w", err)
 			}
 			if m.ConfigPath != "" {
@@ -193,8 +196,8 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 // --config - the main config comes from the stdin bytes read by Complete, so
 // a SIGHUP reload applies them again and re-reads only the drop-ins and env.
 func (m *MCPServerOptions) readConfig(ctx context.Context, opts ...config.ReadConfigOpt) (*config.Config, error) {
-	if m.ConfigPath == config.StdinConfigPath {
-		opts = append(opts, config.WithStdin(bytes.NewReader(m.stdinConfig)))
+	if m.ConfigPath == stdinConfigPath {
+		return config.ReadStdin(ctx, m.stdinConfig, m.ConfigDir, opts...)
 	}
 	return config.Read(ctx, m.ConfigPath, m.ConfigDir, opts...)
 }
@@ -203,7 +206,7 @@ func (m *MCPServerOptions) Validate(ctx context.Context) error {
 	var stdinErr error
 	// Without a port the server speaks MCP over stdio, and stdin was already
 	// used up by the config.
-	if m.ConfigPath == config.StdinConfigPath && m.Config.Port.Get() == "" {
+	if m.ConfigPath == stdinConfigPath && m.Config.Port.Get() == "" {
 		stdinErr = errors.New("reading the config from stdin (--config -) is not supported in stdio mode (port is empty); set port for HTTP or pass a config file path")
 	}
 	return errors.Join(stdinErr, m.validateConfig(ctx, m.Config))

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -35,10 +34,6 @@ const (
 // main configuration TOML file. It is ignored if --config is provided.
 // Downstream builds may change this in defaultOverrides.
 var ConfigPathEnvName = "MCP_CONFIG_PATH"
-
-// StdinConfigPath is the config path that reads the main TOML config from
-// stdin instead of a file (--config -).
-const StdinConfigPath = "-"
 
 // ToolOverride contains per-tool configuration overrides.
 type ToolOverride struct {
@@ -568,7 +563,6 @@ type loadSettings struct {
 	dirPath     string
 	previous    *Config
 	baseDefault bool
-	stdin       io.Reader
 }
 
 // WithDirPath returns a ReadConfigOpt that sets the config directory path used
@@ -589,12 +583,6 @@ func WithPrevious(prev *Config) ReadConfigOpt {
 // Read / ReadToml (Complete with no file) still use New.
 func WithBaseDefault() ReadConfigOpt {
 	return func(s *loadSettings) { s.baseDefault = true }
-}
-
-// WithStdin returns a ReadConfigOpt that sets where Read reads the main
-// config from when configPath is StdinConfigPath. Read fails without it.
-func WithStdin(r io.Reader) ReadConfigOpt {
-	return func(s *loadSettings) { s.stdin = r }
 }
 
 // KeepPreviousIfDefault copies values from prev onto next when next still has
@@ -634,41 +622,48 @@ func applyReadOpts(opts []ReadConfigOpt) loadSettings {
 	return settings
 }
 
-// Read reads the toml file (or stdin when configPath is StdinConfigPath),
-// applies drop-in configs from dropInConfigDir (only if that path is
-// non-empty), then applies env.
+// Read reads the toml file, applies drop-in configs from dropInConfigDir
+// (only if that path is non-empty), then applies env.
 // Loading order: defaults → files → env. Empty dropInConfigDir means no drop-ins.
 func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadConfigOpt) (*Config, error) {
-	settings := applyReadOpts(opts)
-
-	var stdinConfig []byte
 	var configFiles []string
 	var configDir string
-	logger := klogutil.FromContext(ctx)
-
-	if configPath == StdinConfigPath {
-		logger.V(2).Info("Loading main config from stdin")
-		if settings.stdin == nil {
-			return nil, errors.New("config path is stdin (-) but no WithStdin reader was given")
-		}
-		var err error
-		if stdinConfig, err = io.ReadAll(settings.stdin); err != nil {
-			return nil, fmt.Errorf("failed to read config from stdin: %w", err)
-		}
-		// There is no file to be relative to, so relative paths in the
-		// config resolve against the working directory.
-		if configDir, err = os.Getwd(); err != nil {
-			return nil, fmt.Errorf("failed to resolve working directory: %w", err)
-		}
-	} else if configPath != "" {
-		logger.V(2).Info("Loading main config", "path", configPath)
+	if configPath != "" {
+		klogutil.FromContext(ctx).V(2).Info("Loading main config", "path", configPath)
 		configFiles = append(configFiles, configPath)
 		absPath, err := filepath.Abs(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve absolute path to config file: %w", err)
 		}
 		configDir = filepath.Dir(absPath)
+		if dropInConfigDir == "" {
+			if err := rejectStaleImplicitConfD(ctx, configDir); err != nil {
+				return nil, err
+			}
+		}
 	}
+	return read(ctx, nil, configFiles, configDir, dropInConfigDir, applyReadOpts(opts))
+}
+
+// ReadStdin is Read for a main config that was already read from stdin
+// (--config -): data is merged first, then the drop-ins from dropInConfigDir,
+// then env. There is no file to be relative to, so relative paths in data
+// resolve against the working directory.
+func ReadStdin(ctx context.Context, data []byte, dropInConfigDir string, opts ...ReadConfigOpt) (*Config, error) {
+	klogutil.FromContext(ctx).V(2).Info("Loading main config from stdin")
+	configDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve working directory: %w", err)
+	}
+	return read(ctx, data, nil, configDir, dropInConfigDir, applyReadOpts(opts))
+}
+
+// read merges the main config (stdinConfig or configFiles), the drop-ins from
+// dropInConfigDir and env. configDir is where relative paths resolve: the main
+// config's directory, the working directory for stdin, or empty when there is
+// no main config.
+func read(ctx context.Context, stdinConfig []byte, configFiles []string, configDir, dropInConfigDir string, settings loadSettings) (*Config, error) {
+	logger := klogutil.FromContext(ctx)
 
 	if dropInConfigDir != "" {
 		absDropIn, err := filepath.Abs(dropInConfigDir)
@@ -690,10 +685,6 @@ func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadC
 			logger.V(2).Info("Loading drop-in config file(s)", "num_config_files", len(dropInFiles), "config_dir", dropInConfigDir)
 		}
 		configFiles = append(configFiles, dropInFiles...)
-	} else if configDir != "" && configPath != StdinConfigPath {
-		if err := rejectStaleImplicitConfD(ctx, configDir); err != nil {
-			return nil, err
-		}
 	}
 
 	merged, sources, err := mergeTOMLFiles(ctx, stdinConfig, configFiles)

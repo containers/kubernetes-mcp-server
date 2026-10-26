@@ -857,14 +857,12 @@ func (s *ConfigSuite) TestRelativeConfigAndConfigDirAreIndependent() {
 	})
 }
 
-func (s *ConfigSuite) TestReadConfigFromStdin() {
-	stdin := func(data string) ReadConfigOpt { return WithStdin(strings.NewReader(data)) }
-
+func (s *ConfigSuite) TestReadStdin() {
 	s.Run("reads the main config from stdin", func() {
-		cfg, err := Read(s.T().Context(), StdinConfigPath, "", stdin(`
+		cfg, err := ReadStdin(s.T().Context(), []byte(`
 			port = "8080"
 			read_only = true
-		`))
+		`), "")
 		s.Require().NoError(err)
 		s.Run("applies port", func() {
 			s.Equal("8080", cfg.Port.Get())
@@ -881,10 +879,10 @@ func (s *ConfigSuite) TestReadConfigFromStdin() {
 		dropInDir := s.T().TempDir()
 		dropIn := filepath.Join(dropInDir, "10-override.toml")
 		s.Require().NoError(os.WriteFile(dropIn, []byte(`list_output = "yaml"`), 0644))
-		cfg, err := Read(s.T().Context(), StdinConfigPath, dropInDir, stdin(`
+		cfg, err := ReadStdin(s.T().Context(), []byte(`
 			port = "8080"
 			list_output = "table"
-		`))
+		`), dropInDir)
 		s.Require().NoError(err)
 		s.Run("keeps values only set on stdin", func() {
 			s.Equal("8080", cfg.Port.Get())
@@ -901,7 +899,7 @@ func (s *ConfigSuite) TestReadConfigFromStdin() {
 		s.T().Chdir(s.T().TempDir())
 		wd, err := os.Getwd()
 		s.Require().NoError(err)
-		cfg, err := Read(s.T().Context(), StdinConfigPath, s.T().TempDir(), stdin(`port = "8080"`))
+		cfg, err := ReadStdin(s.T().Context(), []byte(`port = "8080"`), s.T().TempDir())
 		s.Require().NoError(err)
 		s.Equal(wd, cfg.ConfigDirPath(), "not the --config-dir directory")
 	})
@@ -910,13 +908,13 @@ func (s *ConfigSuite) TestReadConfigFromStdin() {
 		s.T().Chdir(s.T().TempDir())
 		s.Require().NoError(os.Mkdir("conf.d", 0755))
 		s.Require().NoError(os.WriteFile(filepath.Join("conf.d", "10-override.toml"), []byte(`port = "9090"`), 0644))
-		cfg, err := Read(s.T().Context(), StdinConfigPath, "", stdin(`port = "8080"`))
+		cfg, err := ReadStdin(s.T().Context(), []byte(`port = "8080"`), "")
 		s.Require().NoError(err)
 		s.Equal("8080", cfg.Port.Get())
 	})
 
 	s.Run("invalid TOML on stdin", func() {
-		cfg, err := Read(s.T().Context(), StdinConfigPath, "", stdin(`port = "unclosed string`))
+		cfg, err := ReadStdin(s.T().Context(), []byte(`port = "unclosed string`), "")
 		s.Run("names stdin in the error", func() {
 			s.Require().Error(err)
 			s.Contains(err.Error(), string(SourceStdin))
@@ -924,11 +922,6 @@ func (s *ConfigSuite) TestReadConfigFromStdin() {
 		s.Run("returns nil config", func() {
 			s.Nil(cfg)
 		})
-	})
-
-	s.Run("fails without WithStdin", func() {
-		_, err := Read(s.T().Context(), StdinConfigPath, "")
-		s.Error(err)
 	})
 }
 

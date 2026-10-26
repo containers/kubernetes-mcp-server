@@ -399,7 +399,7 @@ func (s *SIGHUPSuite) TestSIGHUPReappliesStdinConfigAndReloadsDropIns() {
 		toolsets = ["core", "config"]
 	`), 0o644))
 
-	_ = s.initServer(config.StdinConfigPath, s.dropInConfigDir, []byte(s.withKube(`
+	_ = s.initServer(stdinConfigPath, s.dropInConfigDir, []byte(s.withKube(`
 		port = "18080"
 		toolsets = ["core", "config", "helm"]
 	`)))
