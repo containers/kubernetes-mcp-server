@@ -1,0 +1,56 @@
+name: CI change detection
+
+on:
+  workflow_call:
+    outputs:
+      build:
+        value: ${{ jobs.detect.outputs.build }}
+      run_e2e_conformance_browser:
+        value: ${{ jobs.detect.outputs.run_e2e_conformance_browser }}
+
+permissions:
+  pull-requests: read
+
+jobs:
+  detect:
+    name: Detect CI changes
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.paths.outputs.build }}
+      run_e2e_conformance_browser: ${{ steps.paths.outputs.run_e2e_conformance_browser }}
+    steps:
+      - name: Determine applicable checks
+        id: paths
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            let build = true;
+            let runSuites = true;
+            if (context.eventName === 'pull_request') {
+              const { owner, repo } = context.repo;
+              const pr = context.payload.pull_request;
+              const { data: current } = await github.rest.pulls.get({ owner, repo, pull_number: pr.number });
+              if (current.head.sha !== pr.head.sha || current.base.sha !== pr.base.sha) {
+                throw new Error('PR changed during detection; retry on the latest commit');
+              }
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: pr.number, per_page: 100,
+              });
+              // The API caps this list at 3000 files. Never skip on an incomplete or empty diff.
+              if (files.length !== current.changed_files || files.length === 0) {
+                throw new Error('Incomplete or empty PR file list');
+              }
+              const paths = files.flatMap(file => {
+                if (typeof file.filename !== 'string') throw new Error('Missing filename');
+                if (file.status === 'renamed') {
+                  if (typeof file.previous_filename !== 'string') throw new Error('Missing rename origin');
+                  return [file.previous_filename, file.filename];
+                }
+                return [file.filename];
+              });
+              const isMarkdownOrMetadata = path => path.endsWith('.md') || path === 'LICENSE' || path === '.gitignore';
+              build = paths.some(path => !isMarkdownOrMetadata(path));
+              runSuites = paths.some(path => !isMarkdownOrMetadata(path) && !path.startsWith('docs/'));
+            }
+            core.setOutput('build', String(build));
+            core.setOutput('run_e2e_conformance_browser', String(runSuites));

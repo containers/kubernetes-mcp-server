@@ -3,15 +3,11 @@ name: E2E Tests
 on:
   pull_request:
     branches: ['main']
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '**/*.md'
-      - 'docs/**'
   merge_group:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,8 +18,13 @@ defaults:
     shell: bash
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yaml
+
   e2e:
     name: Run E2E Tests
+    needs: changes
+    if: ${{ needs.changes.outputs.run_e2e_conformance_browser == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -44,3 +45,22 @@ jobs:
       - name: Cleanup
         if: always()
         run: make e2e-teardown
+
+  gate:
+    name: E2E gate
+    if: ${{ always() }}
+    needs: [changes, e2e]
+    runs-on: ubuntu-latest
+    env:
+      DETECTION: ${{ needs.changes.result }}
+      REQUIRED: ${{ needs.changes.outputs.run_e2e_conformance_browser }}
+      RESULT: ${{ needs.e2e.result }}
+    steps:
+      - name: Enforce E2E result
+        run: |
+          [[ "$DETECTION" == success ]] || exit 1
+          case "$REQUIRED" in
+            true) [[ "$RESULT" == success ]] ;;
+            false) [[ "$RESULT" == skipped ]] ;;
+            *) exit 1 ;;
+          esac
