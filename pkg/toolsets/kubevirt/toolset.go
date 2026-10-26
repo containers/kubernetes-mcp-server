@@ -28,15 +28,15 @@ func (t *Toolset) GetDescription() string {
 	return kubevirtdefaults.ToolsetDescription()
 }
 
-func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
+func (t *Toolset) GetTools(_ context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
-		vm_clone.Tools(ctx, toolsetContext.Inspector),
-		vm_console.Tools(ctx, toolsetContext.Inspector),
-		vm_create.Tools(ctx, toolsetContext.Inspector),
-		vm_guestagent.Tools(ctx, toolsetContext.Inspector),
-		vm_lifecycle.Tools(ctx, toolsetContext.Inspector),
-		vm_template.Tools(ctx, toolsetContext.Inspector),
-		vm_troubleshoot.Tools(ctx, toolsetContext.Inspector),
+		vm_clone.Tools(toolsetContext.Inspector),
+		vm_console.Tools(toolsetContext.Inspector),
+		vm_create.Tools(toolsetContext.Inspector),
+		vm_guestagent.Tools(toolsetContext.Inspector),
+		vm_lifecycle.Tools(toolsetContext.Inspector),
+		vm_template.Tools(toolsetContext.Inspector),
+		vm_troubleshoot.Tools(toolsetContext.Inspector),
 	)
 }
 

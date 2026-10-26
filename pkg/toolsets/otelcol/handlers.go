@@ -3,10 +3,10 @@ package otelcol
 import (
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen"
 )
 
@@ -128,7 +128,8 @@ func ListComponentsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 		return api.NewToolCallResult("", err), nil
 	}
 
-	slog.Info("ListComponentsHandler called")
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("ListComponentsHandler called")
 
 	version = normalizeVersion(version)
 	if version == "" {
@@ -157,7 +158,7 @@ func ListComponentsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 		output.Components[string(k)] = v
 	}
 
-	slog.Info("ListComponentsHandler executed successfully",
+	logger.Info("ListComponentsHandler executed successfully",
 		"receivers", len(output.Receivers),
 		"processors", len(output.Processors),
 		"exporters", len(output.Exporters))
@@ -179,7 +180,8 @@ func GetComponentSchemaHandler(params api.ToolHandlerParams) (*api.ToolCallResul
 		return api.NewToolCallResult("", err), nil
 	}
 
-	slog.Info("GetComponentSchemaHandler called")
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("GetComponentSchemaHandler called")
 
 	ct := ComponentType(componentType)
 	if !ct.IsValid() {
@@ -209,7 +211,7 @@ func GetComponentSchemaHandler(params api.ToolHandlerParams) (*api.ToolCallResul
 		Schema:  schema.Schema,
 	}
 
-	slog.Info("GetComponentSchemaHandler executed successfully", "component", componentName)
+	logger.Info("GetComponentSchemaHandler executed successfully", "component", componentName)
 	return api.NewToolCallResultStructured(output, nil), nil
 }
 
@@ -229,8 +231,9 @@ func ValidateConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 		return api.NewToolCallResult("", err), nil
 	}
 
-	slog.Info("ValidateConfigHandler called")
-	slog.Debug("ValidateConfigHandler params", "componentType", componentType, "componentName", componentName)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("ValidateConfigHandler called")
+	logger.V(4).Info("ValidateConfigHandler params", "componentType", componentType, "componentName", componentName)
 
 	ct := ComponentType(componentType)
 	if !ct.IsValid() {
@@ -278,7 +281,7 @@ func ValidateConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 		Version: version,
 	}
 
-	slog.Info("ValidateConfigHandler executed successfully", "valid", output.Valid, "errorCount", len(output.Errors))
+	logger.Info("ValidateConfigHandler executed successfully", "valid", output.Valid, "errorCount", len(output.Errors))
 	return api.NewToolCallResultStructured(output, nil), nil
 }
 
@@ -288,7 +291,8 @@ func GetVersionsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", err), nil
 	}
 
-	slog.Info("GetVersionsHandler called")
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("GetVersionsHandler called")
 
 	versions, err := loader.GetAllVersions()
 	if err != nil {
@@ -305,6 +309,6 @@ func GetVersionsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		LatestVersion: latestVersion,
 	}
 
-	slog.Info("GetVersionsHandler executed successfully", "versionCount", len(output.Versions))
+	logger.Info("GetVersionsHandler executed successfully", "versionCount", len(output.Versions))
 	return api.NewToolCallResultStructured(output, nil), nil
 }

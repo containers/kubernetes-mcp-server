@@ -1,0 +1,12 @@
+{
+  "default_approvers": ["@Cali0707", "@manusa"],
+  "default_reviewers": ["@mjudeikis"],
+  "areas": [
+    {
+      "toolset": "kiali",
+      "paths": ["/pkg/toolsets/kiali/", "/pkg/kiali/"],
+      "approvers": ["@matzew", "@manusa"],
+      "reviewers": ["@aljesusg"]
+    }
+  ]
+}

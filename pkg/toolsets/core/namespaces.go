@@ -13,21 +13,21 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 )
 
-func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
+func initNamespaces(inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "namespaces_list",
-			Description: "List all the Kubernetes namespaces in the current cluster",
+			Description: "List all the Kubernetes namespaces in the current cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"fieldSelector": {
 						Type:        "string",
 						Description: "Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     REGEX_FIELDSELECTOR,
 					},
-				},
+				}),
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Namespaces: List",
@@ -46,9 +46,10 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 	ret = append(ret, api.ServerTool{
 		Tool: api.Tool{
 			Name:        "projects_list",
-			Description: "List all the OpenShift projects in the current cluster",
+			Description: "List all the OpenShift projects in the current cluster." + ListPageSentence,
 			InputSchema: &jsonschema.Schema{
-				Type: "object",
+				Type:       "object",
+				Properties: PageProperties(nil),
 			},
 			Annotations: api.ToolAnnotations{
 				Title:           "Projects: List",
@@ -65,8 +66,8 @@ func initNamespaces(ctx context.Context, inspector api.ClusterInspector) []api.S
 			}},
 		}),
 		Handler: projectsList,
-		TargetCompatibilityFilters: []func() bool{
-			func() bool {
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+			func(ctx context.Context) bool {
 				return api.AnyTargetHasGVK(ctx, inspector, schema.GroupVersionKind{Group: "project.openshift.io", Version: "v1", Kind: "Project"})
 			},
 		},
@@ -83,28 +84,34 @@ func namespacesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
 	options := api.ListOptions{AsTable: params.ListOutput.AsTable()}
 	options.FieldSelector = p.OptionalString("fieldSelector", "")
-	if err := p.Err(); err != nil {
+	if err := ApplyListPage(p, &options.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).NamespacesList(params, options)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list namespaces: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to render namespaces: %w", err)), nil
 	}
-	return api.NewToolCallResultFull(printed.Text, tableAppStructured(ret, printed.Structured), nil), nil
+	text, structured := WithListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
+	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 
 func projectsList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	ret, err := kubernetes.NewCore(params).ProjectsList(params, api.ListOptions{AsTable: params.ListOutput.AsTable()})
-	if err != nil {
+	options := api.ListOptions{AsTable: params.ListOutput.AsTable()}
+	if err := ApplyListPage(api.WrapParams(params), &options.ListOptions); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", err)), nil
+	}
+	ret, err := kubernetes.NewCore(params).ProjectsList(params, options)
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list projects: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to render projects: %w", err)), nil
 	}
-	return api.NewToolCallResultFull(printed.Text, tableAppStructured(ret, printed.Structured), nil), nil
+	text, structured := WithListPage(printed.Text, tableAppStructured(ret, printed.Structured), ret)
+	return api.NewToolCallResultFull(text, structured, nil), nil
 }

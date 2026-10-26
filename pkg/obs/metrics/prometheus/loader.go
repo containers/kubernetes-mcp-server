@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 const (
@@ -80,14 +81,14 @@ func (p *RealLoader) ListMetrics(ctx context.Context, nameRegex string) ([]strin
 	}
 
 	start := time.Now()
-	labelValues, _, err := p.client.LabelValues(ctx, "__name__", matches, time.Now().Add(-ListMetricsTimeRange), time.Now())
+	labelValues, _, _, err := p.client.LabelValues(ctx, "__name__", matches, time.Now().Add(-ListMetricsTimeRange), time.Now())
 	duration := time.Since(start)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", p.backend, "operation", "list_metrics",
-			"duration_ms", duration.Milliseconds(), "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", p.backend, "operation", "list_metrics",
+			"duration_ms", duration.Milliseconds())
 		return nil, fmt.Errorf("error fetching metric names: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", p.backend, "operation", "list_metrics",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", p.backend, "operation", "list_metrics",
 		"duration_ms", duration.Milliseconds(), "result_count", len(labelValues))
 
 	metrics := make([]string, len(labelValues))
@@ -135,7 +136,7 @@ func (p *RealLoader) ValidateMetricsExist(ctx context.Context, query string) err
 // the query passes any configured guardrails.
 func (p *RealLoader) validateQuery(ctx context.Context, query string) error {
 	if err := p.ValidateMetricsExist(ctx, query); err != nil {
-		slog.Warn("Query validation rejected", "reason", "metric-not-found", "query", query, "error", err)
+		klogutil.LogWarn(klogutil.FromContext(ctx), "Query validation rejected", klogutil.Field("reason", "metric-not-found"), klogutil.Field("query", query), klogutil.Err(err))
 		return fmt.Errorf("metric validation failed: %w", err)
 	}
 
@@ -147,7 +148,7 @@ func (p *RealLoader) validateQuery(ctx context.Context, query string) error {
 			if errors.As(err, &gv) {
 				guardrail = gv.Guardrail
 			}
-			slog.Warn("Guardrail rejected query", "guardrail", guardrail, "query", query, "error", err)
+			klogutil.LogWarn(klogutil.FromContext(ctx), "Guardrail rejected query", klogutil.Field("guardrail", guardrail), klogutil.Field("query", query), klogutil.Err(err))
 			return fmt.Errorf("query validation failed: %w", err)
 		}
 		if !isSafe {
@@ -170,14 +171,14 @@ func (p *RealLoader) ExecuteRangeQuery(ctx context.Context, query string, queryS
 	}
 
 	start := time.Now()
-	result, warnings, err := p.client.QueryRange(ctx, query, r, v1.WithTimeout(DefaultQueryTimeout))
+	result, warnings, _, err := p.client.QueryRange(ctx, query, r, v1.WithTimeout(DefaultQueryTimeout))
 	duration := time.Since(start)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", p.backend, "operation", "range_query",
-			"duration_ms", duration.Milliseconds(), "query", query, "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", p.backend, "operation", "range_query",
+			"duration_ms", duration.Milliseconds(), "query", query)
 		return nil, fmt.Errorf("error executing range query: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", p.backend, "operation", "range_query",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", p.backend, "operation", "range_query",
 		"duration_ms", duration.Milliseconds(), "query", query)
 
 	response := map[string]any{
@@ -198,14 +199,14 @@ func (p *RealLoader) ExecuteInstantQuery(ctx context.Context, query string, ts t
 	}
 
 	start := time.Now()
-	result, warnings, err := p.client.Query(ctx, query, ts)
+	result, warnings, _, err := p.client.Query(ctx, query, ts)
 	duration := time.Since(start)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", p.backend, "operation", "instant_query",
-			"duration_ms", duration.Milliseconds(), "query", query, "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", p.backend, "operation", "instant_query",
+			"duration_ms", duration.Milliseconds(), "query", query)
 		return nil, fmt.Errorf("error executing instant query: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", p.backend, "operation", "instant_query",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", p.backend, "operation", "instant_query",
 		"duration_ms", duration.Milliseconds(), "query", query)
 
 	response := map[string]any{
@@ -227,14 +228,14 @@ func (p *RealLoader) GetLabelNames(ctx context.Context, metricName string, start
 	}
 
 	apiStart := time.Now()
-	labelNames, _, err := p.client.LabelNames(ctx, matches, start, end)
+	labelNames, _, _, err := p.client.LabelNames(ctx, matches, start, end)
 	duration := time.Since(apiStart)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", p.backend, "operation", "label_names",
-			"duration_ms", duration.Milliseconds(), "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", p.backend, "operation", "label_names",
+			"duration_ms", duration.Milliseconds())
 		return nil, fmt.Errorf("error fetching label names: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", p.backend, "operation", "label_names",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", p.backend, "operation", "label_names",
 		"duration_ms", duration.Milliseconds(), "result_count", len(labelNames))
 
 	labels := make([]string, len(labelNames))
@@ -251,14 +252,14 @@ func (p *RealLoader) GetLabelValues(ctx context.Context, label, metricName strin
 	}
 
 	apiStart := time.Now()
-	labelValues, _, err := p.client.LabelValues(ctx, label, matches, start, end)
+	labelValues, _, _, err := p.client.LabelValues(ctx, label, matches, start, end)
 	duration := time.Since(apiStart)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", p.backend, "operation", "label_values",
-			"duration_ms", duration.Milliseconds(), "label", label, "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", p.backend, "operation", "label_values",
+			"duration_ms", duration.Milliseconds(), "label", label)
 		return nil, fmt.Errorf("error fetching label values: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", p.backend, "operation", "label_values",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", p.backend, "operation", "label_values",
 		"duration_ms", duration.Milliseconds(), "label", label, "result_count", len(labelValues))
 
 	values := make([]string, len(labelValues))
@@ -270,14 +271,14 @@ func (p *RealLoader) GetLabelValues(ctx context.Context, label, metricName strin
 
 func (p *RealLoader) GetSeries(ctx context.Context, matches []string, start, end time.Time) ([]map[string]string, error) {
 	apiStart := time.Now()
-	seriesList, _, err := p.client.Series(ctx, matches, start, end)
+	seriesList, _, _, err := p.client.Series(ctx, matches, start, end)
 	duration := time.Since(apiStart)
 	if err != nil {
-		slog.Error("Backend call failed", "backend", p.backend, "operation", "series",
-			"duration_ms", duration.Milliseconds(), "error", err)
+		klogutil.FromContext(ctx).Error(err, "Backend call failed", "backend", p.backend, "operation", "series",
+			"duration_ms", duration.Milliseconds())
 		return nil, fmt.Errorf("error fetching series: %w", err)
 	}
-	slog.Debug("Backend call completed", "backend", p.backend, "operation", "series",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed", "backend", p.backend, "operation", "series",
 		"duration_ms", duration.Milliseconds(), "result_count", len(seriesList))
 
 	result := make([]map[string]string, len(seriesList))

@@ -46,7 +46,7 @@ func newTestParams(t *testing.T, cfg *Config, dynamicClient *dynamicfake.FakeDyn
 	}
 	return api.ToolHandlerParams{
 		Context:          ctx,
-		Config:           &config.Config{},
+		Config:           config.BaseDefault(),
 		KubernetesClient: &mockKubernetesClient{restConfig: &rest.Config{}, dynamicClient: dynamicClient},
 		Request:          &mockToolCallRequest{arguments: args},
 	}

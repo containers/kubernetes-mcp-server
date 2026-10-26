@@ -66,24 +66,51 @@ func (c *Configuration) warmCaches() {
 	c.Toolsets()
 }
 
-func (c *Configuration) isToolApplicable(tool api.ServerTool) bool {
-	if c.ReadOnly.Get() && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
-		return false
+func (c *Configuration) isToolApplicable(ctx context.Context) ToolFilter {
+	return func(tool api.ServerTool) bool {
+		if c.ReadOnly.Get() && !ptr.Deref(tool.Tool.Annotations.ReadOnlyHint, false) {
+			return false
+		}
+		if c.DisableDestructive.Get() && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
+			return false
+		}
+		if c.EnabledTools.Get() != nil && !slices.Contains(c.EnabledTools.Get(), tool.Tool.Name) {
+			return false
+		}
+		if c.DisabledTools.Get() != nil && slices.Contains(c.DisabledTools.Get(), tool.Tool.Name) {
+			return false
+		}
+		if c.EnableTargetCompatibilityToolFilters.Get() && !targetCompatible(ctx, tool.TargetCompatibilityFilters) {
+			return false
+		}
+		return true
 	}
-	if c.DisableDestructive.Get() && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
-		return false
+}
+
+// targetCompatible reports whether every filter accepts the tool.
+// One filter runs on the caller goroutine. Additional filters run concurrently;
+// the first rejection cancels the others.
+func targetCompatible(ctx context.Context, filters []api.TargetCompatibilityFilter) bool {
+	switch len(filters) {
+	case 0:
+		return true
+	case 1:
+		return filters[0](ctx)
 	}
-	if c.EnabledTools.Get() != nil && !slices.Contains(c.EnabledTools.Get(), tool.Tool.Name) {
-		return false
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Buffer one result per filter so a canceled filter can finish without blocking.
+	results := make(chan bool, len(filters))
+	for _, filter := range filters {
+		go func() {
+			results <- filter(ctx)
+		}()
 	}
-	if c.DisabledTools.Get() != nil && slices.Contains(c.DisabledTools.Get(), tool.Tool.Name) {
-		return false
-	}
-	if c.EnableTargetCompatibilityToolFilters.Get() {
-		for _, filter := range tool.TargetCompatibilityFilters {
-			if !filter() {
-				return false
-			}
+	for range filters {
+		if !<-results {
+			return false
 		}
 	}
 	return true
@@ -186,6 +213,7 @@ func NewServer(ctx context.Context, configuration Configuration, targetProvider 
 	s.server.AddReceivingMiddleware(userAgentPropagationMiddleware(version.BinaryName, version.Version))
 	s.server.AddReceivingMiddleware(protocolReceivingMiddleware)
 	s.server.AddReceivingMiddleware(s.metricsMiddleware())
+	s.server.AddReceivingMiddleware(inFlightRequestsMiddleware(s.metrics))
 	// Outbound (server-initiated) frames — log notifications, list_changed
 	// notifications, progress, server-side pings — bypass the receiving
 	// path entirely; protocolSendingMiddleware makes them visible at V(6).
@@ -430,7 +458,7 @@ func commitItems[M, H any](
 // collectApplicableTools returns tools after applying filtering and mutation
 func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration) []api.ServerTool {
 	filter := CompositeFilter(
-		cfg.isToolApplicable,
+		cfg.isToolApplicable(ctx),
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
 		ShouldIncludeConfigurationViewTool(s.httpTransport, cfg.EnabledTools.Get()),
 	)

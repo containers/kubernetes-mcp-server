@@ -2,6 +2,7 @@ kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
+    multicluster: "true"
     suite: config
     readonly: "true"
     project: kubernetes
@@ -27,10 +28,18 @@ spec:
     - llmJudge:
         contains: "{steps.kubernetes.listContexts.count} context"
         # Validates the agent mentioned the actual count from the extension
-        # Template expands to e.g., "1 context" or "3 contexts"
+        # In multicluster setup, should be "2 context" or "2 contexts"
+
+    - llmJudge:
+        contains: "east"
+        # Verify east cluster context is mentioned
+
+    - llmJudge:
+        contains: "west"
+        # Verify west cluster context is mentioned
 
   cleanup:
     # No cleanup needed - read-only operation
 
   prompt:
-    inline: Show me all available Kubernetes contexts
+    inline: Show me all available Kubernetes contexts in this multicluster environment

@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 const (
@@ -39,7 +43,10 @@ func (k *Kiali) Available(ctx context.Context) bool {
 }
 
 func (k *Kiali) probeStatus(ctx context.Context) bool {
-
+	limit, err := k.backendLimit()
+	if err != nil {
+		return false
+	}
 	statusURL, err := k.validateAndGetURL(statusPath)
 	if err != nil {
 		klogutil.FromContext(ctx).V(2).Info("kiali status probe: invalid URL", "error", err)
@@ -75,7 +82,7 @@ func (k *Kiali) probeStatus(ctx context.Context) bool {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	body, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
 		return false
 	}
@@ -101,4 +108,76 @@ func (k *Kiali) probeStatus(ctx context.Context) bool {
 func isTemporaryDNSProbeError(err error) bool {
 	var dnsErr *net.DNSError
 	return errors.As(err, &dnsErr) && dnsErr.IsTemporary
+}
+
+func probeStatusURL(ctx context.Context, baseURL string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) bool {
+	k := kialiForStatusProbe(baseURL, kialiCfg, serverCfg, bearerToken)
+	if k == nil {
+		return false
+	}
+	return k.probeStatus(ctx)
+}
+
+func kialiForStatusProbe(baseURL string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) *Kiali {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil
+	}
+
+	probeCfg := kialiCfg
+	if probeCfg == nil {
+		probeCfg = &Config{Url: baseURL}
+	} else if strings.TrimSpace(probeCfg.Url) == "" {
+		cp := *probeCfg
+		cp.Url = baseURL
+		probeCfg = &cp
+	}
+
+	if serverCfg == nil {
+		serverCfg = config.New()
+	}
+
+	return &Kiali{
+		cfg:                  serverCfg,
+		bearerToken:          bearerToken,
+		kialiURL:             probeCfg.Url,
+		kialiInsecure:        probeCfg.Insecure,
+		certificateAuthority: probeCfg.CertificateAuthority,
+	}
+}
+
+func probeCandidateURLs(ctx context.Context, candidates []string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
+	if len(candidates) == 0 {
+		return "", false
+	}
+	if len(candidates) == 1 {
+		if probeStatusURL(ctx, candidates[0], kialiCfg, serverCfg, bearerToken) {
+			return candidates[0], true
+		}
+		return "", false
+	}
+
+	probeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu    sync.Mutex
+		found string
+	)
+	g, gctx := errgroup.WithContext(probeCtx)
+	for _, candidate := range candidates {
+		g.Go(func() error {
+			if probeStatusURL(gctx, candidate, kialiCfg, serverCfg, bearerToken) {
+				mu.Lock()
+				if found == "" {
+					found = candidate
+					cancel()
+				}
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return found, found != ""
 }

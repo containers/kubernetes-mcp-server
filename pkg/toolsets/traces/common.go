@@ -41,9 +41,9 @@ var (
 	}
 )
 
-func hasTempoStackCRD(p api.ClusterInspector) func() bool {
-	return func() bool {
-		return api.AnyTargetHasGVK(context.TODO(), p, tempoStackGVK)
+func hasTempoStackCRD(p api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return api.AnyTargetHasGVK(ctx, p, tempoStackGVK)
 	}
 }
 
@@ -59,7 +59,7 @@ func getTempoClient(params api.ToolHandlerParams) (tempoclient.Loader, error) {
 	}
 
 	tls := strings.HasPrefix(url, "https://")
-	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
+	rt, err := auth.BuildRoundTripper(params.Context, params.Config, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}

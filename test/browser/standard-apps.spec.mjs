@@ -6,20 +6,33 @@ const assets = new URL("../../../pkg/mcpapps/", import.meta.url);
 const template = readFileSync(new URL("standard.html", assets), "utf8");
 const styles = readFileSync(new URL("styles.css", assets), "utf8");
 const script = readFileSync(new URL("standard.js", assets), "utf8");
+const testOrigin = "https://mcp-apps.test";
+
+test.beforeEach(async ({ page }) => {
+  // Give the fixture a real origin without a server or external network access.
+  await page.route(testOrigin + "/", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>" }));
+  await page.goto(testOrigin + "/");
+});
 
 async function openApp(page, kind = "table") {
   await page.setContent("<iframe></iframe>");
-  await page.evaluate(() => {
+  await page.evaluate(origin => {
+    const appWindow = document.querySelector("iframe").contentWindow;
     window.messages = [];
-    window.addEventListener("message", event => window.messages.push(event.data));
-  });
+    window.addEventListener("message", event => {
+      if (event.source !== appWindow || event.origin !== origin) return;
+      window.messages.push(event.data);
+    });
+  }, testOrigin);
   const frame = page.frames()[1];
   await frame.setContent(template.replace("{{KIND}}", kind).replace("{{STYLES}}", styles).replace("{{SCRIPT}}", script));
   return frame;
 }
 
 async function send(page, message) {
-  await page.evaluate(message => document.querySelector("iframe").contentWindow.postMessage({ jsonrpc: "2.0", ...message }, "*"), message);
+  await page.evaluate(({ message, origin }) => {
+    document.querySelector("iframe").contentWindow.postMessage({ jsonrpc: "2.0", ...message }, origin);
+  }, { message, origin: testOrigin });
 }
 
 async function result(page, structuredContent) {
@@ -342,10 +355,15 @@ for (const kind of ["table", "metrics", "resource"]) {
     await send(page, { id: 1, result: { protocolVersion: "2026-01-26" } });
     await expect.poll(() => page.evaluate(() => window.messages.some(m => m.method === "ui/notifications/initialized"))).toBe(true);
     const rejected = app.locator("#app");
-    await app.evaluate(() => {
-      window.postMessage({ jsonrpc: "2.0", id: 1, error: { message: "spoofed" } }, "*");
-      return new Promise(resolve => window.addEventListener("message", resolve, { once: true }));
-    });
+    await app.evaluate(origin => new Promise(resolve => {
+      function onMessage(event) {
+        if (event.source !== window || event.origin !== origin) return;
+        window.removeEventListener("message", onMessage);
+        resolve();
+      }
+      window.addEventListener("message", onMessage);
+      window.postMessage({ jsonrpc: "2.0", id: 1, error: { message: "spoofed" } }, origin);
+    }), testOrigin);
     await expect(rejected).toHaveText("Loading data…");
     await send(page, { id: 1, error: { message: "initialization failed" } });
     await expect(rejected).toHaveText("Unable to load data: initialization failed");

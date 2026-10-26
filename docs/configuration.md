@@ -192,7 +192,7 @@ SIGHUP is not available on Windows; restart the process.
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
 | `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
-| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, OAuth, token exchange, well-known metadata). |
+| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata). |
 | `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
 
 The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case.
@@ -236,14 +236,14 @@ tls_cipher_suites = [
 
 `TLS_MIN_VERSION` and `TLS_CIPHER_SUITES` configure TLS for **both** inbound and outbound connections. They are applied at load time (startup and SIGHUP) and override the corresponding TOML values when set:
 
-| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, OAuth, token exchange, well-known metadata) |
+| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata) |
 |---------|----------------------|-------------------------------------------------------------------------|
 | `tls_min_version` / `tls_cipher_suites` (TOML) | ✅ | ✅ |
 | `TLS_MIN_VERSION` / `TLS_CIPHER_SUITES` (env) | ✅ overrides TOML | ✅ overrides TOML |
 
 When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
 
-Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali and NetObserv re-read TLS settings on each tool invocation.
+Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali, NetObserv, and observability backends re-read TLS settings on each tool invocation. Observability backends verify certificates and hostnames using the combined system trust store, Kubernetes REST config CA data and CA file (when configured), and mounted service CA (when present); an unreadable or invalid CA source fails the connection. Setting an observability toolset's `insecure = true` is rejected.
 
 ```bash
 # Example: Enforce TLS 1.3 minimum version (inbound + outbound)
@@ -307,7 +307,11 @@ Kiali, NetObserv, Loki, and Tempo apply it when they read the body.
 An exact fit is allowed.
 The next byte closes the body and returns an error, so client-go does not decode the rest.
 A list over that cap is the same error, with no partial page.
-Pagination is deferred to [kubernetes-mcp-server#1473](https://github.com/containers/kubernetes-mcp-server/issues/1473).
+`resources_list`, `pods_list`, `pods_list_in_namespace`, `pods_top`, `nodes_top`, `namespaces_list`, `projects_list`, and `events_list` take `limit` and `continue`.
+Omit `limit` to list everything.
+Set it, and send the `continue` token from the previous page with the same selectors, to retrieve the next Kubernetes list page.
+`helm_list` takes `limit` and `offset`.
+Helm applies those after it has loaded the release secrets, so a secret list that exceeds this cap still fails.
 NetObserv flow export is the exception: it keeps the bytes already read and appends a truncation notice.
 `0` leaves that read uncapped.
 Switching-protocol (`101`) responses and the (internal-only) openapi schema retrieval are skipped.
@@ -529,6 +533,9 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 # Enable specific toolsets
 toolsets = ["core", "config", "helm", "kubevirt"]
 ```
+
+Some tools require additional cluster APIs, resource instances, or permissions.
+See [Tool requirements](tool-requirements.md) for availability prerequisites.
 
 **Available Resources:**
 

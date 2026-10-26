@@ -2,6 +2,7 @@ kind: Task
 apiVersion: mcpchecker/v1alpha2
 metadata:
   labels:
+    multicluster: "true"
     suite: config
     project: kubernetes
   annotations:
@@ -30,10 +31,13 @@ spec:
     - llmJudge:
         contains: "{steps.kubernetes.getCurrentContext.context}"
         # Validates the agent mentioned the actual current context name
-        # Template expands to e.g., "kind-kind" or "minikube"
+
+    - llmJudge:
+        contains: "2 context"
+        # In multicluster setup, should mention "2 contexts"
 
   cleanup:
     # No cleanup needed - read-only operation
 
   prompt:
-    inline: What is the current Kubernetes context I'm using, and what other contexts are available?
+    inline: What is the current Kubernetes context I'm using, and what other contexts are available in this multicluster setup?

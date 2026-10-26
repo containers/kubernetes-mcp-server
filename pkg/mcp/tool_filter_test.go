@@ -1,9 +1,12 @@
 package mcp
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/utils/ptr"
 )
@@ -99,6 +102,46 @@ func (s *ToolFilterSuite) TestShouldIncludeConfigurationViewTool() {
 	s.Run("includes other tools over HTTP", func() {
 		otherTool := api.ServerTool{Tool: api.Tool{Name: "configuration_contexts_list"}}
 		s.True(ShouldIncludeConfigurationViewTool(true, nil)(otherTool))
+	})
+}
+
+func (s *ToolFilterSuite) TestTargetCompatible() {
+	cfg := &Configuration{Config: config.New()}
+	cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+	applicable := cfg.isToolApplicable(s.T().Context())
+
+	s.Run("accepts when every filter accepts", func() {
+		tool := api.ServerTool{TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+			func(context.Context) bool { return true },
+			func(context.Context) bool { return true },
+		}}
+		s.True(applicable(tool))
+	})
+
+	s.Run("rejects when any filter rejects", func() {
+		tool := api.ServerTool{TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+			func(context.Context) bool { return true },
+			func(context.Context) bool { return false },
+		}}
+		s.False(applicable(tool))
+	})
+
+	s.Run("cancels the other filters after a rejection", func() {
+		canceled := make(chan struct{})
+		tool := api.ServerTool{TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+			func(ctx context.Context) bool {
+				<-ctx.Done()
+				close(canceled)
+				return true
+			},
+			func(context.Context) bool { return false },
+		}}
+		s.False(applicable(tool))
+		select {
+		case <-canceled:
+		case <-time.After(2 * time.Second):
+			s.Fail("sibling filter was not canceled")
+		}
 	})
 }
 

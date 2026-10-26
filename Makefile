@@ -97,6 +97,14 @@ update-readme-tools: ## Update the README.md and docs/configuration.md files wit
 	go run ./internal/tools/update-readme/main.go README.md
 	go run ./internal/tools/update-readme/main.go docs/configuration.md
 
+.PHONY: update-codeowners
+update-codeowners: ## Generate .github/CODEOWNERS from .github/ownership.json
+	go run ./internal/tools/update-codeowners/main.go
+
+.PHONY: check-codeowners
+check-codeowners: ## Check that .github/CODEOWNERS matches .github/ownership.json
+	go run ./internal/tools/update-codeowners/main.go -check
+
 ##@ Local Development
 
 .PHONY: local-env-setup

@@ -2,13 +2,18 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	promapi "github.com/prometheus/client_golang/api"
 	"github.com/stretchr/testify/require"
@@ -22,6 +27,7 @@ func TestBuildRoundTripper(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
+	caData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 
 	tests := []struct {
 		name           string
@@ -99,8 +105,11 @@ func TestBuildRoundTripper(t *testing.T) {
 			if tt.ctxValue != "" {
 				ctx = context.WithValue(ctx, kubernetes.OAuthAuthorizationHeader, tt.ctxValue)
 			}
+			if tt.restConfig != nil {
+				tt.restConfig.CAData = caData
+			}
 
-			rt, err := BuildRoundTripper(ctx, tt.restConfig, tt.authMode, true, true)
+			rt, err := BuildRoundTripper(ctx, config.BaseDefault(), tt.restConfig, tt.authMode, true, false)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -154,7 +163,7 @@ func TestCreateHeaderAPIConfig(t *testing.T) {
 	ctx = ContextWithAuthFromRequest(ctx, req)
 
 	// Step 4: Create round tripper using the complete production code path
-	rt, err := BuildRoundTripper(ctx, &rest.Config{}, AuthModeHeader, true, true)
+	rt, err := BuildRoundTripper(ctx, config.BaseDefault(), &rest.Config{}, AuthModeHeader, true, false)
 	if err != nil {
 		t.Fatalf("failed to create round tripper: %v", err)
 	}
@@ -185,6 +194,120 @@ func TestCreateHeaderAPIConfig(t *testing.T) {
 	if capturedRequest.Header.Get("X-Test") != "test-value" {
 		t.Error("expected X-Test header to be preserved")
 	}
+}
+
+func TestBuildRoundTripperTLS(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	caData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+
+	request := func(t *testing.T, rt http.RoundTripper, address string) error {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, address, http.NoBody)
+		require.NoError(t, err)
+		resp, err := rt.RoundTrip(req)
+		if err == nil {
+			require.NoError(t, resp.Body.Close())
+		}
+		return err
+	}
+
+	t.Run("untrusted certificate is rejected", func(t *testing.T) {
+		rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{}, AuthModeHeader, true, false)
+		require.NoError(t, err)
+		require.Error(t, request(t, rt, server.URL))
+	})
+	t.Run("REST CA data is trusted with hostname verification", func(t *testing.T) {
+		rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{CAData: caData}}, AuthModeHeader, true, false)
+		require.NoError(t, err)
+		require.NoError(t, request(t, rt, server.URL))
+		require.Error(t, request(t, rt, strings.Replace(server.URL, "127.0.0.1", "localhost", 1)))
+	})
+	t.Run("REST CA file is trusted", func(t *testing.T) {
+		caFile := t.TempDir() + "/ca.pem"
+		require.NoError(t, os.WriteFile(caFile, caData, 0600))
+		rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{CAFile: caFile}}, AuthModeHeader, true, false)
+		require.NoError(t, err)
+		require.NoError(t, request(t, rt, server.URL))
+	})
+	t.Run("REST CA data and CA file can both be provided", func(t *testing.T) {
+		caFile := t.TempDir() + "/ca.pem"
+		require.NoError(t, os.WriteFile(caFile, caData, 0600))
+		rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData, CAFile: caFile,
+		}}, AuthModeHeader, true, false)
+		require.NoError(t, err)
+		require.NoError(t, request(t, rt, server.URL))
+	})
+	t.Run("missing REST CA file fails even with valid CA data", func(t *testing.T) {
+		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData, CAFile: t.TempDir() + "/missing.pem",
+		}}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "failed to read REST config CA file")
+	})
+	t.Run("invalid REST CA file fails even with valid CA data", func(t *testing.T) {
+		caFile := t.TempDir() + "/ca.pem"
+		require.NoError(t, os.WriteFile(caFile, []byte("invalid"), 0600))
+		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData, CAFile: caFile,
+		}}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "failed to parse REST config CA file")
+	})
+	t.Run("invalid CA fails closed", func(t *testing.T) {
+		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{TLSClientConfig: rest.TLSClientConfig{CAData: []byte("invalid")}}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "CAData")
+	})
+	t.Run("insecure mode is rejected", func(t *testing.T) {
+		_, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{}, AuthModeHeader, true, true)
+		require.ErrorContains(t, err, "insecure TLS is not supported")
+	})
+	t.Run("missing server config is rejected", func(t *testing.T) {
+		_, err := BuildRoundTripper(t.Context(), nil, &rest.Config{}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "no server config available")
+	})
+	t.Run("require TLS rejects HTTP", func(t *testing.T) {
+		cfg := config.BaseDefault()
+		cfg.RequireTLS.SetForTest(true)
+		rt, err := BuildRoundTripper(t.Context(), cfg, &rest.Config{}, AuthModeHeader, false, false)
+		require.NoError(t, err)
+		require.ErrorContains(t, request(t, rt, "http://example.com"), "require_tls")
+	})
+	t.Run("TLS minimum version is applied", func(t *testing.T) {
+		tls12Server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		tls12Server.TLS = &tls.Config{MaxVersion: tls.VersionTLS12}
+		tls12Server.StartTLS()
+		defer tls12Server.Close()
+		cfg := config.BaseDefault()
+		cfg.TLSMinVersion.SetForTest("1.3")
+		ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tls12Server.Certificate().Raw})
+		rt, err := BuildRoundTripper(t.Context(), cfg, &rest.Config{TLSClientConfig: rest.TLSClientConfig{CAData: ca}}, AuthModeHeader, true, false)
+		require.NoError(t, err)
+		require.Error(t, request(t, rt, tls12Server.URL))
+	})
+	t.Run("invalid cipher suite is rejected", func(t *testing.T) {
+		cfg := config.BaseDefault()
+		cfg.TLSCipherSuites.SetForTest([]string{"UNKNOWN_CIPHER"})
+		_, err := BuildRoundTripper(t.Context(), cfg, &rest.Config{}, AuthModeHeader, true, false)
+		require.ErrorContains(t, err, "UNKNOWN_CIPHER")
+	})
+	t.Run("HTTP still forwards the bearer token", func(t *testing.T) {
+		httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Received-Auth", r.Header.Get("Authorization"))
+		}))
+		defer httpServer.Close()
+		rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{BearerToken: "my-token"}, AuthModeKubeConfig, false, false)
+		require.NoError(t, err)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, httpServer.URL, http.NoBody)
+		require.NoError(t, err)
+		resp, err := rt.RoundTrip(req)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, resp.Body.Close()) }()
+		require.Equal(t, "Bearer my-token", resp.Header.Get("X-Received-Auth"))
+	})
 }
 
 func TestContextWithAuthFromRequest(t *testing.T) {
