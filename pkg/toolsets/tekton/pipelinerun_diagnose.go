@@ -199,7 +199,7 @@ var pipelineRunDiagnosisOutputSchema = func() *jsonschema.Schema {
 	return schema
 }()
 
-func pipelineRunDiagnoseTool(ctx context.Context, inspector api.ClusterInspector) api.ServerTool {
+func pipelineRunDiagnoseTool(inspector api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "tekton_pipelinerun_diagnose",
@@ -251,8 +251,8 @@ func pipelineRunDiagnoseTool(ctx context.Context, inspector api.ClusterInspector
 			},
 		),
 		Handler: diagnosePipelineRun,
-		TargetCompatibilityFilters: []func() bool{
-			hasPipelineRun(ctx, inspector),
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+			hasPipelineRun(inspector),
 		},
 	}
 }

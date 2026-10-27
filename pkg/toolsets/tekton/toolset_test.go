@@ -46,7 +46,7 @@ func (s *TektonSuite) TestOnlyDiagnosisRequiresPipelineRunGVK() {
 		}
 		foundDiagnosis = true
 		s.Require().Len(tool.TargetCompatibilityFilters, 1)
-		s.False(tool.TargetCompatibilityFilters[0]())
+		s.False(tool.TargetCompatibilityFilters[0](s.T().Context()))
 		s.Require().NotNil(tool.Tool.Annotations.OpenWorldHint)
 		s.True(*tool.Tool.Annotations.OpenWorldHint)
 	}

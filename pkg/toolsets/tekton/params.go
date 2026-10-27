@@ -52,8 +52,8 @@ var (
 	}
 )
 
-func hasPipelineRun(ctx context.Context, inspector api.ClusterInspector) func() bool {
-	return func() bool {
+func hasPipelineRun(inspector api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
 		return inspector == nil || api.AnyTargetHasGVK(ctx, inspector, pipelineRunGVK)
 	}
 }
