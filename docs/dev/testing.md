@@ -2,6 +2,21 @@
 
 This project follows specific testing patterns to ensure consistency, maintainability, and quality. When writing tests, adhere to the following guidelines.
 
+## Browser test extensions
+
+`make browser-test` runs the existing browser tests and additional Playwright
+tests under `test/browser/extensions/` (for example, `*.spec.mjs` or
+`*.test.mjs`). Extensions are optional;
+downstream repositories can add suites there without editing the shared runner.
+The runner copies the entire extension directory, preserving nested folders,
+helpers, and fixtures under `_output/browser/playwright/extensions/`.
+
+Downstream Makefiles can add prerequisites to `browser-test` to prepare their
+assets. The target builds the server after these prerequisites complete, so
+the binary embeds the generated assets before browser testing begins.
+Run `make browser-test` as its own goal: combining it with `build` can trigger
+duplicate builds, which can interfere with each other when using `-j`.
+
 ## Test Framework
 
 - **Use `testify/suite`** for organizing tests into suites
