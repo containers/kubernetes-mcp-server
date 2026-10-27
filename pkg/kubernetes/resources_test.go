@@ -357,6 +357,44 @@ func (c resourcesDiscoveryClient) RawDiscoveryClient() discovery.DiscoveryInterf
 	return c.discovery
 }
 
+type contextualDiscovery struct {
+	aggregatedDiscovery
+	discovery.ServerResourcesInterfaceWithContext
+	preferredCalled *bool
+}
+
+func (d contextualDiscovery) ServerPreferredResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
+	*d.preferredCalled = true
+	return d.ServerPreferredResources()
+}
+
+func (s *resourcesDiscoverySuite) TestAPIResourcesListUsesContextAwareDiscoveryMethod() {
+	preferredCalled := false
+	client := resourcesDiscoveryClient{
+		discovery: contextualDiscovery{
+			aggregatedDiscovery: aggregatedDiscovery{
+				groups: &metav1.APIGroupList{Groups: []metav1.APIGroup{{
+					Name:             "",
+					Versions:         []metav1.GroupVersionForDiscovery{{GroupVersion: "v1", Version: "v1"}},
+					PreferredVersion: metav1.GroupVersionForDiscovery{GroupVersion: "v1", Version: "v1"},
+				}}},
+				resources: map[schema.GroupVersion]*metav1.APIResourceList{
+					schema.GroupVersion{Version: "v1"}: {
+						GroupVersion: "v1",
+						APIResources: []metav1.APIResource{{Name: "pods", Kind: "Pod", Namespaced: true}},
+					},
+				},
+			},
+			preferredCalled: &preferredCalled,
+		},
+	}
+
+	resources, err := NewCore(client).APIResourcesList(context.Background(), "pod")
+	s.Require().NoError(err)
+	s.True(preferredCalled, "expected the context-aware discovery method to be used")
+	s.Len(resources, 1)
+}
+
 func (s *resourcesDiscoverySuite) TestAPIResourcesListUsesTopLevelDiscoveryResources() {
 	client := resourcesDiscoveryClient{
 		discovery: aggregatedDiscovery{
@@ -377,6 +415,7 @@ func (s *resourcesDiscoverySuite) TestAPIResourcesListUsesTopLevelDiscoveryResou
 					GroupVersion: "v1",
 					APIResources: []metav1.APIResource{
 						{Name: "pods", Kind: "Pod", Namespaced: true},
+						{Name: "podtemplates", Kind: "PodTemplate", Namespaced: true},
 						{Name: "pods/status", Kind: "Pod", Namespaced: true},
 					},
 				},
@@ -393,7 +432,7 @@ func (s *resourcesDiscoverySuite) TestAPIResourcesListUsesTopLevelDiscoveryResou
 	}
 
 	s.Run("Pod discovery omits pods/status", func() {
-		resources, err := NewCore(client).APIResourcesList("pod")
+		resources, err := NewCore(client).APIResourcesList(context.Background(), "pod")
 		s.Require().NoError(err)
 		s.Equal([]APIResourceInfo{{
 			APIVersion: "v1",
@@ -404,7 +443,7 @@ func (s *resourcesDiscoverySuite) TestAPIResourcesListUsesTopLevelDiscoveryResou
 	})
 
 	s.Run("Deployment discovery omits status and scale subresources", func() {
-		resources, err := NewCore(client).APIResourcesList("deployment")
+		resources, err := NewCore(client).APIResourcesList(context.Background(), "deployment")
 		s.Require().NoError(err)
 		s.Equal([]APIResourceInfo{{
 			APIVersion: "apps/v1",
@@ -415,8 +454,16 @@ func (s *resourcesDiscoverySuite) TestAPIResourcesListUsesTopLevelDiscoveryResou
 	})
 
 	s.Run("Scale is not exposed as a top-level resource kind", func() {
-		resources, err := NewCore(client).APIResourcesList("scale")
+		resources, err := NewCore(client).APIResourcesList(context.Background(), "scale")
 		s.Require().NoError(err)
+		s.Empty(resources)
+	})
+
+	s.Run("canceled context stops discovery", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		resources, err := NewCore(client).APIResourcesList(ctx, "pod")
+		s.ErrorIs(err, context.Canceled)
 		s.Empty(resources)
 	})
 }

@@ -430,7 +430,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
 
 - **api_resources_list** - Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.
-  - `kind` (`string`) **(required)** - Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.
+  - `kind` (`string`) **(required)** - Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.
 
 </details>
 

@@ -1346,10 +1346,10 @@ func (s *ResourcesSuite) TestAPIResourcesList() {
 
 		var decoded apiResourcesListToolResult
 		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
-		s.Run("only matching kinds are returned", func() {
+		s.Run("only the exact matching kind is returned", func() {
 			for _, r := range decoded.Resources {
-				s.Containsf(strings.ToLower(r.Kind), "deployment",
-					"expected only kinds containing 'deployment', got %s", r.Kind)
+				s.Equalf("deployment", strings.ToLower(r.Kind),
+					"expected only the exact kind 'Deployment', got %s", r.Kind)
 			}
 		})
 		s.Run("still finds the known Deployment kind", func() {

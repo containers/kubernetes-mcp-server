@@ -23,7 +23,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.",
+          "description": "Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.",
           "minLength": 1,
           "type": "string"
         }

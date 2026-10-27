@@ -16,6 +16,7 @@ import (
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/discovery"
 )
 
 const (
@@ -222,27 +223,53 @@ type APIResourceInfo struct {
 // don't need to already know a kind's apiVersion; this is how they discover
 // it, including for CRDs the caller has no built-in knowledge of.
 //
-// When kindFilter is non-empty, only kinds whose name contains kindFilter
+// When kindFilter is non-empty, only kinds whose name equals kindFilter
 // (case-insensitive) are returned; an empty kindFilter returns every
 // registered resource type. This function itself imposes no requirement on
 // kindFilter -- the api_resources_list tool handler is what makes it
 // mandatory, since an LLM caller dumping every API resource type on a
 // cluster with many CRDs into its own context is a token cost and a source
-// of confusion, not a useful default. ServerPreferredResources can return
-// partial results alongside a non-nil error (e.g. one API group temporarily
-// unavailable, or a large CRD catalog slowing discovery -- see
+// of confusion, not a useful default. The context-aware preferred discovery
+// call can return partial results alongside a non-nil error (e.g. one API
+// group temporarily unavailable, or a large CRD catalog slowing discovery -- see
 // containers/kubernetes-mcp-server#283); this returns whatever resources
 // were discovered together with that error rather than discarding them, so
 // callers can decide whether partial results are still useful.
-func (c *Core) APIResourcesList(kindFilter string) ([]APIResourceInfo, error) {
-	lists, err := c.RawDiscoveryClient().ServerPreferredResources()
+func (c *Core) APIResourcesList(ctx context.Context, kindFilter string) ([]APIResourceInfo, error) {
+	// Use the raw discovery client because the cached discovery client can
+	// remain stale after a CRD is installed outside this server. Resetting the
+	// RESTMapper below refreshes resource mapping only; it does not invalidate
+	// the discovery cache. Preferred discovery is intentional here: callers
+	// need one server-preferred top-level version per kind. A future use case
+	// that needs every served version or subresource can use a broader
+	// discovery method instead.
+	rawDiscoveryClient := c.RawDiscoveryClient()
+	var (
+		lists []*metav1.APIResourceList
+		err   error
+	)
+	if contextual, ok := rawDiscoveryClient.(discovery.ServerResourcesInterfaceWithContext); ok {
+		// Use the concrete client method when available: client-go wraps this
+		// method with its standard discovery retry behavior.
+		lists, err = contextual.ServerPreferredResourcesWithContext(ctx)
+	} else if aggregated, ok := rawDiscoveryClient.(discovery.AggregatedDiscoveryInterface); ok {
+		lists, err = discovery.ServerPreferredResourcesWithContext(
+			ctx,
+			discovery.ToAggregatedDiscoveryInterfaceWithContext(aggregated),
+		)
+	} else {
+		lists, err = discovery.ServerPreferredResourcesWithContext(
+			ctx,
+			discovery.ToDiscoveryInterfaceWithContext(rawDiscoveryClient),
+		)
+	}
 	resources := make([]APIResourceInfo, 0, len(lists))
 	for _, list := range lists {
 		if list == nil {
 			continue
 		}
 		for _, r := range list.APIResources {
-			if kindFilter != "" && !strings.Contains(strings.ToLower(r.Kind), strings.ToLower(kindFilter)) {
+			if kindFilter != "" && !strings.EqualFold(r.Kind, kindFilter) {
 				continue
 			}
 			resources = append(resources, APIResourceInfo{

@@ -14,6 +14,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -242,7 +243,7 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 					"kind": {
 						Type:        "string",
 						MinLength:   ptr.To(1),
-						Description: "Required case-insensitive substring filter on kind (e.g. 'deployment', 'route'). Matches across every API group, so a broad term can match more than one kind (e.g. 'networkpolicy' also matches CiliumNetworkPolicy) -- use the most specific substring you can.",
+						Description: "Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.",
 					},
 				},
 				Required: []string{"kind"},
@@ -278,12 +279,15 @@ func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 	if kindFilter == "" {
 		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: kind parameter must not be empty")), nil
 	}
+	if params.Config == nil {
+		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: config cannot be nil")), nil
+	}
 
-	resources, err := kubernetes.NewCore(params).APIResourcesList(kindFilter)
+	resources, err := kubernetes.NewCore(params).APIResourcesList(params.Context, kindFilter)
 	if err != nil && len(resources) == 0 {
 		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
 	}
-	resources = filterDeniedAPIResources(resources, params.Config.DeniedResources.Get())
+	resources = filterDeniedAPIResources(params.Context, resources, params.Config.DeniedResources.Get())
 
 	result := apiResourcesListResult{Resources: resources}
 	if err != nil {
@@ -295,35 +299,26 @@ func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 	return api.NewToolCallResultStructured(result, nil), nil
 }
 
-func filterDeniedAPIResources(resources []kubernetes.APIResourceInfo, denied []config.GroupVersionKind) []kubernetes.APIResourceInfo {
+func filterDeniedAPIResources(ctx context.Context, resources []kubernetes.APIResourceInfo, denied []config.GroupVersionKind) []kubernetes.APIResourceInfo {
 	if len(denied) == 0 {
 		return resources
 	}
 
 	filtered := make([]kubernetes.APIResourceInfo, 0, len(resources))
 	for _, resource := range resources {
-		if isDeniedAPIResource(resource, denied) {
+		if config.IsDeniedResource(resource.APIVersion, resource.Kind, denied) {
+			klogutil.LogInfo(
+				klogutil.FromContext(ctx).V(4),
+				"Omitting denied API resource from discovery",
+				klogutil.Field("apiVersion", resource.APIVersion),
+				klogutil.Field("kind", resource.Kind),
+				klogutil.Field("resource", resource.Name),
+			)
 			continue
 		}
 		filtered = append(filtered, resource)
 	}
 	return filtered
-}
-
-func isDeniedAPIResource(resource kubernetes.APIResourceInfo, denied []config.GroupVersionKind) bool {
-	for _, deniedResource := range denied {
-		groupVersion := deniedResource.Version
-		if deniedResource.Group != "" {
-			groupVersion = deniedResource.Group + "/" + deniedResource.Version
-		}
-		if resource.APIVersion != groupVersion {
-			continue
-		}
-		if deniedResource.Kind == "" || deniedResource.Kind == resource.Kind {
-			return true
-		}
-	}
-	return false
 }
 
 func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
