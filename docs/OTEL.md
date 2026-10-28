@@ -201,6 +201,9 @@ export OTEL_SERVICE_VERSION=1.0.0
 export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production,team=platform"
 ```
 
+For traces, `OTEL_SERVICE_NAME` takes precedence over `service.name` in
+`OTEL_RESOURCE_ATTRIBUTES`. If neither is set, the built-in service name is used.
+
 #### Endpoint Protocols
 
 The server supports both gRPC and HTTP/protobuf protocols:

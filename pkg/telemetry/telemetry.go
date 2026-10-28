@@ -32,7 +32,7 @@ func Enabled() bool {
 }
 
 // InitTracerWithConfig initializes the OpenTelemetry tracer provider using the provided config.
-// Env overrides are already resolved onto cfg at load time.
+// Exporter and sampler env overrides are already resolved onto cfg at load time.
 // Check telemetry.Enabled() to determine if tracing is active.
 func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serviceName, serviceVersion string) (func(), error) {
 	logger := klogutil.FromContext(ctx)
@@ -48,12 +48,13 @@ func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serv
 		return func() {}, nil
 	}
 
-	// Create resource with service information
+	// Create resource with service defaults, allowing environment overrides.
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName),
 			semconv.ServiceVersion(serviceVersion),
 		),
+		resource.WithFromEnv(),
 	)
 	if err != nil {
 		logger.V(1).Info("Failed to create resource, tracing disabled")
