@@ -103,6 +103,9 @@ type TelemetryConfig struct {
 	// If nil (not set), telemetry is auto-enabled when Endpoint is configured.
 	// If explicitly set to false, telemetry is disabled even if env vars are set.
 	Enabled Option[*bool]
+	// ServiceName is the trace service name. Empty uses the supplied server name.
+	// Overridden by OTEL_SERVICE_NAME when that env var is non-empty.
+	ServiceName Option[string]
 	// Endpoint is the OTLP endpoint URL (e.g., "http://localhost:4317").
 	// Overridden by OTEL_EXPORTER_OTLP_ENDPOINT when that env var is non-empty.
 	Endpoint Option[string]
@@ -129,6 +132,7 @@ type TelemetryConfig struct {
 func newTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
 		Enabled:          opt[*bool]("enabled", nil).desc("Explicitly enable or disable telemetry"),
+		ServiceName:      opt("service_name", "").env("OTEL_SERVICE_NAME", parseEnvString).desc("Trace service name (empty uses the server name)"),
 		Endpoint:         opt("endpoint", "").env("OTEL_EXPORTER_OTLP_ENDPOINT", parseEnvString).desc("OTLP endpoint URL"),
 		Protocol:         opt("protocol", "grpc").env("OTEL_EXPORTER_OTLP_PROTOCOL", parseEnvString).desc("OTLP protocol (grpc or http/protobuf)"),
 		TracesSampler:    opt("traces_sampler", "").env("OTEL_TRACES_SAMPLER", parseEnvString).desc("Trace sampling strategy"),

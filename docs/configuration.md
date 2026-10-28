@@ -821,6 +821,7 @@ Configure OpenTelemetry distributed tracing and metrics. See [OTEL.md](OTEL.md) 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `telemetry.enabled` | boolean | auto | Explicitly enable/disable telemetry. Auto-enabled when `endpoint` is set. |
+| `telemetry.service_name` | string | `""` | Trace service name. Empty uses the built-in server name. Overridden by `OTEL_SERVICE_NAME` when set. |
 | `telemetry.endpoint` | string | `""` | OTLP endpoint URL (e.g., `http://localhost:4317`). Overridden by `OTEL_EXPORTER_OTLP_ENDPOINT` when set. |
 | `telemetry.protocol` | string | `"grpc"` | OTLP protocol: `grpc` or `http/protobuf`. Overridden by `OTEL_EXPORTER_OTLP_PROTOCOL` when set. |
 | `telemetry.traces_sampler` | string | `""` | Trace sampling strategy. Overridden by `OTEL_TRACES_SAMPLER` when set. |
@@ -986,6 +987,7 @@ Empty or unset variables are ignored (they do not override TOML or defaults). No
 | `MCP_CONFIG_PATH` | — | Path to the main TOML file, or `-` to read it from stdin as with `--config -`. Ignored if `--config` is set. |
 | `TLS_MIN_VERSION` | `tls_min_version` | |
 | `TLS_CIPHER_SUITES` | `tls_cipher_suites` | Comma-separated list |
+| `OTEL_SERVICE_NAME` | `telemetry.service_name` | |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `telemetry.endpoint` | |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `telemetry.protocol` | |
 | `OTEL_TRACES_SAMPLER` | `telemetry.traces_sampler` | |
