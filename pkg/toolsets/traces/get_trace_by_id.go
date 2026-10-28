@@ -13,7 +13,9 @@ import (
 
 // getTraceByIDOutput defines the output schema for the tempo_get_trace_by_id tool.
 type getTraceByIDOutput struct {
-	Trace any `json:"trace" jsonschema:"The trace data with services, scopes and spans"`
+	Trace   any    `json:"trace" jsonschema:"The trace data with services, scopes and spans"`
+	Status  any    `json:"status,omitempty" jsonschema:"Tempo response status indicating whether the trace is complete or partial"`
+	Message string `json:"message,omitempty" jsonschema:"Tempo response message"`
 }
 
 var getTraceByIDOutputSchema = tools.MustSchema[getTraceByIDOutput]()
@@ -104,5 +106,8 @@ func getTraceByIDHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if output.Trace == nil {
 		return api.NewToolCallResult("", fmt.Errorf("trace %s not found", traceid)), nil
 	}
-	return api.NewToolCallResultFull(trace, output, nil), nil
+
+	// Reformat the trace in a LLM-friendly format
+	formatTrace(output.Trace)
+	return api.NewToolCallResultStructured(output, nil), nil
 }

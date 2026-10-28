@@ -1,6 +1,7 @@
 package traces
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -141,15 +142,51 @@ func TestSearchTracesHandler_InvalidEndTime(t *testing.T) {
 
 func TestGetTraceByIDHandler_Success(t *testing.T) {
 	srv := tempoServer(t, map[string]mockResponse{
-		"traces": {body: `{"trace":{"traceID":"abc123","services":[]}}`},
+		"traces": {body: `{
+			"trace": {
+				"resourceSpans": [{
+					"resource": {
+						"attributes": [{
+							"key": "service.name",
+							"value": {
+								"stringValue": "frontend"
+							}
+						}]
+					},
+					"scopeSpans": [{"spans": [{"spanId": "AQIDBAUGBwg=", "name": "GET /"}]}]
+				}]
+			}
+		}`},
 	})
 	params := handlerParams(t, srv.URL, map[string]any{"traceid": "abc123"})
 
 	result, err := getTraceByIDHandler(params)
 	require.NoError(t, err)
 	require.NoError(t, result.Error)
-	output := result.StructuredContent.(getTraceByIDOutput)
-	require.NotNil(t, output.Trace)
+	require.JSONEq(t, `{
+		"trace": {
+			"resourceSpans": [{
+				"resource": {"attributes": {"service.name": "frontend"}},
+				"scopeSpans": [{"spans": [{"spanId": "0102030405060708", "name": "GET /"}]}]
+			}]
+		}
+	}`, result.Content)
+}
+
+func TestGetTraceByIDHandler_PreservesPartialTraceWarning(t *testing.T) {
+	const body = `{
+		"trace":{"resourceSpans":[]},
+		"status":"PARTIAL",
+		"message":"Trace exceeds maximum size, a partial trace is returned"
+	}`
+	srv := tempoServer(t, map[string]mockResponse{"traces": {body: body}})
+	result, err := initGetTraceByID(nil).Handler(handlerParams(t, srv.URL, map[string]any{"traceid": "abc123"}))
+	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	require.JSONEq(t, body, result.Content)
+	structured, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	require.JSONEq(t, body, string(structured))
 }
 
 func TestGetTraceByIDHandler_EmptyTraceID(t *testing.T) {

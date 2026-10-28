@@ -98,6 +98,13 @@
     "outputSchema": {
       "additionalProperties": false,
       "properties": {
+        "message": {
+          "description": "Tempo response message",
+          "type": "string"
+        },
+        "status": {
+          "description": "Tempo response status indicating whether the trace is complete or partial"
+        },
         "trace": {
           "description": "The trace data with services, scopes and spans"
         }
