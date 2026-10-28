@@ -38,7 +38,7 @@ func TestOTLPTraceFlattensAttributes(t *testing.T) {
 		}]
 	}`
 
-	var trace any
+	var trace map[string]any
 	require.NoError(t, json.Unmarshal([]byte(input), &trace))
 
 	formatTrace(trace)

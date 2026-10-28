@@ -232,9 +232,9 @@ func TestGetTraceByIDHandler_InvalidEndTime(t *testing.T) {
 	require.ErrorContains(t, result.Error, "invalid end time")
 }
 
-func TestGetTraceByIDHandler_NullTrace(t *testing.T) {
+func TestGetTraceByIDHandler_TraceNotFound(t *testing.T) {
 	srv := tempoServer(t, map[string]mockResponse{
-		"traces": {body: `{"trace":null}`},
+		"traces": {body: `{"trace":{}}`},
 	})
 	params := handlerParams(t, srv.URL, map[string]any{"traceid": "00000000000000000000000000000000"})
 	result, err := getTraceByIDHandler(params)

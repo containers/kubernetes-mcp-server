@@ -13,9 +13,9 @@ import (
 
 // getTraceByIDOutput defines the output schema for the tempo_get_trace_by_id tool.
 type getTraceByIDOutput struct {
-	Trace   any    `json:"trace" jsonschema:"The trace data with services, scopes and spans"`
-	Status  any    `json:"status,omitempty" jsonschema:"Tempo response status indicating whether the trace is complete or partial"`
-	Message string `json:"message,omitempty" jsonschema:"Tempo response message"`
+	Trace   map[string]any `json:"trace" jsonschema:"The trace data with services, scopes and spans"`
+	Status  any            `json:"status,omitempty" jsonschema:"Tempo response status indicating whether the trace is complete or partial"`
+	Message string         `json:"message,omitempty" jsonschema:"Tempo response message"`
 }
 
 var getTraceByIDOutputSchema = tools.MustSchema[getTraceByIDOutput]()
@@ -103,7 +103,8 @@ func getTraceByIDHandler(params api.ToolHandlerParams) (*api.ToolCallResult, err
 	if err := json.Unmarshal([]byte(trace), &output); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to unmarshal trace: %w", err)), nil
 	}
-	if output.Trace == nil {
+	// Tempo returns an empty object ({"trace":{}}) when a trace ID is not found.
+	if len(output.Trace) == 0 {
 		return api.NewToolCallResult("", fmt.Errorf("trace %s not found", traceid)), nil
 	}
 

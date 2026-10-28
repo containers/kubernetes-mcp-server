@@ -7,9 +7,8 @@ import (
 
 // formatTrace flattens OTLP attributes in place to save tokens and converts
 // base64 trace/span IDs to hex for readability.
-func formatTrace(trace any) {
-	root, _ := trace.(map[string]any)
-	resourceSpans, _ := root["resourceSpans"].([]any)
+func formatTrace(trace map[string]any) {
+	resourceSpans, _ := trace["resourceSpans"].([]any)
 	for _, resourceSpan := range resourceSpans {
 		rs, _ := resourceSpan.(map[string]any)
 		flattenAttributesIn(rs["resource"])
