@@ -3,11 +3,6 @@ name: Browser Tests
 on:
   pull_request:
     branches: ['main']
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '**/*.md'
-      - 'docs/**'
   merge_group:
 
 permissions:
@@ -24,6 +19,7 @@ defaults:
 jobs:
   browser-test:
     name: Run browser tests
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 30
