@@ -3,7 +3,9 @@
 BROWSER_MCP_PORT ?= 3001
 
 .PHONY: browser-test
-browser-test: build ## Run MCP Apps browser tests with a local HTTPS server
+# Build in the recipe so optional browser-test prerequisites finish first.
+browser-test: ## Run MCP Apps browser tests with a local HTTPS server
+	$(MAKE) build
 	@set -eu; \
 	mkdir -p _output/browser; \
 	cert="$$PWD/_output/browser/proxy-cert.pem"; \
