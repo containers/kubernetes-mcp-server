@@ -210,6 +210,7 @@ func (s *ToolsetsSuite) TestTektonToolsFilteredByRequiredAPI() {
 	}
 	s.ElementsMatch([]string{
 		"tekton_pipelinerun_lifecycle",
+		"tekton_pipelinerun_diagnose",
 	}, names)
 }
 
@@ -238,6 +239,7 @@ func (s *ToolsetsSuite) TestTektonToolsPresentWithTektonAPIs() {
 		"tekton_pipeline_start",
 		"tekton_pipelinerun_lifecycle",
 		"tekton_pipelinerun_logs",
+		"tekton_pipelinerun_diagnose",
 		"tekton_task_start",
 		"tekton_taskrun_restart",
 		"tekton_taskrun_logs",

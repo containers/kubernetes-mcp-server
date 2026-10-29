@@ -33,19 +33,18 @@ func (p *filteringProvider) GetTargets(context.Context) ([]string, error) { retu
 func (p *filteringProvider) GetDefaultTarget() string                     { return "" }
 func (p *filteringProvider) GetTargetParameterName() string               { return "" }
 
-func (s *TektonSuite) TestOnlyDiagnosisRequiresPipelineRunGVK() {
+func (s *TektonSuite) TestTektonToolsHaveFiltersAndDiagnosisRequiresPipelineRunGVK() {
 	provider := &filteringProvider{available: false}
 	tools := (&tekton.Toolset{}).GetTools(s.T().Context(), api.ToolsetContext{Inspector: provider})
 	s.Require().NotEmpty(tools)
 
 	foundDiagnosis := false
 	for _, tool := range tools {
+		s.Require().Len(tool.TargetCompatibilityFilters, 1, tool.Tool.Name)
 		if tool.Tool.Name != "tekton_pipelinerun_diagnose" {
-			s.Empty(tool.TargetCompatibilityFilters, tool.Tool.Name)
 			continue
 		}
 		foundDiagnosis = true
-		s.Require().Len(tool.TargetCompatibilityFilters, 1)
 		s.False(tool.TargetCompatibilityFilters[0](s.T().Context()))
 		s.Require().NotNil(tool.Tool.Annotations.OpenWorldHint)
 		s.True(*tool.Tool.Annotations.OpenWorldHint)
