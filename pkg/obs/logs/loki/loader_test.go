@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,27 @@ func TestQueryRange(t *testing.T) {
 	}
 	if len(result.Streams[0].Entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(result.Streams[0].Entries))
+	}
+}
+
+func TestQueryRangeMetricQuery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"namespace":"default"},"values":[[1710000000,"3"],[1710000060,"5"]]}]}}`))
+	}))
+	defer server.Close()
+
+	loader := NewHTTPLoader(server.Client(), server.URL, "", uncapped)
+
+	_, err := loader.QueryRange(context.Background(), QueryRangeInput{
+		Query:     `sum by (namespace) (count_over_time({namespace="default"}[1m]))`,
+		Limit:     50,
+		Direction: "backward",
+	})
+	if err == nil {
+		t.Fatal("expected an error for a metric query")
+	}
+	if !strings.Contains(err.Error(), `resultType "matrix"`) || !strings.Contains(err.Error(), "only log queries are supported") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
