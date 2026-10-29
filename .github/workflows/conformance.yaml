@@ -3,11 +3,6 @@ name: MCP Conformance Tests
 on:
   pull_request:
     branches: ['main']
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '**/*.md'
-      - 'docs/**'
   merge_group:
 
 permissions:
@@ -24,6 +19,7 @@ defaults:
 jobs:
   conformance:
     name: MCP Protocol Conformance
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

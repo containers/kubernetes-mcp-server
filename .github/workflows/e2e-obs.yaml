@@ -3,29 +3,7 @@ name: E2E Obs Toolset Tests
 on:
   pull_request:
     branches: ['main']
-    paths:
-      # Obs toolsets and library
-      - 'pkg/toolsets/metrics/**'
-      - 'pkg/toolsets/logs/**'
-      - 'pkg/toolsets/traces/**'
-      - 'pkg/toolsets/otelcol/**'
-      - 'pkg/obs/**'
-      # Obs e2e fixtures and helpers
-      - 'test/e2e/obs_*'
-      - 'test/e2e/manifests/obs/**'
-      - 'hack/e2e/obs/**'
-      - 'build/obs.mk'
-      - '.github/workflows/e2e-obs.yaml'
-      # Shared e2e / deploy surface the obs tests depend on
-      - 'test/e2e/helpers_test.go'
-      - 'charts/kubernetes-mcp-server/**'
-      - 'pkg/mcp/**'
-      - 'pkg/config/**'
-      - 'pkg/kubernetes/**'
-      - 'cmd/kubernetes-mcp-server/**'
-      - 'build/e2e.mk'
-      - 'go.mod'
-      - 'go.sum'
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -42,6 +20,7 @@ defaults:
 jobs:
   e2e-obs:
     name: Run Obs Toolset E2E Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

@@ -9,10 +9,6 @@ on:
       - 'LICENSE'
       - '*.md'
   pull_request:
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '*.md'
   merge_group:
 
 concurrency:
@@ -81,12 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest #x64
-          - ubuntu-24.04-arm #arm64
-          - windows-latest #x64
-          - macos-15-intel #x64
-          - macos-latest #arm64
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","ubuntu-24.04-arm","windows-latest","macos-15-intel","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -101,6 +92,7 @@ jobs:
 
   cross-compile:
     needs: [check-format, check-readme, check-codeowners]
+    if: github.event_name != 'pull_request'
     name: Cross-compile for linux/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -117,3 +109,27 @@ jobs:
           go-version-file: go.mod
       - name: Build
         run: make build-multiarch TARGETOS=linux TARGETARCH=${{ matrix.goarch }}
+
+  queue-build-validation:
+    name: Queue build validation
+    needs: [check-format, check-readme, check-codeowners, build, cross-compile]
+    if: always() && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    env:
+      FORMAT_RESULT: ${{ needs.check-format.result }}
+      README_RESULT: ${{ needs.check-readme.result }}
+      CODEOWNERS_RESULT: ${{ needs.check-codeowners.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      CROSS_COMPILE_RESULT: ${{ needs.cross-compile.result }}
+    steps:
+      - name: Verify build checks
+        run: |
+          test "$FORMAT_RESULT" = success
+          test "$README_RESULT" = success
+          test "$CODEOWNERS_RESULT" = success
+          test "$BUILD_RESULT" = success
+          if [ "$GITHUB_EVENT_NAME" = merge_group ]; then
+            test "$CROSS_COMPILE_RESULT" = success
+          else
+            test "$CROSS_COMPILE_RESULT" = skipped
+          fi

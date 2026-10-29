@@ -9,10 +9,6 @@ on:
       - 'build/helm.mk'
       - '.github/workflows/helm.yaml'
   pull_request:
-    paths:
-      - 'charts/**'
-      - 'build/helm.mk'
-      - '.github/workflows/helm.yaml'
   merge_group:
 
 concurrency:
@@ -22,6 +18,7 @@ concurrency:
 jobs:
   validate:
     name: Validate Helm Chart
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,6 +37,7 @@ jobs:
 
   check-helm-docs:
     name: Check Helm Docs are up-to-date
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
