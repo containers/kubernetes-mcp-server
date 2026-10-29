@@ -3,15 +3,11 @@ name: MCP Conformance Tests
 on:
   pull_request:
     branches: ['main']
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '**/*.md'
-      - 'docs/**'
   merge_group:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,8 +18,13 @@ defaults:
     shell: bash
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yaml
+
   conformance:
     name: MCP Protocol Conformance
+    needs: changes
+    if: ${{ needs.changes.outputs.run_e2e_conformance_browser == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,3 +43,22 @@ jobs:
 
       - name: Run conformance tests
         run: make conformance-test
+
+  gate:
+    name: Conformance gate
+    if: ${{ always() }}
+    needs: [changes, conformance]
+    runs-on: ubuntu-latest
+    env:
+      DETECTION: ${{ needs.changes.result }}
+      REQUIRED: ${{ needs.changes.outputs.run_e2e_conformance_browser }}
+      RESULT: ${{ needs.conformance.result }}
+    steps:
+      - name: Enforce conformance result
+        run: |
+          [[ "$DETECTION" == success ]] || exit 1
+          case "$REQUIRED" in
+            true) [[ "$RESULT" == success ]] ;;
+            false) [[ "$RESULT" == skipped ]] ;;
+            *) exit 1 ;;
+          esac

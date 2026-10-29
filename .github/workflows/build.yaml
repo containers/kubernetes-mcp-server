@@ -4,16 +4,12 @@ on:
   push:
     branches:
       - 'main'
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '*.md'
   pull_request:
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '*.md'
   merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
@@ -25,8 +21,13 @@ defaults:
     shell: bash
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yaml
+
   check-format:
     name: Check formatting
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -46,6 +47,8 @@ jobs:
 
   check-readme:
     name: Check README is up-to-date
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -65,6 +68,8 @@ jobs:
 
   check-codeowners:
     name: Check CODEOWNERS is up-to-date
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -76,7 +81,8 @@ jobs:
         run: make check-codeowners
 
   build:
-    needs: [check-format, check-readme, check-codeowners]
+    needs: [changes, check-format, check-readme, check-codeowners]
+    if: ${{ needs.changes.outputs.build == 'true' }}
     name: Build on ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -100,7 +106,8 @@ jobs:
         run: make test
 
   cross-compile:
-    needs: [check-format, check-readme, check-codeowners]
+    needs: [changes, check-format, check-readme, check-codeowners]
+    if: ${{ needs.changes.outputs.build == 'true' }}
     name: Cross-compile for linux/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -117,3 +124,32 @@ jobs:
           go-version-file: go.mod
       - name: Build
         run: make build-multiarch TARGETOS=linux TARGETARCH=${{ matrix.goarch }}
+
+  gate:
+    name: Build gate
+    if: ${{ always() }}
+    needs: [changes, check-format, check-readme, check-codeowners, build, cross-compile]
+    runs-on: ubuntu-latest
+    env:
+      DETECTION: ${{ needs.changes.result }}
+      REQUIRED: ${{ needs.changes.outputs.build }}
+      FORMAT: ${{ needs.check-format.result }}
+      README: ${{ needs.check-readme.result }}
+      CODEOWNERS: ${{ needs.check-codeowners.result }}
+      BUILD: ${{ needs.build.result }}
+      CROSS_COMPILE: ${{ needs.cross-compile.result }}
+    steps:
+      - name: Enforce build results
+        run: |
+          [[ "$DETECTION" == success ]] || exit 1
+          case "$REQUIRED" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) exit 1 ;;
+          esac
+          for result in "$FORMAT" "$README" "$CODEOWNERS" "$BUILD" "$CROSS_COMPILE"; do
+            if [[ "$result" != "$expected" ]]; then
+              echo "::error::Expected $expected but found $result"
+              exit 1
+            fi
+          done
