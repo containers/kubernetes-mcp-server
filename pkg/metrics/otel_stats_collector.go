@@ -323,9 +323,17 @@ func (c *OtelStatsCollector) RecordHTTPRequest(ctx context.Context, method, path
 	}
 
 	// Record HTTP request with attributes
+	//
+	// Sanitize the path: request paths may contain invalid UTF-8 after
+	// net/http percent-decodes hostile input such as "/%c0%ae%c0%ae/"
+	// (an overlong UTF-8 encoding of ".." used by path traversal scanners).
+	// Prometheus label values must be valid UTF-8, and the invalid attribute
+	// value would be retained by the cumulative counter until the process
+	// restarts, permanently breaking /metrics with HTTP 500.
+	// strings.ToValidUTF8 has a fast path that returns valid strings as-is.
 	c.httpRequestCounter.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("http.request.method", method),
-		attribute.String("url.path", path),
+		attribute.String("url.path", strings.ToValidUTF8(path, "\uFFFD")),
 		attribute.String("http.response.status_class", statusClass),
 	))
 }
