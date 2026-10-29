@@ -318,6 +318,71 @@ users:
 	})
 }
 
+func (s *DerivedTestSuite) TestKubeConfigContext() {
+	writeConfig := func(content string) *config.Config {
+		kubeconfigPath := filepath.Join(s.T().TempDir(), "config")
+		s.Require().NoError(os.WriteFile(kubeconfigPath, []byte(content), 0644))
+		return test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\`)+`"
+		`)))
+	}
+	ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
+
+	s.Run("with a non-current context keeps that context's namespace", func() {
+		testCfg := writeConfig(`
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://cluster-a.example.com
+  name: cluster-a
+- cluster:
+    server: https://cluster-b.example.com
+  name: cluster-b
+contexts:
+- context:
+    cluster: cluster-a
+    namespace: ns-a
+  name: context-a
+- context:
+    cluster: cluster-b
+    namespace: ns-b
+  name: context-b
+current-context: context-a
+`)
+		testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "context-b")
+		s.Require().NoError(err)
+
+		derived, err := testManager.Derived(ctx)
+		s.Require().NoError(err)
+
+		s.Equal("ns-b", derived.NamespaceOrDefault(""))
+	})
+
+	s.Run("with an auto-selected only context keeps that context's namespace", func() {
+		testCfg := writeConfig(`
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://cluster-a.example.com
+  name: cluster-a
+contexts:
+- context:
+    cluster: cluster-a
+    namespace: ns-a
+  name: context-a
+`)
+		testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
+		s.Require().NoError(err)
+
+		derived, err := testManager.Derived(ctx)
+		s.Require().NoError(err)
+
+		s.Equal("ns-a", derived.NamespaceOrDefault(""))
+	})
+}
+
 func TestDerived(t *testing.T) {
 	suite.Run(t, new(DerivedTestSuite))
 }
