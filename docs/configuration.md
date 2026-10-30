@@ -572,10 +572,20 @@ Fine-grained control over individual tools within enabled toolsets.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled_tools` | string[] | `[]` | Allowlist of specific tools to enable. When set, only these tools are available. |
-| `disabled_tools` | string[] | `[]` | Denylist of specific tools to disable. Applied after `enabled_tools`. |
+| `enabled_tools` | string[] | `[]` | Explicit allowlist of all tools to enable. When set, replaces the default tool selection. |
+| `opt_in_tools` | string[] | `[]` | Additional tools to enable on top of the current selection, whether that is the default selection or an explicit `enabled_tools` allowlist. |
+| `disabled_tools` | string[] | `[]` | Denylist of tools to disable. Takes precedence over both `enabled_tools` and `opt_in_tools`. |
 
-The `configuration_view` tool is disabled by default in HTTP mode because it exposes kubeconfig contents. To expose it in HTTP mode, include `configuration_view` explicitly in `enabled_tools` along with every other tool the server should provide.
+The owning toolset must be enabled in `toolsets` for a tool to be available. Neither `enabled_tools` nor `opt_in_tools` enables a toolset automatically. All selections remain subject to `read_only`, `disable_destructive`, and other tool availability filters.
+
+The `configuration_view` tool is disabled by default in HTTP mode because it exposes kubeconfig contents. Add it to `opt_in_tools` to enable it alongside the other available tools, without maintaining a complete allowlist:
+
+```toml
+toolsets = ["core", "config"]
+opt_in_tools = ["configuration_view"]
+```
+
+Including `configuration_view` in an explicit `enabled_tools` allowlist also enables it in HTTP mode. If a tool appears in `disabled_tools`, it remains disabled even when it is in either enable list.
 
 **Example:**
 ```toml
@@ -597,7 +607,7 @@ Customize tool descriptions shown to MCP clients without modifying source code. 
 **Override Fields:**
 - `description` (optional): Custom description for the tool. Empty strings are ignored.
 
-Tools are keyed by their flat name (e.g., `pods_list`, `resources_get`), consistent with `enabled_tools` and `disabled_tools`.
+Tools are keyed by their flat name (e.g., `pods_list`, `resources_get`), consistent with `enabled_tools`, `opt_in_tools`, and `disabled_tools`.
 
 **Example:**
 ```toml
