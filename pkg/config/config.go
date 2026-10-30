@@ -73,6 +73,10 @@ type HTTPConfig struct {
 	// Only effective when rate_limit_rps > 0.
 	// When zero, the rate limiting middleware applies DefaultRateLimitBurst.
 	RateLimitBurst Option[int]
+	// SessionTimeout closes Streamable HTTP sessions that receive no request for this long.
+	// An open request (such as a GET event stream) keeps its session alive.
+	// When set to 0 (default), idle sessions are never closed.
+	SessionTimeout Option[time.Duration]
 }
 
 // newHTTPConfig returns HTTPConfig with Option metadata and defaults.
@@ -92,6 +96,12 @@ func newHTTPConfig() HTTPConfig {
 			}
 			return nil
 		}).desc("Max burst size for rate limiting per session"),
+		SessionTimeout: opt("session_timeout", time.Duration(0)).validate(func(v time.Duration) error {
+			if v < 0 {
+				return fmt.Errorf("session_timeout must not be negative (got %v)", v)
+			}
+			return nil
+		}).desc("Close HTTP sessions idle for this long (0 disables)"),
 	}
 }
 

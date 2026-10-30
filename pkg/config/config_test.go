@@ -112,6 +112,8 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.False(paths["port"].Reloadable)
 	s.False(paths["apps_enabled"].Reloadable)
 	s.False(paths["disable_localhost_protection"].Reloadable)
+	s.Contains(paths, "http.session_timeout")
+	s.False(paths["http.session_timeout"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
 	s.Contains(paths, "max_backend_response_bytes")
 	s.True(paths["max_backend_response_bytes"].Reloadable)

@@ -95,7 +95,7 @@ SIGHUP re-reads files and re-applies env. A parse, unknown-key, non-reloadable, 
 
 On SIGHUP the option dump includes `changed=true` and `previous` for values that differ from the prior config.
 
-Requires restart: listen/TLS (`port`, `bind_address`, `metrics_port`, `tls_*`, `http.read_header_timeout`), `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`, `kubeconfig`, `cluster_provider_strategy`, Kubernetes client QPS/burst and watcher timings, `[telemetry]`, `cluster_provider_configs`.
+Requires restart: listen/TLS (`port`, `bind_address`, `metrics_port`, `tls_*`, `http.read_header_timeout`, `http.session_timeout`), `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`, `kubeconfig`, `cluster_provider_strategy`, Kubernetes client QPS/burst and watcher timings, `[telemetry]`, `cluster_provider_configs`.
 
 Reloadable: logging, `list_output`, `max_backend_response_bytes`, `max_in_flight`, `max_result_bytes`, access-control and tool filtering, toolsets/prompts/confirmation, OAuth and `[token_exchange]`, `trust_proxy_headers`, HTTP body/rate-limit settings, `toolset_configs`.
 
@@ -123,7 +123,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 | `tls_cert`, `tls_key`, `require_tls` | — | no |
 | `tls_min_version` | `TLS_MIN_VERSION` | no (inbound) |
 | `tls_cipher_suites` | `TLS_CIPHER_SUITES` | no (inbound) |
-| `http.read_header_timeout` | — | no |
+| `http.read_header_timeout`, `http.session_timeout` | — | no |
 | `http.max_body_bytes`, `http.rate_limit_rps`, `http.rate_limit_burst` | — | yes |
 | `require_oauth`, `oauth_*`, `authorization_url`, `skip_jwt_verification`, `disable_dynamic_client_registration`, `server_url`, `certificate_authority`, `trust_proxy_headers`, `token_exchange.*` | — | yes |
 | `telemetry.*` | matching `OTEL_*` | no |

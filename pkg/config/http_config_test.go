@@ -21,6 +21,10 @@ func (s *HTTPConfigSuite) TestDefaults() {
 	s.Run("sets max body bytes to 16MB for large K8s manifests", func() {
 		s.Equal(int64(16<<20), cfg.HTTP.MaxBodyBytes.Get())
 	})
+
+	s.Run("leaves session timeout disabled", func() {
+		s.Equal(time.Duration(0), cfg.HTTP.SessionTimeout.Get())
+	})
 }
 
 func (s *HTTPConfigSuite) TestTOMLParsing() {
@@ -29,12 +33,14 @@ func (s *HTTPConfigSuite) TestTOMLParsing() {
 [http]
 read_header_timeout = "5s"
 max_body_bytes = 33554432
+session_timeout = "30m"
 `)
 		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
 		s.Equal(5*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
 		s.Equal(int64(32<<20), cfg.HTTP.MaxBodyBytes.Get())
+		s.Equal(30*time.Minute, cfg.HTTP.SessionTimeout.Get())
 	})
 
 	s.Run("uses defaults when not specified", func() {
@@ -98,6 +104,14 @@ func (s *HTTPConfigSuite) TestValidate() {
 		err := cfg.Validate(s.T().Context())
 		s.Error(err)
 		s.Contains(err.Error(), "rate_limit_rps must not be negative")
+	})
+
+	s.Run("negative session timeout is rejected", func() {
+		cfg := New()
+		cfg.HTTP.SessionTimeout.SetForTest(-time.Second)
+		err := cfg.Validate(s.T().Context())
+		s.Error(err)
+		s.Contains(err.Error(), "session_timeout must not be negative")
 	})
 
 	s.Run("negative burst is rejected", func() {

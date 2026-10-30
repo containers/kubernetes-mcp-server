@@ -181,7 +181,7 @@ If the new files fail to parse (including unknown keys), a non-reloadable option
 
 A SIGHUP that would change a non-reloadable option is rejected and the process exits. Restart to apply those values. That includes:
 
-- Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
+- Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`, `http.session_timeout`
 - Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`
 - Cluster connection: `kubeconfig`, `cluster_provider_strategy`, `cluster_provider_configs`
 - Kubernetes client: `kube_client_qps`, `kube_client_burst`, watcher/poll timings
@@ -285,12 +285,14 @@ Configure HTTP server settings to protect against denial-of-service attacks.
 | `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). One term in the [pod memory floor](scaling.md). Stdio frames use the same number. |
 | `http.rate_limit_rps` | float | `0` | Maximum requests per second per session. When `0` (default), rate limiting is disabled. |
 | `http.rate_limit_burst` | integer | `0` (effective `10`) | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. `0` uses the built-in burst of 10. |
+| `http.session_timeout` | duration | `"0"` | Close a Streamable HTTP session after it receives no request for this long. When `0` (default), idle sessions are never closed. |
 
 Duration values use Go duration syntax: `"30s"`, `"5m"`, `"1h30m"`.
 
 **Security Considerations:**
 - `read_header_timeout` is the primary defense against Slowloris attacks, which send headers extremely slowly to exhaust server connections
 - `max_body_bytes` prevents memory exhaustion from unbounded request payloads. The 16 MB default accommodates large Kubernetes manifests (CRDs, ConfigMaps)
+- `session_timeout` bounds memory on long-running HTTP servers. A client that disconnects without sending `DELETE` leaves its session open, and the MCP TypeScript SDK's `close()` sends none. Each open session keeps a goroutine and its state. An open GET event stream does not count as activity, so set it longer than your clients' idle gaps: a client that sends nothing for longer gets `404` and must reconnect.
 - `rate_limit_rps` prevents any single session from overwhelming the server with requests. Rate limiting is per-session, so one client hitting the limit does not affect other sessions. Requests with no session ID (e.g., STDIO transport) bypass rate limiting.
 
 **Example:**
