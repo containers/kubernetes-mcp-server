@@ -51,6 +51,9 @@ type ServerTool struct {
 	Tool    Tool
 	RBAC    *RBACMetadata
 	Handler ToolHandlerFunc
+	// Multimodal indicates that the tool can return non-text content, such as
+	// images, that requires a multimodal model. Used for server-side filtering.
+	Multimodal bool
 	// App optionally associates this tool with an MCP Apps UI resource.
 	// The MCP server registers the resource and adds its URI to tool metadata
 	// only when MCP Apps are enabled.
