@@ -295,6 +295,26 @@ func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
 	})
 }
 
+func (s *OtelStatsCollectorSuite) TestPrometheusHandlerInvalidUTF8Path() {
+	s.Run("serves metrics with 200 after recording a request path with invalid UTF-8", func() {
+		collector, err := NewOtelStatsCollectorWithConfig(s.T().Context(), CollectorConfig{
+			MeterName:      "test-meter-prom-invalid-utf8",
+			ServiceName:    "test-service",
+			ServiceVersion: "1.0.0",
+		})
+		s.Require().NoError(err)
+
+		collector.RecordHTTPRequest(context.Background(), "GET", "/\xc0\xae\xc0\xae/windows/win.ini", 401, 5*time.Millisecond)
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rec := httptest.NewRecorder()
+		collector.PrometheusHandler().ServeHTTP(rec, req)
+
+		s.Equal(http.StatusOK, rec.Code, "Should return 200 OK, body: %s", rec.Body.String())
+		s.Contains(rec.Body.String(), "k8s_mcp_http_requests")
+	})
+}
+
 func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "none")

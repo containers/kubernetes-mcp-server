@@ -325,7 +325,7 @@ func (c *OtelStatsCollector) RecordHTTPRequest(ctx context.Context, method, path
 	// Record HTTP request with attributes
 	c.httpRequestCounter.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("http.request.method", method),
-		attribute.String("url.path", path),
+		attribute.String("url.path", strings.ToValidUTF8(path, "\uFFFD")),
 		attribute.String("http.response.status_class", statusClass),
 	))
 }
