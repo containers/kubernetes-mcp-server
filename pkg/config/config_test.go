@@ -55,6 +55,9 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("DisableDestructive is false", func() {
 		s.False(base.DisableDestructive.Get())
 	})
+	s.Run("DisableMultimodal is false", func() {
+		s.False(base.DisableMultimodal.Get())
+	})
 	s.Run("Stateless is false", func() {
 		s.False(base.Stateless.Get())
 	})
@@ -113,6 +116,8 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.False(paths["apps_enabled"].Reloadable)
 	s.False(paths["disable_localhost_protection"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
+	s.Contains(paths, "disable_multimodal")
+	s.True(paths["disable_multimodal"].Reloadable)
 	s.Contains(paths, "max_backend_response_bytes")
 	s.True(paths["max_backend_response_bytes"].Reloadable)
 	s.Contains(paths, "max_in_flight")
@@ -260,6 +265,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		list_output = "yaml"
 		read_only = true
 		disable_destructive = true
+		disable_multimodal = true
 		stateless = true
 		apps_enabled = true
 		disable_localhost_protection = true
@@ -308,6 +314,7 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{"list_output", cfg.ListOutput.Get(), "yaml"},
 			{"read_only", cfg.ReadOnly.Get(), true},
 			{"disable_destructive", cfg.DisableDestructive.Get(), true},
+			{"disable_multimodal", cfg.DisableMultimodal.Get(), true},
 			{"stateless", cfg.Stateless.Get(), true},
 			{"apps_enabled", cfg.AppsEnabled.Get(), true},
 			{"disable_localhost_protection", cfg.DisableLocalhostProtection.Get(), true},

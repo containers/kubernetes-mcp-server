@@ -500,6 +500,7 @@ Control what operations the MCP server can perform on your Kubernetes cluster. T
 |-------|------|---------|-------------|
 | `read_only` | boolean | `false` | When `true`, only exposes tools annotated with `readOnlyHint=true`. Prevents any write operations on the cluster. |
 | `disable_destructive` | boolean | `false` | When `true`, disables tools annotated with `destructiveHint=true` (delete, update operations). Has no effect when `read_only` is `true`. |
+| `disable_multimodal` | boolean | `false` | When `true`, disables tools marked as multimodal that return non-text content, such as images. Use with models that do not support multimodal tool results. Currently filters out `vm_console_screenshot`. Reloadable via SIGHUP; `enabled_tools` cannot override this filter. |
 | `experimental_enable_target_compatibility_tool_filters` | boolean | `false` | Controls cluster-capability tool filtering. Tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). **NOTE:** This feature is experimental, and this option is subject to change or removal in a future release. |
 
 **Example:**
@@ -509,6 +510,9 @@ read_only = true
 
 # Or allow writes but prevent deletions
 disable_destructive = true
+
+# Hide image-producing tools for text-only models
+disable_multimodal = true
 
 # Probe every target for API-group compatibility
 experimental_enable_target_compatibility_tool_filters = true

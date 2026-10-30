@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	kubevirtToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -146,6 +148,56 @@ func (s *ConfigReloadSuite) TestConfigurationReload() {
 		s.Equal("table", server.configuration.Load().Config.ListOutput.Get())
 		s.Equal([]string{"core", "config"}, server.configuration.Load().Config.Toolsets.Get())
 	})
+}
+
+func (s *ConfigReloadSuite) TestDisableMultimodal() {
+	s.Cfg.Toolsets.SetForTest(append(s.Cfg.Toolsets.Get(), (&kubevirtToolset.Toolset{}).GetName()))
+	newConfig := func(disabled bool) *config.Config {
+		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+			read_only = true
+			disable_destructive = true
+			disable_multimodal = %t
+			enabled_tools = ["vm_console_screenshot", "resources_get"]
+		`, disabled)), config.WithBaseDefault())
+		s.Require().NoError(err)
+		cfg.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
+		cfg.ListOutput.SetForTest(s.Cfg.ListOutput.Get())
+		cfg.Toolsets.SetForTest(s.Cfg.Toolsets.Get())
+		return cfg
+	}
+	s.Cfg = newConfig(true)
+	s.InitMcpClient()
+
+	for _, tc := range []struct {
+		name     string
+		disabled bool
+		reload   bool
+	}{
+		{name: "disabled at startup", disabled: true},
+		{name: "enabled after reload", disabled: false, reload: true},
+		{name: "disabled after reload", disabled: true, reload: true},
+	} {
+		s.Run(tc.name, func() {
+			if tc.reload {
+				s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), newConfig(tc.disabled)))
+			}
+			tools, err := s.ListTools()
+			s.Require().NoError(err)
+			var names []string
+			for _, tool := range tools.Tools {
+				names = append(names, tool.Name)
+			}
+			s.Contains(names, "resources_get", "text tools remain available")
+			if tc.disabled {
+				s.NotContains(names, "vm_console_screenshot", "enabled_tools must not bypass disable_multimodal")
+				_, err = s.CallTool("vm_console_screenshot", map[string]any{"namespace": "default", "name": "test-vm"})
+				s.Require().Error(err)
+				s.Contains(err.Error(), "unknown tool")
+			} else {
+				s.Contains(names, "vm_console_screenshot", "read-only and non-destructive filters allow screenshots")
+			}
+		})
+	}
 }
 
 func (s *ConfigReloadSuite) TestReloadTargetCompatibilityFiltersRebuildsToolDescriptions() {

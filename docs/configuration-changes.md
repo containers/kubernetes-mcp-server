@@ -118,7 +118,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 | `max_in_flight` | — | yes |
 | `max_result_bytes` | — | yes |
 | `kubeconfig`, `cluster_provider_strategy` | — | no |
-| `cluster_auth_mode`, `denied_resources`, `read_only`, `disable_destructive`, `validation_enabled`, `experimental_enable_target_compatibility_tool_filters` | — | yes |
+| `cluster_auth_mode`, `denied_resources`, `read_only`, `disable_destructive`, `disable_multimodal`, `validation_enabled`, `experimental_enable_target_compatibility_tool_filters` | — | yes |
 | `toolsets`, `enabled_tools`, `disabled_tools`, `tool_overrides`, `prompts`, `confirmation_*` | — | yes |
 | `tls_cert`, `tls_key`, `require_tls` | — | no |
 | `tls_min_version` | `TLS_MIN_VERSION` | no (inbound) |
