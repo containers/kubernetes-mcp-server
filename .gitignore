@@ -37,3 +37,6 @@ python/build/
 python/dist/
 python/kubernetes_mcp_server.egg-info/
 !python/kubernetes-mcp-server
+
+# Guest observability eval port-forward PID
+.guest-observability-loki-pf.pid

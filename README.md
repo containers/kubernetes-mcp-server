@@ -264,7 +264,7 @@ and only needed for the project-specific scenarios noted.
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Kubernetes](https://kubernetes.io) | - | 33 |
-| [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
+| [KubeVirt](https://kubevirt.io) | `guest-observability`, `kubevirt`, `tekton` | 33 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
 
@@ -280,6 +280,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 |-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
 | config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
 | core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| guest-observability | Virtual machine guest log observability tools backed by Loki. Check the [Guest Observability documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/guest-observability.md) for more details.                |         |
 | helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
 | kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
 | kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
@@ -431,6 +432,36 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **api_resources_list** - Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.
   - `kind` (`string`) **(required)** - Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.
+
+</details>
+
+<details>
+
+<summary>guest-observability</summary>
+
+- **guest-observability_loki_query** - Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.
+
+Guest telemetry uses namespace and vm_name as VM identity labels, while os and source classify the guest operating system and telemetry source. A collector label may also be available for orphan guest telemetry when the standard contract labels are absent.
+
+Loki label matchers exclude streams where the matched label is absent. An empty result from a query using namespace, vm_name, os, or source therefore does not prove that matching guest events are absent. When relevant telemetry may have incomplete labels, a bounded follow-up query can use progressively fewer contract-label matchers while preserving filters for the event itself.
+
+A missing label matcher should not be replaced with a log-content filter containing that label's value unless the value is known to occur in the log message. Removing namespace="example" and adding |= "example", for example, does not establish namespace association.
+
+For event-content searches, stable event identifiers and case-insensitive matching are useful when provider or component capitalization is not guaranteed. For Windows guest-log investigations, available classification labels such as os="windows" or source="windows_eventlog" should be retained in the initial query together with the event-content filter. Windows storage reset telemetry commonly contains Event ID 129 and the StorPort provider.
+
+If an event is discovered after identity labels are removed, event detection and VM attribution must be treated separately. Reliable VM identity requires both namespace and vm_name from the telemetry. Missing os or source represents classification uncertainty but does not by itself invalidate identity when namespace and vm_name are present.
+
+Results may include guest telemetry contract warnings identifying missing identity or classification labels and whether VM attribution is reliable.
+  - `direction` (`string`) - Log ordering direction: backward returns newest matching entries first; forward returns oldest matching entries first.
+  - `end` (`string`) - Optional RFC3339 end timestamp with explicit timezone.
+When start and end are omitted, the query defaults to the previous one
+hour ending at the server's current time.
+  - `limit` (`integer`) - Maximum raw log entries to return. Defaults to 100 and is capped at 1000.
+  - `query` (`string`) **(required)** - LogQL query expression to execute.
+  - `start` (`string`) - Optional RFC3339 start timestamp with explicit timezone.
+When start and end are omitted, the query defaults to the previous one
+hour ending at the server's current time.
+  - `step` (`string`) - Optional query resolution for metric-style LogQL range queries, for example 30s, 1m, or 5m.
 
 </details>
 
