@@ -69,6 +69,10 @@ func (s *ResourcesTestSuite) SetupTest() {
 					"metadata":   map[string]interface{}{"name": "test-node"},
 				}}},
 			})
+		case "/api/v1/namespaces/test-namespace/pods":
+			test.WriteObject(w, &unstructured.UnstructuredList{
+				Object: map[string]interface{}{"apiVersion": "v1", "kind": "List"},
+			})
 		case "/api/v1/namespaces/test-namespace/pods/test-pod":
 			if r.Method == http.MethodPatch {
 				s.captureAppliedObject(r)
@@ -162,6 +166,30 @@ func (s *ResourcesTestSuite) TestResourcesGetNamespacedResourceRetainsNamespace(
 	s.Require().NoError(err)
 	s.Equal("test-pod", pod.GetName())
 	s.assertLastPath("/api/v1/namespaces/test-namespace/pods/test-pod")
+}
+
+func (s *ResourcesTestSuite) TestResourcesLowercaseKindRetainsNamespace() {
+	lowercasePod := &schema.GroupVersionKind{Version: "v1", Kind: "pod"}
+	s.Run("get", func() {
+		pod, err := s.core.ResourcesGet(s.T().Context(), lowercasePod, "test-namespace", "test-pod")
+		s.Require().NoError(err)
+		s.Equal("test-pod", pod.GetName())
+		s.assertLastPath("/api/v1/namespaces/test-namespace/pods/test-pod")
+	})
+	s.Run("list", func() {
+		_, err := s.core.ResourcesList(s.T().Context(), lowercasePod, "test-namespace", api.ListOptions{})
+		s.Require().NoError(err)
+		s.assertLastPath("/api/v1/namespaces/test-namespace/pods")
+	})
+	s.Run("delete", func() {
+		_ = s.core.ResourcesDelete(s.T().Context(), lowercasePod, "test-namespace", "test-pod", nil)
+		s.assertLastPath("/api/v1/namespaces/test-namespace/pods/test-pod")
+	})
+	s.Run("lowercase cluster-scoped kind still drops the namespace", func() {
+		_, err := s.core.ResourcesGet(s.T().Context(), &schema.GroupVersionKind{Version: "v1", Kind: "node"}, "test-namespace", "test-node")
+		s.Require().NoError(err)
+		s.assertLastPath("/api/v1/nodes/test-node")
+	})
 }
 
 func (s *ResourcesTestSuite) TestResourcesCreateOrUpdateClusterScopedResourceIgnoresNamespace() {
