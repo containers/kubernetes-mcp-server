@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -15,6 +16,7 @@ import (
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/discovery"
 )
 
 const (
@@ -205,10 +207,101 @@ func (c *Core) resourcesCreateOrUpdate(ctx context.Context, resources []*unstruc
 	return resources, nil
 }
 
+// APIResourceInfo describes one Kubernetes API resource type registered on
+// the cluster: its preferred apiVersion, kind, plural resource name, and
+// whether it's namespaced. Mirrors the fields `kubectl api-resources` shows.
+type APIResourceInfo struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	Namespaced bool   `json:"namespaced"`
+}
+
+// APIResourcesList returns the API resource types registered on the cluster,
+// using the server's preferred version for each kind -- the same data
+// `kubectl api-resources` shows. Unlike ResourcesList/ResourcesGet, callers
+// don't need to already know a kind's apiVersion; this is how they discover
+// it, including for CRDs the caller has no built-in knowledge of.
+//
+// When kindFilter is non-empty, only kinds whose name equals kindFilter
+// (case-insensitive) are returned; an empty kindFilter returns every
+// registered resource type. This function itself imposes no requirement on
+// kindFilter -- the api_resources_list tool handler is what makes it
+// mandatory, since an LLM caller dumping every API resource type on a
+// cluster with many CRDs into its own context is a token cost and a source
+// of confusion, not a useful default. The context-aware preferred discovery
+// call can return partial results alongside a non-nil error (e.g. one API
+// group temporarily unavailable, or a large CRD catalog slowing discovery -- see
+// containers/kubernetes-mcp-server#283); this returns whatever resources
+// were discovered together with that error rather than discarding them, so
+// callers can decide whether partial results are still useful.
+func (c *Core) APIResourcesList(ctx context.Context, kindFilter string) ([]APIResourceInfo, error) {
+	// Use the raw discovery client because the cached discovery client can
+	// remain stale after a CRD is installed outside this server. Resetting the
+	// RESTMapper below refreshes resource mapping only; it does not invalidate
+	// the discovery cache. Preferred discovery is intentional here: callers
+	// need one server-preferred top-level version per kind. A future use case
+	// that needs every served version or subresource can use a broader
+	// discovery method instead.
+	rawDiscoveryClient := c.RawDiscoveryClient()
+	var (
+		lists []*metav1.APIResourceList
+		err   error
+	)
+	if contextual, ok := rawDiscoveryClient.(discovery.ServerResourcesInterfaceWithContext); ok {
+		// Use the concrete client method when available: client-go wraps this
+		// method with its standard discovery retry behavior.
+		lists, err = contextual.ServerPreferredResourcesWithContext(ctx)
+	} else if aggregated, ok := rawDiscoveryClient.(discovery.AggregatedDiscoveryInterface); ok {
+		lists, err = discovery.ServerPreferredResourcesWithContext(
+			ctx,
+			discovery.ToAggregatedDiscoveryInterfaceWithContext(aggregated),
+		)
+	} else {
+		lists, err = discovery.ServerPreferredResourcesWithContext(
+			ctx,
+			discovery.ToDiscoveryInterfaceWithContext(rawDiscoveryClient),
+		)
+	}
+	resources := make([]APIResourceInfo, 0, len(lists))
+	for _, list := range lists {
+		if list == nil {
+			continue
+		}
+		for _, r := range list.APIResources {
+			if kindFilter != "" && !strings.EqualFold(r.Kind, kindFilter) {
+				continue
+			}
+			resources = append(resources, APIResourceInfo{
+				APIVersion: list.GroupVersion,
+				Kind:       r.Kind,
+				Name:       r.Name,
+				Namespaced: r.Namespaced,
+			})
+		}
+	}
+	return resources, err
+}
+
 func (c *Core) resourceFor(gvk *schema.GroupVersionKind) (*schema.GroupVersionResource, error) {
 	m, err := c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 	if err != nil {
-		return nil, err
+		if !meta.IsNoMatchError(err) {
+			return nil, err
+		}
+		// The RESTMapper builds and caches its full group/resource snapshot on
+		// first use and never refreshes it on its own -- resourcesCreateOrUpdate
+		// resets it, but only when a CustomResourceDefinition is applied
+		// through *this server's own* resources_create_or_update tool. A CRD
+		// installed any other way (kubectl, an operator, Helm, a different MCP
+		// client) after the mapper was already warmed left every other
+		// resource tool permanently unable to find it without a server
+		// restart. Reset once and retry so a fresh CRD resolves without one.
+		c.RESTMapper().Reset()
+		m, err = c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &m.Resource, nil
 }
