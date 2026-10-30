@@ -394,14 +394,14 @@ func pipelineRunEventTargets(pipelineRunName string, pipelineRun metav1.Object, 
 	}
 
 	if pipelineRun != nil && pipelineRun.GetUID() != "" {
-		add(pipelineEventTarget{kind: "PipelineRun", name: pipelineRunName, uid: pipelineRun.GetUID()})
+		add(pipelineEventTarget{kind: pipelineRunKind, name: pipelineRunName, uid: pipelineRun.GetUID()})
 	}
 	for i := range taskRuns {
 		if pipelineRun != nil && !metav1.IsControlledBy(&taskRuns[i], pipelineRun) {
 			continue
 		}
 		if taskRuns[i].UID != "" {
-			add(pipelineEventTarget{kind: "TaskRun", name: taskRuns[i].Name, uid: taskRuns[i].UID})
+			add(pipelineEventTarget{kind: taskRunKind, name: taskRuns[i].Name, uid: taskRuns[i].UID})
 		}
 		add(pipelineEventTarget{kind: "Pod", name: taskRuns[i].Status.PodName})
 	}

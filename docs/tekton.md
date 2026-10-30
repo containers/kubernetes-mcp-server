@@ -8,6 +8,8 @@ Enable it with:
 toolsets = ["core", "config", "tekton"]
 ```
 
+When `experimental_enable_target_compatibility_tool_filters` is enabled, the server advertises each Tekton tool only when one target serves every `tekton.dev/v1` kind that tool requires, or when discovery cannot determine availability. Resource changes on any target automatically refresh the advertised tools. This compatibility filter applies to tools, not to the `pipeline-troubleshoot` prompt.
+
 ## PipelineRun operations
 
 - `tekton_pipeline_start` starts a Pipeline by creating a PipelineRun.
