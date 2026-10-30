@@ -45,8 +45,9 @@ func (c *TempoClient) doRequest(req *http.Request) (body string, err error) {
 		return "", err
 	}
 
-	// Use LLM-friendly format
-	req.Header.Set("Accept", "application/vnd.grafana.llm")
+	// There may be a reverse proxy in front of Tempo, which redacts sensitive fields and
+	// expects JSON responses (e.g. observatorium/api with query RBAC enabled).
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
