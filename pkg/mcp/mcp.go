@@ -74,7 +74,9 @@ func (c *Configuration) isToolApplicable(ctx context.Context) ToolFilter {
 		if c.DisableDestructive.Get() && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
 			return false
 		}
-		if c.EnabledTools.Get() != nil && !slices.Contains(c.EnabledTools.Get(), tool.Tool.Name) {
+		if c.EnabledTools.Get() != nil &&
+			!slices.Contains(c.EnabledTools.Get(), tool.Tool.Name) &&
+			!slices.Contains(c.OptInTools.Get(), tool.Tool.Name) {
 			return false
 		}
 		if c.DisabledTools.Get() != nil && slices.Contains(c.DisabledTools.Get(), tool.Tool.Name) {
@@ -460,7 +462,7 @@ func (s *Server) collectApplicableTools(ctx context.Context, cfg *Configuration)
 	filter := CompositeFilter(
 		cfg.isToolApplicable(ctx),
 		ShouldIncludeTargetListTool(s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
-		ShouldIncludeConfigurationViewTool(s.httpTransport, cfg.EnabledTools.Get()),
+		ShouldIncludeConfigurationViewTool(s.httpTransport, slices.Concat(cfg.EnabledTools.Get(), cfg.OptInTools.Get())),
 	)
 	mutator := ComposeMutators(
 		WithTargetParameter(s.p.GetDefaultTarget(), s.p.GetTargetParameterName(), s.p.IsMultiTarget()),
