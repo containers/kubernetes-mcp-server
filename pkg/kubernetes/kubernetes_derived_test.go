@@ -323,7 +323,7 @@ func (s *DerivedTestSuite) TestKubeConfigContext() {
 		kubeconfigPath := filepath.Join(s.T().TempDir(), "config")
 		s.Require().NoError(os.WriteFile(kubeconfigPath, []byte(content), 0644))
 		return test.Must(config.ReadToml(s.T().Context(), []byte(`
-			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\`)+`"
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
 		`)))
 	}
 	ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
