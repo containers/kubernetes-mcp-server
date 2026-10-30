@@ -11,6 +11,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -58,20 +59,42 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 			return newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
 		},
 	}
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		provider, err := tc()
 		s.Require().NoError(err, "Expected no error from provider creation")
+		group := fmt.Sprintf("alex-%d.example.com", i)
 
 		s.Run("With provider "+reflect.TypeOf(provider).String(), func() {
 			callback, waitForCallback := CallbackWaiter()
 			provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
+			targets := []string{provider.GetDefaultTarget()}
+			if provider.IsMultiTarget() {
+				targets = append(targets, "context-1")
+			}
+			clients := make(map[string]*Kubernetes, len(targets))
+			for _, target := range targets {
+				k, err := provider.GetDerivedKubernetes(s.T().Context(), target)
+				s.Require().NoError(err, "Expected no error from GetDerivedKubernetes for target %q", target)
+				_, err = k.RESTMapper().KindFor(schema.GroupVersionResource{Version: "v1", Resource: "pods"})
+				s.Require().NoError(err, "Expected the REST mapper of target %q to resolve resources discovered at startup", target)
+				clients[target] = k
+			}
 			s.Run("Reloads provider on cluster changes", func() {
-				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "alex.example.com/v1"})
+				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{
+					GroupVersion: group + "/v1",
+					APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}}},
+				})
 
 				s.Require().NoError(waitForCallback(5 * time.Second))
-				// Provider-wise the watcher.ClusterState which triggers the callback has no effect.
-				// We might consider removing it at some point? (20251202)
 			})
+			for target, k := range clients {
+				s.Run(fmt.Sprintf("Resolves resources of the API group added after startup for target %q", target), func() {
+					s.Eventually(func() bool {
+						_, err := k.RESTMapper().KindFor(schema.GroupVersionResource{Group: group, Version: "v1", Resource: "widgets"})
+						return err == nil
+					}, 5*time.Second, 50*time.Millisecond, "Expected the REST mapper to resolve the new API group after the cluster state change")
+				})
+			}
 		})
 	}
 }
