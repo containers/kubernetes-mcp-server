@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: loki-label-names
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: logs
+    suite: obs
+    requires: obs
+    toolType: exploration
+  description: |
+    Tests discovery workflow: loki_list_instances then loki_label_names with tenant
+    network on the obs-loki stack (openshift-network mode).
+spec:
+  prompt:
+    inline: |
+      For LokiStack obs-loki in namespace obs-loki, tenant network, what
+      label names are available for writing LogQL queries?
+  verify:
+    - llmJudge:
+        contains: "SrcK8S_Namespace"
+    - llmJudge:
+        contains: "DstK8S_Namespace"

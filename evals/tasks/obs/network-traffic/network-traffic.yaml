@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "network-traffic"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can discover network-related metrics and query them to find
+    which pods are receiving the most network traffic.
+spec:
+  verify:
+    - llmJudge:
+        contains: "container_network_receive_bytes_total"
+    - llmJudge:
+        contains: "pod"
+  prompt:
+    inline: |
+      Which pods are receiving the most network traffic?
+      Use Prometheus metrics and include the metric name and PromQL query you used.

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -118,20 +119,6 @@ func (s *ConsoleScreenshotSuite) TestSuccess() {
 		_, _, err := Screenshot(s.ctx, dyn, cfg, "default", "test-vm")
 		s.Require().NoError(err)
 	})
-
-	s.Run("accepts a screenshot exactly at the size limit", func() {
-		padded := make([]byte, ConsoleMaxScreenshotBytes)
-		copy(padded, s.validPNG()) // valid PNG header, trailing zero padding tolerated by DecodeConfig
-		cfg := s.screenshotTestServer(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write(padded)
-		})
-		dyn := newFakeDynamicClient(newTestVMI("default", "test-vm", "Running", nil))
-
-		data, _, err := Screenshot(s.ctx, dyn, cfg, "default", "test-vm")
-		s.Require().NoError(err)
-		s.Len(data, ConsoleMaxScreenshotBytes)
-	})
 }
 
 func (s *ConsoleScreenshotSuite) TestVMIValidation() {
@@ -177,14 +164,26 @@ func (s *ConsoleScreenshotSuite) TestVMIValidation() {
 }
 
 func (s *ConsoleScreenshotSuite) TestScreenshotResponseErrors() {
-	s.Run("rejects an oversized screenshot", func() {
+	s.Run("returns the backend response cap error", func() {
 		cfg := s.screenshotTestServer(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write(make([]byte, ConsoleMaxScreenshotBytes+1))
+			_, _ = w.Write(s.validPNG())
+		})
+		cfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+			return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				resp, err := rt.RoundTrip(req)
+				if err != nil || resp == nil || resp.Body == nil {
+					return resp, err
+				}
+				resp.Body = kubernetes.LimitResponseBody(resp.Body, 8)
+				return resp, nil
+			})
 		})
 		dyn := newFakeDynamicClient(newTestVMI("default", "test-vm", "Running", nil))
 		_, _, err := Screenshot(s.ctx, dyn, cfg, "default", "test-vm")
-		s.requireConsoleCode(err, ConsoleCodeScreenshotTooLarge)
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		s.Require().ErrorAs(err, &tooLarge)
+		s.Equal(int64(8), tooLarge.Limit)
 	})
 
 	s.Run("rejects an empty response", func() {
@@ -215,6 +214,10 @@ func (s *ConsoleScreenshotSuite) TestScreenshotResponseErrors() {
 		s.requireConsoleCode(err, ConsoleCodePermissionDenied)
 	})
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestConsoleScreenshotSuite(t *testing.T) {
 	suite.Run(t, new(ConsoleScreenshotSuite))

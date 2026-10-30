@@ -1,0 +1,24 @@
+kind: Eval
+apiVersion: mcpchecker/v1alpha1
+metadata:
+  name: "config-multicluster"
+  description: "Config multicluster evaluations for Kubernetes MCP Server"
+config:
+  defaultTaskLimits:
+    timeout: 5m
+  agent:
+    type: "file"
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+  taskSets:
+    - glob: ../../tasks/config/multicluster/*/*.yaml
+      labelSelector:
+        suite: config
+        multicluster: "true"

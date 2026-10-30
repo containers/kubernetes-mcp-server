@@ -337,8 +337,7 @@ func (s *HelmSuite) TestHelmUninstallDenied() {
 func (s *HelmSuite) TestHelmListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("helm_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -354,6 +353,53 @@ func (s *HelmSuite) TestHelmListForbidden() {
 			s.Contains(logNotification.Data, "Permission denied", "log message should indicate permission denied")
 		})
 	})
+}
+
+func (s *HelmSuite) TestHelmListPagination() {
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	for _, name := range []string{"release-a", "release-b"} {
+		_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), helmReleaseSecret(name), metav1.CreateOptions{})
+		s.Require().NoError(err)
+	}
+	s.InitMcpClient()
+
+	s.Run("returns the first release and the next offset", func() {
+		toolResult, err := s.CallTool("helm_list", map[string]interface{}{"limit": 1})
+		s.Require().NoError(err)
+		s.Require().False(toolResult.IsError)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.Contains(text, "offset=1")
+		var decoded []map[string]interface{}
+		s.Require().NoError(yaml.Unmarshal([]byte(text), &decoded))
+		s.Require().Len(decoded, 1)
+		s.Equal("release-a", decoded[0]["name"])
+	})
+	s.Run("returns the second release from that offset", func() {
+		toolResult, err := s.CallTool("helm_list", map[string]interface{}{"limit": 1, "offset": 1})
+		s.Require().NoError(err)
+		s.Require().False(toolResult.IsError)
+		var decoded []map[string]interface{}
+		s.Require().NoError(yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Require().Len(decoded, 1)
+		s.Equal("release-b", decoded[0]["name"])
+	})
+	s.Run("rejects a negative limit", func() {
+		toolResult, err := s.CallTool("helm_list", map[string]interface{}{"limit": -1})
+		s.Require().NoError(err)
+		s.True(toolResult.IsError)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "limit must be greater than or equal to 0")
+	})
+}
+
+func helmReleaseSecret(name string) *corev1.Secret {
+	payload := base64.StdEncoding.EncodeToString([]byte(`{"name":"` + name + `","info":{"status":"deployed"}}`))
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "sh.helm.release.v1." + name,
+			Labels: map[string]string{"owner": "helm", "name": name},
+		},
+		Data: map[string][]byte{"release": []byte(payload)},
+	}
 }
 
 func clearHelmReleases(ctx context.Context, kc *kubernetes.Clientset) {

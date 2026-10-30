@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "prometheus-wal-size"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can query the current Prometheus WAL storage size using
+    the prometheus_tsdb_wal_storage_size_bytes metric.
+spec:
+  verify:
+    - llmJudge:
+        contains: "prometheus_tsdb_wal_storage_size_bytes"
+  prompt:
+    inline: |
+      What is the current storage size of the Prometheus WAL?
+      Include the Prometheus metric name and PromQL query you used.

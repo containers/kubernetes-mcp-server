@@ -26,6 +26,21 @@ const (
 	// set but rate_limit_burst is not specified (zero value).
 	DefaultRateLimitBurst = 10
 
+	// DefaultMaxInFlight is the default number of tools/call, prompts/get, and
+	// resources/read handlers that may run at once in this process.
+	// 0 disables the limit.
+	DefaultMaxInFlight = 64
+
+	// DefaultMaxResultBytes is the default cap on one tool, prompt, or
+	// resource result. 0 disables the limit.
+	DefaultMaxResultBytes = 16 << 20
+
+	// DefaultMaxBackendResponseBytes is the default cap on one Kubernetes,
+	// Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager response,
+	// and on the combined stdout and stderr retained by one pods_exec.
+	// 0 disables the limit.
+	DefaultMaxBackendResponseBytes = 4 << 20
+
 	extensionToolsetTable  = "toolset_configs"
 	extensionProviderTable = "cluster_provider_configs"
 )
@@ -228,6 +243,18 @@ type Config struct {
 	MetricsPort Option[string]
 	// ListOutput is the output format for resource list operations (yaml or table).
 	ListOutput Option[string]
+	// MaxBackendResponseBytes is the maximum number of bytes read from one
+	// Kubernetes API, Kiali, NetObserv, Loki, Tempo, Prometheus, or
+	// Alertmanager response. pods_exec counts stdout and stderr together
+	// against the same limit. 0 disables the limit.
+	MaxBackendResponseBytes Option[int64]
+	// MaxInFlight is the maximum number of tools/call, prompts/get, and
+	// resources/read handlers running in this process. 0 disables the limit.
+	MaxInFlight Option[int]
+	// MaxResultBytes is the maximum size of one tool, prompt, or resource
+	// result. For a tool, the size is len(Content) plus the JSON size of
+	// StructuredContent when that field is set. 0 disables the limit.
+	MaxResultBytes Option[int64]
 	// AppsEnabled enables MCP Apps UI resources for tools that declare an app.
 	// Defaults to false so existing MCP clients retain their current behavior.
 	AppsEnabled Option[bool]
@@ -365,7 +392,7 @@ type Config struct {
 	// Internal: which file last set toolset_configs
 	toolsetConfigsSource Source
 
-	// Internal: the config.toml directory, to help resolve relative file paths
+	// Internal: the directory relative file paths resolve against (see ConfigDirPath)
 	configDirPath string
 	// Internal: known provider strategies, set via WithProviderStrategies
 	providerStrategies []string
@@ -398,6 +425,24 @@ func newConfig() *Config {
 		BindAddress: opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
 		MetricsPort: opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
 		ListOutput:  opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		MaxBackendResponseBytes: opt("max_backend_response_bytes", int64(DefaultMaxBackendResponseBytes)).reload().validate(func(v int64) error {
+			if v < 0 {
+				return fmt.Errorf("max_backend_response_bytes must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max bytes of one backend response (Kubernetes, Kiali, NetObserv, Loki, Tempo, Prometheus, Alertmanager; 0 disables)"),
+		MaxInFlight: opt("max_in_flight", DefaultMaxInFlight).reload().validate(func(v int) error {
+			if v < 0 {
+				return fmt.Errorf("max_in_flight must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max concurrent tools/call, prompts/get, and resources/read (0 disables)"),
+		MaxResultBytes: opt("max_result_bytes", int64(DefaultMaxResultBytes)).reload().validate(func(v int64) error {
+			if v < 0 {
+				return fmt.Errorf("max_result_bytes must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max bytes of one tool, prompt, or resource result (0 disables)"),
 		AppsEnabled: opt("apps_enabled", false).desc("Enable MCP Apps UI resources (requires restart)"),
 		Stateless:   opt("stateless", false).desc("Run without tool/prompt change notifications"),
 		DisableLocalhostProtection: opt("disable_localhost_protection", false).
@@ -491,9 +536,10 @@ func (c *Config) tokenExchangeHasNonDefault() bool {
 	return found
 }
 
-// ConfigDirPath returns the directory of the main config file (or the drop-in
-// dir when --config-dir is used alone). Used to resolve relative paths in
-// extension parsers (e.g. Kiali CA files).
+// ConfigDirPath returns the directory of the main config file, the working
+// directory when the main config is read from stdin (--config -), or the
+// drop-in dir when --config-dir is used alone. Used to resolve relative paths
+// in extension parsers (e.g. Kiali CA files).
 func (c *Config) ConfigDirPath() string { return c.configDirPath }
 
 // ResolveClusterAuthMode returns the effective cluster auth mode.
@@ -625,21 +671,44 @@ func applyReadOpts(opts []ReadConfigOpt) loadSettings {
 // (only if that path is non-empty), then applies env.
 // Loading order: defaults → files → env. Empty dropInConfigDir means no drop-ins.
 func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadConfigOpt) (*Config, error) {
-	settings := applyReadOpts(opts)
-
 	var configFiles []string
 	var configDir string
-	logger := klogutil.FromContext(ctx)
-
 	if configPath != "" {
-		logger.V(2).Info("Loading main config", "path", configPath)
+		klogutil.FromContext(ctx).V(2).Info("Loading main config", "path", configPath)
 		configFiles = append(configFiles, configPath)
 		absPath, err := filepath.Abs(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve absolute path to config file: %w", err)
 		}
 		configDir = filepath.Dir(absPath)
+		if dropInConfigDir == "" {
+			if err := rejectStaleImplicitConfD(ctx, configDir); err != nil {
+				return nil, err
+			}
+		}
 	}
+	return read(ctx, nil, configFiles, configDir, dropInConfigDir, applyReadOpts(opts))
+}
+
+// ReadStdin is Read for a main config that was already read from stdin
+// (--config -): data is merged first, then the drop-ins from dropInConfigDir,
+// then env. There is no file to be relative to, so relative paths in data
+// resolve against the working directory.
+func ReadStdin(ctx context.Context, data []byte, dropInConfigDir string, opts ...ReadConfigOpt) (*Config, error) {
+	klogutil.FromContext(ctx).V(2).Info("Loading main config from stdin")
+	configDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve working directory: %w", err)
+	}
+	return read(ctx, data, nil, configDir, dropInConfigDir, applyReadOpts(opts))
+}
+
+// read merges the main config (stdinConfig or configFiles), the drop-ins from
+// dropInConfigDir and env. configDir is where relative paths resolve: the main
+// config's directory, the working directory for stdin, or empty when there is
+// no main config.
+func read(ctx context.Context, stdinConfig []byte, configFiles []string, configDir, dropInConfigDir string, settings loadSettings) (*Config, error) {
+	logger := klogutil.FromContext(ctx)
 
 	if dropInConfigDir != "" {
 		absDropIn, err := filepath.Abs(dropInConfigDir)
@@ -661,13 +730,9 @@ func Read(ctx context.Context, configPath, dropInConfigDir string, opts ...ReadC
 			logger.V(2).Info("Loading drop-in config file(s)", "num_config_files", len(dropInFiles), "config_dir", dropInConfigDir)
 		}
 		configFiles = append(configFiles, dropInFiles...)
-	} else if configDir != "" {
-		if err := rejectStaleImplicitConfD(ctx, configDir); err != nil {
-			return nil, err
-		}
 	}
 
-	merged, sources, err := mergeTOMLFiles(ctx, configFiles)
+	merged, sources, err := mergeTOMLFiles(ctx, stdinConfig, configFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -757,23 +822,38 @@ func getSortedConfigFiles(ctx context.Context, dir string) ([]string, error) {
 }
 
 // mergeTOMLFiles reads and deep-merges TOML files in order, with later files
-// overriding earlier ones. sources maps each dotted key to the file that last set it.
-func mergeTOMLFiles(ctx context.Context, files []string) (map[string]any, map[string]string, error) {
+// overriding earlier ones. A main config read from stdin is merged first.
+// sources maps each dotted key to the file that last set it.
+func mergeTOMLFiles(ctx context.Context, stdinConfig []byte, files []string) (map[string]any, map[string]string, error) {
 	merged := map[string]any{}
 	sources := map[string]string{}
+	if len(stdinConfig) > 0 {
+		if err := mergeTOML(merged, sources, stdinConfig, string(SourceStdin)); err != nil {
+			return nil, nil, err
+		}
+	}
 	for _, file := range files {
 		klogutil.FromContext(ctx).V(3).Info("Merging config", "file_name", filepath.Base(file))
 		data, err := os.ReadFile(file)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to read config %s: %w", file, err)
 		}
-		dropIn := make(map[string]any)
-		if _, err = toml.NewDecoder(bytes.NewReader(data)).Decode(&dropIn); err != nil {
-			return nil, nil, fmt.Errorf("failed to decode config %s: %w", file, err)
+		if err := mergeTOML(merged, sources, data, file); err != nil {
+			return nil, nil, err
 		}
-		deepMerge(merged, dropIn, file, sources, "")
 	}
 	return merged, sources, nil
+}
+
+// mergeTOML decodes data and deep-merges it into merged, recording src as the
+// origin of every key it sets.
+func mergeTOML(merged map[string]any, sources map[string]string, data []byte, src string) error {
+	doc := make(map[string]any)
+	if _, err := toml.NewDecoder(bytes.NewReader(data)).Decode(&doc); err != nil {
+		return fmt.Errorf("failed to decode config %s: %w", src, err)
+	}
+	deepMerge(merged, doc, src, sources, "")
+	return nil
 }
 
 // deepMerge recursively merges src into dst.

@@ -68,6 +68,7 @@ func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 	serverPrompt := api.ServerPrompt{
 		Prompt: config.Prompt{
 			Name:        "test-prompt",
+			Title:       "Test Prompt",
 			Description: "Test description",
 			Arguments: []config.PromptArgument{
 				{
@@ -104,6 +105,7 @@ func TestServerPromptToGoSdkPrompt_Conversion(t *testing.T) {
 	require.NotNil(t, handler)
 
 	assert.Equal(t, "test-prompt", mcpPrompt.Name)
+	assert.Equal(t, "Test Prompt", mcpPrompt.Title)
 	assert.Equal(t, "Test description", mcpPrompt.Description)
 	require.Len(t, mcpPrompt.Arguments, 2)
 

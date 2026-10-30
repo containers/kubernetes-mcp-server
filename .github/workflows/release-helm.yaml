@@ -38,19 +38,23 @@ jobs:
       run: |
         BASE_VERSION=$(make helm-print-chart-version)
 
-        # Use development version for workflow_dispatch, stable version for tags
+        # Use development version for workflow_dispatch, stable version for tags.
+        # Stable charts are published with the release tag as their version (tag v0.0.70 -> chart 0.0.70),
+        # so every release publishes a new version that Helm and GitOps tools, which cache charts by version, pick up.
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          APP_VERSION=$(make print-git-tag-version)
           GIT_SHORT_SHA=$(git rev-parse --short HEAD)
           CHART_VERSION="${BASE_VERSION}-dev.${GIT_SHORT_SHA}"
           echo "::notice::Creating development release: ${CHART_VERSION}"
         else
-          CHART_VERSION="${BASE_VERSION}"
+          APP_VERSION="${GITHUB_REF_NAME#v}"
+          CHART_VERSION="${APP_VERSION}"
+          sed -i "s/^  version: latest$/  version: ${GITHUB_REF_NAME}/" charts/kubernetes-mcp-server/values.yaml
           echo "::notice::Creating stable release: ${CHART_VERSION}"
         fi
         echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
         echo "Chart version: $CHART_VERSION"
 
-        APP_VERSION=$(make print-git-tag-version)
         echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
         echo "App version: $APP_VERSION"
 
@@ -72,6 +76,7 @@ jobs:
     - name: Package and push Helm chart
       env:
         HELM_CHART_VERSION: ${{ steps.versions.outputs.chart_version }}
+        GIT_TAG_VERSION: ${{ steps.versions.outputs.app_version }}
       run: make helm-push
 
     - name: Verify chart installation

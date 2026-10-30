@@ -64,6 +64,15 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("LogLevel is 0", func() {
 		s.Equal(0, base.LogLevel.Get())
 	})
+	s.Run("MaxBackendResponseBytes is 4MiB", func() {
+		s.Equal(int64(4<<20), base.MaxBackendResponseBytes.Get())
+	})
+	s.Run("MaxInFlight is 64", func() {
+		s.Equal(64, base.MaxInFlight.Get())
+	})
+	s.Run("MaxResultBytes is 16MiB", func() {
+		s.Equal(int64(16<<20), base.MaxResultBytes.Get())
+	})
 }
 
 func (s *ConfigSuite) TestReadTomlWithBaseDefault() {
@@ -104,7 +113,97 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.False(paths["apps_enabled"].Reloadable)
 	s.False(paths["disable_localhost_protection"].Reloadable)
 	s.True(paths["log_level"].Reloadable)
+	s.Contains(paths, "max_backend_response_bytes")
+	s.True(paths["max_backend_response_bytes"].Reloadable)
+	s.Contains(paths, "max_in_flight")
+	s.True(paths["max_in_flight"].Reloadable)
+	s.Contains(paths, "max_result_bytes")
+	s.True(paths["max_result_bytes"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
+}
+
+func (s *ConfigSuite) TestMaxBackendResponseBytes() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 32`))
+		s.Require().NoError(err)
+		s.Equal(int64(32), cfg.MaxBackendResponseBytes.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 0`))
+		s.Require().NoError(err)
+		s.Equal(int64(0), cfg.MaxBackendResponseBytes.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "max_backend_response_bytes must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 4194304`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`max_backend_response_bytes = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(int64(2), next.MaxBackendResponseBytes.Get())
+	})
+}
+
+func (s *ConfigSuite) TestMaxInFlight() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 8`))
+		s.Require().NoError(err)
+		s.Equal(8, cfg.MaxInFlight.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 0`))
+		s.Require().NoError(err)
+		s.Equal(0, cfg.MaxInFlight.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_in_flight = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "max_in_flight must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 64`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`max_in_flight = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(2, next.MaxInFlight.Get())
+	})
+}
+
+func (s *ConfigSuite) TestMaxResultBytes() {
+	s.Run("reads a toml value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_result_bytes = 32`))
+		s.Require().NoError(err)
+		s.Equal(int64(32), cfg.MaxResultBytes.Get())
+	})
+	s.Run("zero is valid and disables the limit", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_result_bytes = 0`))
+		s.Require().NoError(err)
+		s.Equal(int64(0), cfg.MaxResultBytes.Get())
+		s.NoError(cfg.Validate(s.T().Context()))
+	})
+	s.Run("rejects a negative value", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`max_result_bytes = -1`))
+		s.Require().NoError(err)
+		err = cfg.Validate(s.T().Context())
+		s.Require().Error(err)
+		s.Contains(err.Error(), "max_result_bytes must not be negative")
+	})
+	s.Run("reload applies a new limit", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`max_result_bytes = 16777216`))
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`max_result_bytes = 2`), WithPrevious(prev))
+		s.Require().NoError(err)
+		s.Equal(int64(2), next.MaxResultBytes.Get())
+	})
 }
 
 func (s *ConfigSuite) TestConfigPathEnvName() {
@@ -854,6 +953,74 @@ func (s *ConfigSuite) TestRelativeConfigAndConfigDirAreIndependent() {
 	s.Run("resolves both flags against the working directory", func() {
 		s.Equal(7, config.LogLevel.Get())
 		s.Equal("3333", config.Port.Get())
+	})
+}
+
+func (s *ConfigSuite) TestReadStdin() {
+	s.Run("reads the main config from stdin", func() {
+		cfg, err := ReadStdin(s.T().Context(), []byte(`
+			port = "8080"
+			read_only = true
+		`), "")
+		s.Require().NoError(err)
+		s.Run("applies port", func() {
+			s.Equal("8080", cfg.Port.Get())
+		})
+		s.Run("applies read_only", func() {
+			s.True(cfg.ReadOnly.Get())
+		})
+		s.Run("records stdin as the source", func() {
+			s.Equal(SourceStdin, cfg.Port.Source())
+		})
+	})
+
+	s.Run("drop-ins override stdin", func() {
+		dropInDir := s.T().TempDir()
+		dropIn := filepath.Join(dropInDir, "10-override.toml")
+		s.Require().NoError(os.WriteFile(dropIn, []byte(`list_output = "yaml"`), 0644))
+		cfg, err := ReadStdin(s.T().Context(), []byte(`
+			port = "8080"
+			list_output = "table"
+		`), dropInDir)
+		s.Require().NoError(err)
+		s.Run("keeps values only set on stdin", func() {
+			s.Equal("8080", cfg.Port.Get())
+		})
+		s.Run("drop-in wins for keys set in both", func() {
+			s.Equal("yaml", cfg.ListOutput.Get())
+		})
+		s.Run("records the drop-in as the source", func() {
+			s.Equal(Source(dropIn), cfg.ListOutput.Source())
+		})
+	})
+
+	s.Run("relative paths resolve against the working directory", func() {
+		s.T().Chdir(s.T().TempDir())
+		wd, err := os.Getwd()
+		s.Require().NoError(err)
+		cfg, err := ReadStdin(s.T().Context(), []byte(`port = "8080"`), s.T().TempDir())
+		s.Require().NoError(err)
+		s.Equal(wd, cfg.ConfigDirPath(), "not the --config-dir directory")
+	})
+
+	s.Run("conf.d in the working directory is not checked", func() {
+		s.T().Chdir(s.T().TempDir())
+		s.Require().NoError(os.Mkdir("conf.d", 0755))
+		s.Require().NoError(os.WriteFile(filepath.Join("conf.d", "10-override.toml"), []byte(`port = "9090"`), 0644))
+		cfg, err := ReadStdin(s.T().Context(), []byte(`port = "8080"`), "")
+		s.Require().NoError(err)
+		s.Equal("8080", cfg.Port.Get())
+	})
+
+	s.Run("invalid TOML on stdin", func() {
+		cfg, err := ReadStdin(s.T().Context(), []byte(`port = "unclosed string`), "")
+		s.Run("names stdin in the error", func() {
+			s.Require().Error(err)
+			s.Contains(err.Error(), string(SourceStdin))
+		})
+		s.Run("returns nil config", func() {
+			s.Nil(cfg)
+		})
 	})
 }
 

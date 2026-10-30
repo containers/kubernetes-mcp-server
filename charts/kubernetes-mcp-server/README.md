@@ -23,6 +23,10 @@ Install the Chart using the following command from the root of this directory:
 helm upgrade -i -n kubernetes-mcp-server --create-namespace kubernetes-mcp-server oci://ghcr.io/containers/charts/kubernetes-mcp-server --set ingress.host=<hostname>
 ```
 
+### Chart versions
+
+Each release publishes the chart with the release version as its chart version (release `v0.0.70` → chart `0.0.70`, app version `0.0.70`). Earlier releases all republished the chart as `0.1.0`, which sorts above the `0.0.x` charts, so installs without `--version` and semver ranges such as `>=0.1.0` keep resolving to `0.1.0` until the `0.1.1` release; pin `--version` to the release you want.
+
 ### Gateway API (HTTPRoute)
 
 If your platform uses [Gateway API](https://gateway.networking.k8s.io/) instead of classic Ingress, set `ingress.enabled` to `false` and enable `httpRoute` with `parentRefs`, `rules` (optional `matches`, `filters`, and `timeouts` are passed through), and optionally `hostnames`. The chart adds `backendRefs` pointing at the release `Service` and `service.port`. `parentRefs` and `hostnames` are rendered with `tpl` on their YAML so you can reference `Release` metadata in values. `httpRoute.parentRefs` is required when `httpRoute.enabled=true`; leaving it empty fails at `helm template` / `helm install` time.
@@ -45,6 +49,26 @@ httpRoute:
         - path:
             type: PathPrefix
             value: /
+```
+
+### Configured Prompts
+
+Prompts declared under `config.prompts` are rendered into the server's `config.toml` through Helm's `tpl`, so `{{argument}}` placeholders in message content must be escaped as `` {{`{{argument}}`}} `` or Helm tries to evaluate them as template actions. See [docs/prompts.md](../../docs/prompts.md) for the prompt schema.
+
+```yaml
+config:
+  prompts:
+    - name: check-pod-logs
+      title: Check Pod Logs
+      description: Show the logs for a pod
+      arguments:
+        - name: name
+          required: true
+        - name: namespace
+          required: false
+      messages:
+        - role: user
+          content: 'Show me the logs for pod {{`{{name}}`}} in {{`{{namespace}}`}}'
 ```
 
 ### Optimized OpenShift Deployment

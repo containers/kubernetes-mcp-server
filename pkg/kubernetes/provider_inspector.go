@@ -2,10 +2,15 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 )
@@ -38,6 +43,30 @@ func (p *providerInspector) Unstructured() api.AggregateUnstructured {
 	return p
 }
 
+func (p *providerInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, p.provider, func(ctx context.Context, target string) (string, error) {
+		client, err := p.provider.GetDerivedKubernetes(ctx, target)
+		if err != nil {
+			return "", err
+		}
+
+		cfg := client.RESTConfig()
+		if cfg.BearerToken != "" {
+			return cfg.BearerToken, nil
+		}
+		if cfg.BearerTokenFile != "" {
+			contents, err := os.ReadFile(cfg.BearerTokenFile)
+			if err != nil {
+				return "", fmt.Errorf("failed to read bearer token file: %w", err)
+			}
+			if token := strings.TrimSpace(string(contents)); token != "" {
+				return token, nil
+			}
+		}
+		return "", errors.New("no bearer token available for target")
+	})
+}
+
 func (p *providerInspector) Resource(resource schema.GroupVersionResource) api.AggregateNamespaceableResourceInterface {
 	return &providerNamespaceableResource{
 		provider: p.provider,
@@ -55,9 +84,10 @@ func (p *providerInspector) ServerResourcesForGroupVersion(
 			return nil, err
 		}
 
-		// client-go discovery does not accept a context, so an Any/All short-circuit
-		// cannot cancel a ServerResourcesForGroupVersion request already in flight.
-		return client.discoveryClient.ServerResourcesForGroupVersion(groupVersion)
+		// ServerResourcesForGroupVersion drops the context. The cached client
+		// implements the context-aware method, so cancellation aborts the request.
+		return discovery.ToDiscoveryInterfaceWithContext(client.DiscoveryClient()).
+			ServerResourcesForGroupVersionWithContext(ctx, groupVersion)
 	})
 }
 

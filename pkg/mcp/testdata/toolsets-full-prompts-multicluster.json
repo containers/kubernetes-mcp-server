@@ -137,6 +137,7 @@
       }
     ],
     "description": "Perform comprehensive health assessment of Kubernetes/OpenShift cluster",
-    "name": "cluster-health-check"
+    "name": "cluster-health-check",
+    "title": "Cluster Health Check"
   }
 ]

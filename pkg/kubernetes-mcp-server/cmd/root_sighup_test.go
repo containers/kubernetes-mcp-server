@@ -103,20 +103,16 @@ func (s *SIGHUPSuite) TearDownTest() {
 }
 
 func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions {
-	cfg, err := config.Read(s.T().Context(), configPath, configDir)
-	s.Require().NoError(err)
+	return s.initServer(configPath, configDir, nil)
+}
 
-	provider, err := kubernetes.NewProvider(s.T().Context(), cfg)
-	s.Require().NoError(err)
-	s.server, err = mcp.NewServer(s.T().Context(), mcp.Configuration{
-		Config: cfg,
-	}, provider)
-	s.Require().NoError(err)
-
+// initServer is InitServer with stdinConfig holding the main config that
+// Complete would have read from stdin for --config -.
+func (s *SIGHUPSuite) initServer(configPath, configDir string, stdinConfig []byte) *MCPServerOptions {
 	opts := &MCPServerOptions{
-		ConfigPath: configPath,
-		ConfigDir:  configDir,
-		Config:     cfg,
+		ConfigPath:  configPath,
+		ConfigDir:   configDir,
+		stdinConfig: stdinConfig,
 		IOStreams: genericiooptions.IOStreams{
 			Out:    s.logBuffer,
 			ErrOut: s.logBuffer,
@@ -126,6 +122,17 @@ func (s *SIGHUPSuite) InitServer(configPath, configDir string) *MCPServerOptions
 			s.reloadExited.Store(true)
 		},
 	}
+	cfg, err := opts.readConfig(s.T().Context())
+	s.Require().NoError(err)
+	opts.Config = cfg
+
+	provider, err := kubernetes.NewProvider(s.T().Context(), cfg)
+	s.Require().NoError(err)
+	s.server, err = mcp.NewServer(s.T().Context(), mcp.Configuration{
+		Config: cfg,
+	}, provider)
+	s.Require().NoError(err)
+
 	s.oauthState = oauth.NewState(&oauth.Snapshot{})
 
 	s.cfgState = config.NewConfigState(cfg)
@@ -379,6 +386,44 @@ func (s *SIGHUPSuite) TestSIGHUPWithConfigDirOnly() {
 		s.Require().Eventually(func() bool {
 			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
 		}, 2*time.Second, 50*time.Millisecond)
+	})
+}
+
+// TestSIGHUPReappliesStdinConfigAndReloadsDropIns covers --config -, which only
+// runs in HTTP mode. It lives in this suite because it exercises the SIGHUP
+// handler alone; no transport is started.
+func (s *SIGHUPSuite) TestSIGHUPReappliesStdinConfigAndReloadsDropIns() {
+	// Drop-in hides helm, which the stdin config enables
+	dropInPath := filepath.Join(s.dropInConfigDir, "10-override.toml")
+	s.Require().NoError(os.WriteFile(dropInPath, []byte(`
+		toolsets = ["core", "config"]
+	`), 0o644))
+
+	_ = s.initServer(stdinConfigPath, s.dropInConfigDir, []byte(s.withKube(`
+		port = "18080"
+		toolsets = ["core", "config", "helm"]
+	`)))
+
+	s.Run("drop-in overrides the stdin config at startup", func() {
+		s.False(slices.Contains(s.server.GetEnabledTools(), "helm_list"))
+	})
+
+	// Remove the drop-in so toolsets fall back to the stdin config
+	s.Require().NoError(os.Remove(dropInPath))
+	s.Require().NoError(syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	s.Run("stdin toolsets apply after the drop-in is removed", func() {
+		s.Require().Eventually(func() bool {
+			return slices.Contains(s.server.GetEnabledTools(), "helm_list")
+		}, 2*time.Second, 50*time.Millisecond)
+	})
+	s.Run("reloaded config takes toolsets from stdin", func() {
+		// At startup the drop-in set toolsets, so only a successful reload
+		// (with port and kubeconfig still taken from stdin) stores this.
+		s.Equal(config.SourceStdin, s.cfgState.Load().Toolsets.Source())
+	})
+	s.Run("does not exit", func() {
+		s.False(s.reloadExited.Load())
 	})
 }
 

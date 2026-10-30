@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -15,12 +14,11 @@ import (
 // Kubernetes cluster. Used for in-cluster deployments or when multi-cluster
 // support is disabled.
 type singleClusterProvider struct {
-	mu                  sync.RWMutex
-	cfg                 *config.Config
-	strategy            string
-	manager             *Manager
-	kubeconfigWatcher   *watcher.Kubeconfig
-	clusterStateWatcher *watcher.ClusterState
+	mu       sync.RWMutex
+	cfg      *config.Config
+	strategy string
+	manager  *Manager
+	WatcherGroup
 }
 
 var _ Provider = &singleClusterProvider{}
@@ -39,6 +37,7 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 			cfg:      cfg,
 			strategy: strategy,
 		}
+		ret.SetReset(ret.reset)
 		if err := ret.reset(ctx); err != nil {
 			return nil, err
 		}
@@ -53,6 +52,10 @@ func (p *singleClusterProvider) reset(ctx context.Context) error {
 }
 
 func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
+	if err := p.ErrClosed(); err != nil {
+		return err
+	}
+
 	if p.cfg != nil && p.cfg.KubeConfig.Get() != "" && p.strategy == config.ClusterProviderInCluster {
 		return fmt.Errorf("kubeconfig file %s cannot be used with the in-cluster ClusterProviderStrategy",
 			p.cfg.KubeConfig.Get())
@@ -75,14 +78,14 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 		return err
 	}
 
-	p.Close()
 	if p.manager != nil {
 		p.manager.Close()
 	}
 	p.manager = manager
-	p.kubeconfigWatcher = watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
-	return nil
+	return p.Replace(
+		watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get()),
+		watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
+	)
 }
 
 func (p *singleClusterProvider) IsMultiTarget() bool {
@@ -133,26 +136,4 @@ func (p *singleClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
 
 func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
-}
-
-func (p *singleClusterProvider) WatchTargets(ctx context.Context, reload McpReloader) {
-	reloadWithReset := func() error {
-		return reload.Run(func() error {
-			if err := p.reset(ctx); err != nil {
-				return err
-			}
-			p.WatchTargets(ctx, reload)
-			return reload.ApplyToolsets()
-		})
-	}
-	p.kubeconfigWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
-}
-
-func (p *singleClusterProvider) Close() {
-	for _, w := range []watcher.Watcher{p.kubeconfigWatcher, p.clusterStateWatcher} {
-		if !reflect.ValueOf(w).IsNil() {
-			w.Close()
-		}
-	}
 }

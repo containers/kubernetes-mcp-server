@@ -1,0 +1,250 @@
+package kubernetes
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"sync"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+)
+
+// ErrBackendLimitUnavailable is returned when a call cannot read
+// max_backend_response_bytes from the live config.
+var ErrBackendLimitUnavailable = errors.New("max_backend_response_bytes is unavailable")
+
+// BackendTruncationNotice is appended when a read that keeps a partial result
+// hits max_backend_response_bytes.
+const BackendTruncationNotice = "\n[truncated: max_backend_response_bytes]\n"
+
+type skipBackendResponseLimitKey struct{}
+
+// SkipBackendResponseLimit returns a context whose requests are not subject to
+// max_backend_response_bytes. The caller has to read that response whole.
+func SkipBackendResponseLimit(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, skipBackendResponseLimitKey{}, true)
+}
+
+func skipBackendResponseLimit(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	skip, _ := ctx.Value(skipBackendResponseLimitKey{}).(bool)
+	return skip
+}
+
+// maxZeroReads bounds retries when a body Read returns (0, nil). That result
+// means "nothing happened, call again," not EOF. Past this many empty reads
+// the body fails closed, so an over-cap response is not accepted as complete.
+const maxZeroReads = 8
+
+// BackendResponseTooLargeError is returned when a response body exceeds
+// max_backend_response_bytes. The body is closed.
+type BackendResponseTooLargeError struct {
+	Limit int64
+}
+
+// AcceptTruncated returns body as text. A backend cap error becomes the bytes
+// already read plus BackendTruncationNotice and a nil error, with truncated
+// set. Any other error is returned with an empty string.
+func AcceptTruncated(body []byte, err error) (text string, truncated bool, outErr error) {
+	var tooLarge *BackendResponseTooLargeError
+	if errors.As(err, &tooLarge) {
+		return string(body) + BackendTruncationNotice, true, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return string(body), false, nil
+}
+
+func (e *BackendResponseTooLargeError) Error() string {
+	return fmt.Sprintf("response exceeded max_backend_response_bytes (%d)", e.Limit)
+}
+
+// BackendLimit returns max_backend_response_bytes from cfg.
+// A nil config fails closed.
+func BackendLimit(cfg *config.Config) (int64, error) {
+	if cfg == nil {
+		return 0, ErrBackendLimitUnavailable
+	}
+	return cfg.MaxBackendResponseBytes.Get(), nil
+}
+
+// IsResponseTooLarge reports whether err is *BackendResponseTooLargeError.
+func IsResponseTooLarge(err error) bool {
+	var tooLarge *BackendResponseTooLargeError
+	return errors.As(err, &tooLarge)
+}
+
+// ReadCapped reads body up to limit. An over-cap body returns
+// *BackendResponseTooLargeError and no bytes. limit <= 0 reads the whole body.
+// The caller closes body.
+func ReadCapped(body io.ReadCloser, limit int64) ([]byte, error) {
+	data, err := ReadLimited(body, limit)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// ReadLimited reads body up to limit and returns the bytes already read.
+// An over-cap body returns those bytes and *BackendResponseTooLargeError.
+// limit <= 0 reads the whole body. The caller closes body.
+func ReadLimited(body io.ReadCloser, limit int64) ([]byte, error) {
+	return io.ReadAll(LimitResponseBody(body, limit))
+}
+
+// LimitResponseBody allows exactly limit bytes. The next byte closes body and
+// returns *BackendResponseTooLargeError. limit <= 0 returns body unchanged.
+func LimitResponseBody(body io.ReadCloser, limit int64) io.ReadCloser {
+	if body == nil || limit <= 0 {
+		return body
+	}
+	return &limitedBody{rc: body, limit: limit}
+}
+
+type limitedBody struct {
+	rc     io.ReadCloser
+	limit  int64
+	read   int64
+	err    error
+	closed bool
+	mu     sync.Mutex
+}
+
+func (b *limitedBody) Read(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.err != nil {
+		return 0, b.err
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if b.read == b.limit {
+		return b.peek()
+	}
+	room := b.limit - b.read
+	if int64(len(p)) > room {
+		p = p[:room]
+	}
+	n, err := b.rc.Read(p)
+	b.read += int64(n)
+	if b.read < b.limit || err != nil {
+		return n, err
+	}
+	extra, peekErr := b.readByte()
+	if extra > 0 || peekErr == nil {
+		return n, b.fail()
+	}
+	if peekErr != io.EOF {
+		return n, peekErr
+	}
+	return n, nil
+}
+
+func (b *limitedBody) peek() (int, error) {
+	n, err := b.readByte()
+	if n > 0 || err == nil {
+		return 0, b.fail()
+	}
+	if err == io.EOF {
+		return 0, io.EOF
+	}
+	return 0, err
+}
+
+// readByte reads one byte, retrying a (0, nil) result. (0, nil) after
+// maxZeroReads means the reader made no progress.
+func (b *limitedBody) readByte() (int, error) {
+	var one [1]byte
+	for range maxZeroReads {
+		n, err := b.rc.Read(one[:])
+		if n > 0 || err != nil {
+			return n, err
+		}
+	}
+	return 0, nil
+}
+
+func (b *limitedBody) fail() error {
+	if b.err == nil {
+		b.err = &BackendResponseTooLargeError{Limit: b.limit}
+		b.closed = true
+		_ = b.rc.Close()
+	}
+	return b.err
+}
+
+func (b *limitedBody) Close() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return nil
+	}
+	b.closed = true
+	return b.rc.Close()
+}
+
+// backendResponseRoundTripper caps resp.Body using the live limit. Status 101
+// responses stay streaming. A request context from SkipBackendResponseLimit
+// is read whole. See docs/specs/memory-bounds.md#retention.
+type backendResponseRoundTripper struct {
+	delegate http.RoundTripper
+	limit    func() (int64, error)
+}
+
+func newBackendResponseRoundTripper(delegate http.RoundTripper, limit func() (int64, error)) http.RoundTripper {
+	return &backendResponseRoundTripper{delegate: delegate, limit: limit}
+}
+
+// NewBackendResponseRoundTripper caps resp.Body using limit.
+// Status 101 responses and SkipBackendResponseLimit requests are read whole.
+// limit is called on each request. A nil limit fails closed.
+func NewBackendResponseRoundTripper(delegate http.RoundTripper, limit func() (int64, error)) http.RoundTripper {
+	return newBackendResponseRoundTripper(delegate, limit)
+}
+
+// LiveBackendLimit reads BackendLimit on each call.
+func LiveBackendLimit(cfg *config.Config) func() (int64, error) {
+	return func() (int64, error) {
+		return BackendLimit(cfg)
+	}
+}
+
+// WrappedRoundTripper lets client-go unwrap this transport when closing idle connections.
+func (rt *backendResponseRoundTripper) WrappedRoundTripper() http.RoundTripper {
+	return rt.delegate
+}
+
+func (rt *backendResponseRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := rt.delegate.RoundTrip(req)
+	if err != nil || resp == nil || resp.Body == nil {
+		return resp, err
+	}
+	if resp.StatusCode == http.StatusSwitchingProtocols {
+		return resp, nil
+	}
+	if req != nil && skipBackendResponseLimit(req.Context()) {
+		return resp, nil
+	}
+	// Unreachable today: every constructor passes a limit func. The error is
+	// defense against a future bug that installs this wrapper without one.
+	if rt.limit == nil {
+		_ = resp.Body.Close()
+		return nil, ErrBackendLimitUnavailable
+	}
+	limit, limitErr := rt.limit()
+	if limitErr != nil {
+		_ = resp.Body.Close()
+		return nil, limitErr
+	}
+	resp.Body = LimitResponseBody(resp.Body, limit)
+	return resp, nil
+}

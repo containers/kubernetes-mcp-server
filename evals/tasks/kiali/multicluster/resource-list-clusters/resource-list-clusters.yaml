@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    multicluster: "true"
+    suite: kiali
+  name: "Discover Accessible Mesh Clusters"
+  category: "Resource Inspection"
+  description: "Lists the Istio mesh clusters that Kiali can access and identifies the home cluster."
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "home"
+    - llmJudge:
+        contains: "east"
+    - llmJudge:
+        contains: "west"
+  prompt:
+    inline: |
+      Which Istio mesh clusters can Kiali access in my service mesh?
+      List each mesh cluster name and indicate which one is the home cluster where Kiali is running.

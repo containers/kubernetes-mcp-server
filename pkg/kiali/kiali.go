@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,10 +14,12 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 type Kiali struct {
+	cfg                  *config.Config
 	bearerToken          string
 	kialiURL             string
 	kialiInsecure        bool
@@ -26,6 +27,25 @@ type Kiali struct {
 	tlsMinVersion        string
 	tlsCipherSuites      []string
 	requireTLS           func() bool
+}
+
+// bearerTokenFromRESTConfig returns the bearer token from an in-cluster or kubeconfig
+// REST config (inline token or projected service account token file).
+func bearerTokenFromRESTConfig(restConfig *rest.Config) string {
+	if restConfig == nil {
+		return ""
+	}
+	if token := strings.TrimSpace(restConfig.BearerToken); token != "" {
+		return token
+	}
+	if path := strings.TrimSpace(restConfig.BearerTokenFile); path != "" {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(contents))
+	}
+	return ""
 }
 
 // NewKiali creates a new Kiali instance
@@ -37,10 +57,11 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
 	kiali := &Kiali{
+		cfg:             cfg,
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
-		bearerToken:     kubernetes.BearerToken,
+		bearerToken:     bearerTokenFromRESTConfig(kubernetes),
 	}
 	if tc, ok := cfg.GetToolsetConfig("kiali"); ok {
 		if kc, ok := tc.(*Config); ok && kc != nil {
@@ -48,6 +69,9 @@ func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
 			kiali.kialiInsecure = kc.Insecure
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
+	}
+	if strings.TrimSpace(kiali.kialiURL) == "" {
+		kiali.kialiURL = getDiscoveredURL()
 	}
 	return kiali, nil
 }
@@ -165,13 +189,21 @@ func (k *Kiali) authorizationHeader() string {
 	return "Bearer " + token
 }
 
-// maxResponseBodySize is the maximum number of bytes read from a Kiali API
-// response. Responses exceeding this limit are truncated to prevent unbounded
-// memory consumption from a misbehaving or compromised upstream server.
-const maxResponseBodySize = 512 << 10 // 512 KiB
+func (k *Kiali) backendLimit() (int64, error) {
+	// Unreachable today: NewKiali rejects a nil config and stores it. The error
+	// is defense against a future bug that builds a Kiali without one.
+	if k == nil {
+		return kubernetes.BackendLimit(nil)
+	}
+	return kubernetes.BackendLimit(k.cfg)
+}
 
-// executeRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
+// ExecuteRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
 func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
+	limit, err := k.backendLimit()
+	if err != nil {
+		return "", err
+	}
 	ApiCallURL, err := k.validateAndGetURL(endpoint)
 	if err != nil {
 		return "", err
@@ -206,12 +238,12 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	respBody, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
+		if kubernetes.IsResponseTooLarge(err) {
+			return "", err
+		}
 		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-	if int64(len(respBody)) > maxResponseBodySize {
-		return "", fmt.Errorf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {

@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"errors"
 
@@ -508,4 +510,140 @@ func (s *RateLimitingSuite) TestDoubleCloseDoesNotPanic() {
 
 func TestRateLimiting(t *testing.T) {
 	suite.Run(t, new(RateLimitingSuite))
+}
+
+// inFlightCollector drops updates on a cancelled context, so the tests fail if
+// the middleware lets a cancellation skip the increment but not the decrement.
+type inFlightCollector struct {
+	mu       sync.Mutex
+	inFlight map[string]int64
+}
+
+func (c *inFlightCollector) RecordToolCall(context.Context, string, time.Duration, error) {}
+
+func (c *inFlightCollector) RecordHTTPRequest(context.Context, string, string, int, time.Duration) {}
+
+func (c *inFlightCollector) RecordInFlightRequest(ctx context.Context, method string, delta int64) {
+	if ctx.Err() != nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.inFlight[method] += delta
+}
+
+func (c *inFlightCollector) get(method string) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.inFlight[method]
+}
+
+type InFlightRequestsSuite struct {
+	suite.Suite
+}
+
+func (s *InFlightRequestsSuite) TestTracksInFlightRequests() {
+	tests := []struct {
+		name           string
+		method         string
+		finish         func() (mcp.Result, error)
+		cancelOnEntry  bool
+		cancelInFlight bool
+		wantErr        bool
+		wantPanic      bool
+	}{
+		{
+			name:   "success",
+			method: "tools/call",
+			finish: func() (mcp.Result, error) { return &mcp.CallToolResult{}, nil },
+		},
+		{
+			name:    "error",
+			method:  "resources/read",
+			finish:  func() (mcp.Result, error) { return nil, errors.New("handler failed") },
+			wantErr: true,
+		},
+		{
+			name:      "panic",
+			method:    "prompts/get",
+			finish:    func() (mcp.Result, error) { panic("boom") },
+			wantPanic: true,
+		},
+		{
+			name:           "context cancelled before the handler returns",
+			method:         "tools/call",
+			finish:         func() (mcp.Result, error) { return nil, context.Canceled },
+			cancelInFlight: true,
+			wantErr:        true,
+		},
+		{
+			name:          "context already cancelled on entry",
+			method:        "tools/call",
+			finish:        func() (mcp.Result, error) { return nil, context.Canceled },
+			cancelOnEntry: true,
+			wantErr:       true,
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			collector := &inFlightCollector{inFlight: map[string]int64{}}
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			handler := inFlightRequestsMiddleware(collector)(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+				close(entered)
+				<-release
+				return tt.finish()
+			})
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tt.cancelOnEntry {
+				cancel()
+			}
+
+			type outcome struct {
+				err      error
+				panicked bool
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				var o outcome
+				defer func() {
+					o.panicked = recover() != nil
+					done <- o
+				}()
+				_, o.err = handler(ctx, tt.method, &mcp.ServerRequest[*mcp.CallToolParamsRaw]{})
+			}()
+
+			<-entered
+			s.Equal(int64(1), collector.get(tt.method), "in-flight count while the handler is running")
+			if tt.cancelInFlight {
+				cancel()
+			}
+			close(release)
+			o := <-done
+
+			s.Equal(tt.wantPanic, o.panicked, "panic propagated")
+			s.Equal(tt.wantErr, o.err != nil, "error propagated")
+			s.Equal(int64(0), collector.get(tt.method), "in-flight count after the handler returned")
+		})
+	}
+}
+
+func (s *InFlightRequestsSuite) TestIgnoresSubscriptionsListen() {
+	collector := &inFlightCollector{inFlight: map[string]int64{}}
+	var counted int64
+	handler := inFlightRequestsMiddleware(collector)(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+		counted = collector.get("subscriptions/listen")
+		return nil, nil
+	})
+
+	_, err := handler(context.Background(), "subscriptions/listen", &mcp.ServerRequest[*mcp.CallToolParamsRaw]{})
+
+	s.Require().NoError(err)
+	s.Equal(int64(0), counted, "subscriptions/listen is not counted while it is open")
+}
+
+func TestInFlightRequests(t *testing.T) {
+	suite.Run(t, new(InFlightRequestsSuite))
 }

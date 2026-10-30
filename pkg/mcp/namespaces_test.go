@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 )
 
@@ -89,9 +88,7 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 func (s *NamespacesSuite) TestNamespacesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("namespaces_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()

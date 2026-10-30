@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
@@ -20,6 +20,7 @@ import (
 
 // NetObserv is an HTTP client for the NetObserv console plugin backend API.
 type NetObserv struct {
+	cfg                  *config.Config
 	bearerToken          string
 	bearerTokenFile      string
 	pluginURL            string
@@ -31,7 +32,7 @@ type NetObserv struct {
 }
 
 // NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
-func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface) (*NetObserv, error) {
+func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface, detected ...EffectiveConfig) (*NetObserv, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
@@ -39,6 +40,7 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 		return nil, fmt.Errorf("kubernetes rest config is required")
 	}
 	client := &NetObserv{
+		cfg:             cfg,
 		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
 		tlsMinVersion:   cfg.TLSMinVersion.Get(),
 		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
@@ -46,7 +48,7 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 		bearerTokenFile: strings.TrimSpace(restConfig.BearerTokenFile),
 	}
 	var shared *Config
-	if tc, ok := cfg.GetToolsetConfig("netobserv"); ok {
+	if tc, ok := cfg.GetToolsetConfig(ToolsetConfigKey); ok {
 		if parsed, ok := tc.(*Config); ok && parsed != nil {
 			shared = parsed
 		}
@@ -54,6 +56,9 @@ func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Conf
 	resolved := Config{}
 	if shared != nil {
 		resolved = *shared
+	}
+	if len(detected) > 0 && detected[0].Found {
+		resolved.ApplyDetectedEndpoint(detected[0])
 	}
 	isOpenShift := clusterIsOpenShiftFromDiscovery(discoveryClient)
 	resolved.applyDefaults(ctx, isOpenShift)
@@ -171,26 +176,37 @@ func (n *NetObserv) authorizationHeader(ctx context.Context) string {
 	return "Bearer " + token
 }
 
-const maxJSONResponseBodySize = 4 << 20 // 4 MiB
+func (n *NetObserv) backendLimit() (int64, error) {
+	// Unreachable today: NewNetObserv rejects a nil config and stores it. The
+	// error is defense against a future bug that builds a NetObserv without one.
+	if n == nil {
+		return kubernetes.BackendLimit(nil)
+	}
+	return kubernetes.BackendLimit(n.cfg)
+}
 
 // ExecuteGet performs a GET request against the plugin API with query parameters derived from arguments.
 func (n *NetObserv) ExecuteGet(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
-	response, err := n.executeGet(ctx, endpoint, arguments, "application/json", maxJSONResponseBodySize, false)
+	response, err := n.executeGet(ctx, endpoint, arguments, "application/json", false)
 	if err != nil {
 		return "", err
 	}
 	return response.Body, nil
 }
 
-func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string, maxBodySize int64, truncate bool) (GetResponse, error) {
+func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string, truncate bool) (GetResponse, error) {
 	requestURL, err := n.validateAndGetURL(endpoint)
 	if err != nil {
 		return GetResponse{}, err
 	}
-	return n.executeGetAbsolute(ctx, requestURL, arguments, accept, maxBodySize, truncate)
+	return n.executeGetAbsolute(ctx, requestURL, arguments, accept, truncate)
 }
 
-func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string, maxBodySize int64, truncate bool) (GetResponse, error) {
+func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string, truncate bool) (GetResponse, error) {
+	limit, err := n.backendLimit()
+	if err != nil {
+		return GetResponse{}, err
+	}
 	u, err := url.Parse(requestURL)
 	if err != nil {
 		return GetResponse{}, fmt.Errorf("failed to parse request URL: %w", err)
@@ -221,17 +237,13 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		return GetResponse{}, fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
-	if err != nil {
-		return GetResponse{}, fmt.Errorf("failed to read response body: %w", err)
+	respBody, readErr := kubernetes.ReadLimited(resp.Body, limit)
+	if readErr != nil && !kubernetes.IsResponseTooLarge(readErr) {
+		return GetResponse{}, fmt.Errorf("failed to read response body: %w", readErr)
 	}
-	truncated := false
-	if int64(len(respBody)) > maxBodySize {
-		if !truncate {
-			return GetResponse{}, fmt.Errorf("netobserv API response exceeded maximum allowed size of %d bytes", maxBodySize)
-		}
-		respBody = respBody[:maxBodySize]
-		truncated = true
+	// Flow export keeps the prefix. JSON calls still fail closed.
+	if kubernetes.IsResponseTooLarge(readErr) && !truncate {
+		return GetResponse{}, readErr
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {
@@ -239,5 +251,9 @@ func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, a
 		}
 		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
 	}
-	return GetResponse{Body: string(respBody), Truncated: truncated}, nil
+	if kubernetes.IsResponseTooLarge(readErr) {
+		text, _, err := kubernetes.AcceptTruncated(respBody, readErr)
+		return GetResponse{Body: text}, err
+	}
+	return GetResponse{Body: string(respBody)}, nil
 }

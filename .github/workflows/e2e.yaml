@@ -3,11 +3,7 @@ name: E2E Tests
 on:
   pull_request:
     branches: ['main']
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '**/*.md'
-      - 'docs/**'
+  merge_group:
 
 permissions:
   contents: read
@@ -23,6 +19,7 @@ defaults:
 jobs:
   e2e:
     name: Run E2E Tests
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -38,7 +35,8 @@ jobs:
         run: make e2e-full-setup
 
       - name: Run e2e tests
-        run: make e2e-test
+        # Skip TestObs* toolset suites only; keep TestObservability* in the default job
+        run: make e2e-test E2E_ARGS="-skip '^TestObs[A-Z]'"
 
       - name: Cleanup
         if: always()

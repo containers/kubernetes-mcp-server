@@ -13,6 +13,8 @@ import (
 type ClusterInspector interface {
 	Discovery() AggregateDiscovery
 	Unstructured() AggregateUnstructured
+	// BearerToken returns the bearer token of the derived Kubernetes client for each target.
+	BearerToken(ctx context.Context) Results[string]
 }
 
 type AggregateDiscovery interface {
@@ -38,6 +40,18 @@ func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema
 	})
 
 	return hasGVK || (err != nil && !IsNotFound(err))
+}
+
+// GetDefaultObject gets a cluster-scoped object from the default target.
+// It is intended for resources whose configuration is represented once per cluster.
+func GetDefaultObject(
+	ctx context.Context,
+	inspector ClusterInspector,
+	resource schema.GroupVersionResource,
+	name string,
+	options metav1.GetOptions,
+) (*unstructured.Unstructured, error) {
+	return inspector.Unstructured().Resource(resource).Get(ctx, name, options).Default()
 }
 
 type AggregateUnstructured interface {

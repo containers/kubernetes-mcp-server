@@ -1,0 +1,45 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    multicluster: "true"
+    suite: config
+    readonly: "true"
+    project: kubernetes
+  annotations:
+    project-name: "Kubernetes"
+    project-url: "https://kubernetes.io"
+  name: "list-contexts"
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+
+  setup:
+    # No setup needed - working with existing kubeconfig
+
+  verify:
+    - kubernetes.listContexts:
+        # This operation lists all contexts and returns:
+        # - current: name of current context
+        # - count: number of contexts found
+        # Will fail if no contexts exist
+
+    - llmJudge:
+        contains: "{steps.kubernetes.listContexts.count} context"
+        # Validates the agent mentioned the actual count from the extension
+        # In multicluster setup, should be "2 context" or "2 contexts"
+
+    - llmJudge:
+        contains: "east"
+        # Verify east cluster context is mentioned
+
+    - llmJudge:
+        contains: "west"
+        # Verify west cluster context is mentioned
+
+  cleanup:
+    # No cleanup needed - read-only operation
+
+  prompt:
+    inline: Show me all available Kubernetes contexts in this multicluster environment

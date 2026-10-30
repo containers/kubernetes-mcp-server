@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -159,6 +160,18 @@ func (s *NodesTopSuite) TestNodesTop() {
 			s.Contains(content, "node-2", "expected metrics to contain node-2")
 			s.Contains(content, "CPU(cores)", "expected header with CPU column")
 			s.Contains(content, "MEMORY(bytes)", "expected header with MEMORY column")
+		})
+		s.Run("returns structured CPU and memory quantities", func() {
+			encoded, err := json.Marshal(toolResult.StructuredContent)
+			s.Require().NoError(err)
+			var payload struct {
+				Items []map[string]any `json:"items"`
+			}
+			s.Require().NoError(json.Unmarshal(encoded, &payload))
+			s.ElementsMatch([]map[string]any{
+				{"Name": "node-1", "CPU": "500m", "Memory": "2Gi"},
+				{"Name": "node-2", "CPU": "1", "Memory": "4Gi"},
+			}, payload.Items)
 		})
 	})
 

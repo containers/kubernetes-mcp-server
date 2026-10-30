@@ -1,0 +1,526 @@
+kind: Eval
+metadata:
+  name: "obs-e2e"
+config:
+  agent:
+    type: "file"
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+  taskSets:
+    - path: ../../tasks/obs/backend-reachability/backend-reachability.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "(list_metrics|execute_instant_query)"
+        minToolCalls: 1
+        maxToolCalls: 5
+
+    # Metric discovery
+    - path: ../../tasks/obs/list-metrics/list-metrics.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/list-node-metrics/list-node-metrics.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+        minToolCalls: 1
+        maxToolCalls: 5
+
+    # Label exploration
+    - path: ../../tasks/obs/label-names/label-names.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: get_label_names
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: get_label_names
+        minToolCalls: 2
+        maxToolCalls: 7
+    - path: ../../tasks/obs/label-values/label-values.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: get_label_names
+          - server: kubernetes
+            tool: get_label_values
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: get_label_names
+          - type: tool
+            server: kubernetes
+            name: get_label_values
+        minToolCalls: 3
+        maxToolCalls: 7
+    - path: ../../tasks/obs/get-series/get-series.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: get_series
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: get_series
+        minToolCalls: 2
+        maxToolCalls: 7
+    - path: ../../tasks/obs/series-by-namespace/series-by-namespace.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: get_series
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: get_series
+        minToolCalls: 2
+        maxToolCalls: 7
+
+    # Instant / range queries (agent may legitimately use either query type)
+    - path: ../../tasks/obs/pending-pods/pending-pods.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+    - path: ../../tasks/obs/cpu-usage/cpu-usage.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+    - path: ../../tasks/obs/memory-usage/memory-usage.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+    - path: ../../tasks/obs/network-traffic/network-traffic.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+    - path: ../../tasks/obs/prometheus-head-series/prometheus-head-series.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+    - path: ../../tasks/obs/prometheus-requests/prometheus-requests.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+    - path: ../../tasks/obs/prometheus-wal-size/prometheus-wal-size.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+
+    # Range queries
+    - path: ../../tasks/obs/pods-created/pods-created.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: execute_range_query
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: execute_range_query
+        minToolCalls: 2
+        maxToolCalls: 7
+    - path: ../../tasks/obs/crashlooping-pods/crashlooping-pods.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: execute_range_query
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: execute_range_query
+        minToolCalls: 2
+        maxToolCalls: 7
+
+    # Alertmanager
+    - path: ../../tasks/obs/get-alerts/get-alerts.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: get_alerts
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/alert-investigation/alert-investigation.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: get_alerts
+          - server: kubernetes
+            toolPattern: "(list_metrics|execute_instant_query|execute_range_query)"
+        minToolCalls: 2
+        maxToolCalls: 20
+    - path: ../../tasks/obs/filtered-alerts/filtered-alerts.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: get_alerts
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/get-silences/get-silences.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: get_silences
+        minToolCalls: 1
+        maxToolCalls: 5
+
+    # Multi-step reasoning (hard)
+    - path: ../../tasks/obs/namespace-resource-usage/namespace-resource-usage.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+
+    # Multi-step reasoning (hard)
+    - path: ../../tasks/obs/namespace-pod-count/namespace-pod-count.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query|get_label_values)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 15
+
+    # Ambiguous diagnostic (hard)
+    - path: ../../tasks/obs/diagnose-cluster-health/diagnose-cluster-health.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: get_alerts
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        minToolCalls: 4
+        maxToolCalls: 20
+
+    # Visualization
+    - path: ../../tasks/obs/visualize-cpu-usage/visualize-cpu-usage.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: show_timeseries
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: show_timeseries
+        minToolCalls: 2
+        maxToolCalls: 10
+
+    # Time range precision
+    - path: ../../tasks/obs/time-range-query/time-range-query.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            tool: execute_range_query
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+          - type: tool
+            server: kubernetes
+            name: execute_range_query
+        minToolCalls: 2
+        maxToolCalls: 10
+
+    # Error handling
+    - path: ../../tasks/obs/nonexistent-metric/nonexistent-metric.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/nonexistent-namespace/nonexistent-namespace.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: list_metrics
+        minToolCalls: 2
+        maxToolCalls: 10
+    - path: ../../tasks/obs/high-cardinality-rejection/high-cardinality-rejection.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_metrics
+          - server: kubernetes
+            toolPattern: "(execute_instant_query|execute_range_query)"
+        minToolCalls: 2
+        maxToolCalls: 15
+
+    # Traces
+    - path: ../../tasks/obs/search-error-traces/search-error-traces.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tempo_list_instances
+          - server: kubernetes
+            tool: tempo_search_traces
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: tempo_list_instances
+          - type: tool
+            server: kubernetes
+            name: tempo_search_traces
+        minToolCalls: 2
+        maxToolCalls: 5
+    - path: ../../tasks/obs/search-semconv/search-semconv.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tempo_list_instances
+          - server: kubernetes
+            tool: tempo_search_traces
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: tempo_list_instances
+          - type: tool
+            server: kubernetes
+            name: tempo_search_traces
+        minToolCalls: 2
+        maxToolCalls: 5
+    - path: ../../tasks/obs/latency-investigation/latency-investigation.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tempo_list_instances
+          - server: kubernetes
+            tool: tempo_search_traces
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: tempo_list_instances
+          - type: tool
+            server: kubernetes
+            name: tempo_search_traces
+        minToolCalls: 2
+        maxToolCalls: 5
+    - path: ../../tasks/obs/latency-baseline/latency-baseline.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tempo_search_traces
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: tempo_search_traces
+          - type: tool
+            server: kubernetes
+            name: tempo_search_traces
+        minToolCalls: 3
+        maxToolCalls: 5
+
+    # OpenTelemetry Collector
+    - path: ../../tasks/obs/get-versions/get-versions.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: otelcol_get_versions
+        minToolCalls: 1
+        maxToolCalls: 3
+    - path: ../../tasks/obs/list-components/list-components.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: otelcol_list_components
+        minToolCalls: 1
+        maxToolCalls: 3
+    - path: ../../tasks/obs/get-batch-processor-schema/get-batch-processor-schema.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: otelcol_get_component_schema
+        minToolCalls: 1
+        maxToolCalls: 3
+    - path: ../../tasks/obs/validate-batch-processor-config-invalid/validate-batch-processor-config-invalid.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: otelcol_validate_config
+        minToolCalls: 1
+        maxToolCalls: 3
+    - path: ../../tasks/obs/validate-batch-processor-config-valid/validate-batch-processor-config-valid.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: otelcol_validate_config
+        minToolCalls: 1
+        maxToolCalls: 3
+
+    # Logs (Loki) — requires observability/logs toolset; see evals/tasks/obs/README.md
+    - path: ../../tasks/obs/loki-backend-reachability/loki-backend-reachability.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: loki_list_instances
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/loki-list-instances/loki-list-instances.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: loki_list_instances
+        minToolCalls: 1
+        maxToolCalls: 3
+    - path: ../../tasks/obs/loki-label-names/loki-label-names.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: loki_label_names
+        minToolCalls: 1
+        maxToolCalls: 6
+    - path: ../../tasks/obs/loki-label-values/loki-label-values.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: loki_label_values
+        minToolCalls: 1
+        maxToolCalls: 6
+    - path: ../../tasks/obs/loki-query-network-flows/loki-query-network-flows.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: loki_list_instances
+          - server: kubernetes
+            tool: loki_query_range
+        callOrder:
+          - type: tool
+            server: kubernetes
+            name: loki_list_instances
+          - type: tool
+            server: kubernetes
+            name: loki_query_range
+        minToolCalls: 2
+        maxToolCalls: 10

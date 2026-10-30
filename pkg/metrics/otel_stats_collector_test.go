@@ -2,8 +2,10 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"runtime"
 	"testing"
 	"time"
@@ -208,6 +210,56 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 		}
 		s.True(foundGauge, "k8s_mcp.server.info gauge should exist")
 	})
+}
+
+func (s *OtelStatsCollectorSuite) TestRecordInFlightRequest() {
+	type change struct {
+		method string
+		delta  int64
+	}
+	tests := []struct {
+		name     string
+		changes  []change
+		expected map[string]int64
+	}{
+		{
+			name:     "increment sets the in-flight count for the method",
+			changes:  []change{{"tools/call", 1}, {"tools/call", 1}},
+			expected: map[string]int64{"tools/call": 2},
+		},
+		{
+			name:     "decrement returns the in-flight count to zero",
+			changes:  []change{{"tools/call", 1}, {"tools/call", -1}},
+			expected: map[string]int64{"tools/call": 0},
+		},
+		{
+			name:     "methods are tracked independently",
+			changes:  []change{{"tools/call", 1}, {"resources/read", 1}, {"resources/read", 1}, {"resources/read", -1}},
+			expected: map[string]int64{"tools/call": 1, "resources/read": 1},
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			collector, err := NewOtelStatsCollector("test-meter-in-flight")
+			s.Require().NoError(err)
+			ctx := context.Background()
+			for _, c := range tt.changes {
+				collector.RecordInFlightRequest(ctx, c.method, c.delta)
+			}
+
+			stats := collector.GetStats(s.T().Context())
+			s.Equal(tt.expected, stats.RequestsInFlight, "/stats in-flight requests")
+
+			rec := httptest.NewRecorder()
+			collector.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+			body := rec.Body.String()
+			s.Contains(body, "# TYPE k8s_mcp_requests_in_flight gauge")
+			for method, value := range tt.expected {
+				pattern := fmt.Sprintf(`(?m)^k8s_mcp_requests_in_flight\{[^}]*mcp_method_name="%s"[^}]*\} %d$`, regexp.QuoteMeta(method), value)
+				s.Regexp(regexp.MustCompile(pattern), body, "Prometheus value for %s", method)
+			}
+		})
+	}
 }
 
 func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {

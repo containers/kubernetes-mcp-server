@@ -3,11 +3,7 @@ name: Browser Tests
 on:
   pull_request:
     branches: ['main']
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '**/*.md'
-      - 'docs/**'
+  merge_group:
 
 permissions:
   contents: read
@@ -23,6 +19,7 @@ defaults:
 jobs:
   browser-test:
     name: Run browser tests
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 30
@@ -36,7 +33,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 

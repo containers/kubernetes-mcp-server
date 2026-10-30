@@ -1,0 +1,127 @@
+{
+  "default_approvers": [
+    "@Cali0707",
+    "@manusa",
+    "@matzew",
+    "@nader-ziada",
+    "@2uasimojo"
+  ],
+  "default_reviewers": [],
+  "areas": [
+    {
+      "toolset": "config",
+      "paths": ["/pkg/toolsets/config/"],
+      "reviewers": []
+    },
+    {
+      "toolset": "core",
+      "paths": ["/pkg/toolsets/core/"],
+      "reviewers": []
+    },
+    {
+      "toolset": "helm",
+      "paths": ["/pkg/toolsets/helm/", "/pkg/helm/", "/evals/tasks/helm/"],
+      "reviewers": []
+    },
+    {
+      "toolset": "kcp",
+      "paths": ["/pkg/toolsets/kcp/", "/pkg/kcp/"],
+      "reviewers": ["@mjudeikis"]
+    },
+    {
+      "toolset": "kiali",
+      "paths": [
+        "/pkg/toolsets/kiali/",
+        "/pkg/kiali/",
+        "/pkg/mcp/kiali*",
+        "/build/kiali.mk",
+        "/evals/tasks/kiali/",
+        "/docs/KIALI.md"
+      ],
+      "reviewers": [],
+      "approvers": ["@aljesusg", "@josunect"]
+    },
+    {
+      "toolset": "kubevirt",
+      "paths": [
+        "/pkg/toolsets/kubevirt/",
+        "/pkg/kubevirt/",
+        "/pkg/mcp/kubevirt*",
+        "/build/kubevirt.mk",
+        "/evals/tasks/kubevirt/",
+        "/docs/kubevirt.md"
+      ],
+      "reviewers": [],
+      "approvers": ["@ksimon1", "@lyarwood"]
+    },
+    {
+      "toolset": "observability/logs",
+      "paths": [
+        "/pkg/toolsets/logs/",
+        "/pkg/obs/logs/",
+        "/pkg/obs/auth/",
+        "/pkg/obs/instrumentation/",
+        "/pkg/obs/openshift/",
+        "/pkg/obs/tools/",
+        "/pkg/obs/toolcfg/"
+      ],
+      "reviewers": [],
+      "approvers": ["@andreasgerstmayr", "@iNecas", "@saswatamcode", "@slashpai"]
+    },
+    {
+      "toolset": "observability/metrics",
+      "paths": [
+        "/pkg/toolsets/metrics/",
+        "/pkg/obs/metrics/",
+        "/pkg/obs/auth/",
+        "/pkg/obs/tools/",
+        "/pkg/obs/toolcfg/"
+      ],
+      "reviewers": [],
+      "approvers": ["@andreasgerstmayr", "@iNecas", "@saswatamcode", "@slashpai"]
+    },
+    {
+      "toolset": "netobserv",
+      "paths": [
+        "/pkg/toolsets/netobserv/",
+        "/pkg/netobserv/",
+        "/pkg/mcp/netobserv*",
+        "/build/netobserv.mk",
+        "/evals/tasks/netobserv/"
+      ],
+      "reviewers": ["@jotak"],
+      "approvers": ["@jpinsonneau"]
+    },
+    {
+      "toolset": "observability/otelcol",
+      "paths": ["/pkg/toolsets/otelcol/", "/pkg/obs/tools/", "/pkg/obs/toolcfg/"],
+      "reviewers": [],
+      "approvers": ["@andreasgerstmayr", "@iNecas", "@saswatamcode", "@slashpai"]
+    },
+    {
+      "toolset": "tekton",
+      "paths": [
+        "/pkg/toolsets/tekton/",
+        "/pkg/mcp/tekton*",
+        "/build/tekton.mk",
+        "/evals/tasks/tekton/"
+      ],
+      "reviewers": [],
+      "approvers": ["@ksimon1"]
+    },
+    {
+      "toolset": "observability/traces",
+      "paths": [
+        "/pkg/toolsets/traces/",
+        "/pkg/obs/traces/",
+        "/pkg/obs/auth/",
+        "/pkg/obs/instrumentation/",
+        "/pkg/obs/openshift/",
+        "/pkg/obs/tools/",
+        "/pkg/obs/toolcfg/"
+      ],
+      "reviewers": [],
+      "approvers": ["@andreasgerstmayr", "@iNecas", "@saswatamcode", "@slashpai"]
+    }
+  ]
+}

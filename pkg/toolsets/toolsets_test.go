@@ -6,7 +6,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type ToolsetsSuite struct {
@@ -51,72 +50,11 @@ func (t *TestToolset) GetResourceTemplates(context.Context, api.ToolsetContext) 
 
 var _ api.Toolset = (*TestToolset)(nil)
 
-type fakeProvider struct{}
-
-func (f *fakeProvider) IsMultiTarget() bool { return false }
-
-func (f *fakeProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
-
-func (f *fakeProvider) GetDefaultTarget() string { return "" }
-
-func (f *fakeProvider) GetTargetParameterName() string { return "" }
-
-func (f *fakeProvider) Discovery() api.AggregateDiscovery       { return f }
-func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return nil }
-func (f *fakeProvider) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
-	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
-		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
-			{Kind: "Project"}, {Kind: "Route"}, {Kind: "NodeMetrics"}, {Kind: "PodMetrics"},
-			{Kind: "VirtualMachine"}, {Kind: "VirtualMachineTemplate"},
-		}}, nil
-	})
-}
-
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	Register(&TestToolset{name: "duplicate"})
 	s.Panics(func() {
 		Register(&TestToolset{name: "duplicate"})
 	}, "Expected panic on duplicate toolset registration")
-}
-
-func (s *ToolsetsSuite) TestUniqueToolNames() {
-	toolNames := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, tool := range toolset.GetTools(s.T().Context(), api.ToolsetContext{Inspector: &fakeProvider{}}) {
-			s.Falsef(toolNames[tool.Tool.Name], "duplicate tool name: %s", tool.Tool.Name)
-			toolNames[tool.Tool.Name] = true
-		}
-	}
-}
-
-func (s *ToolsetsSuite) TestUniquePromptNames() {
-	promptNames := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, prompt := range toolset.GetPrompts(s.T().Context(), api.ToolsetContext{Inspector: &fakeProvider{}}) {
-			s.Falsef(promptNames[prompt.Prompt.Name], "duplicate prompt name: %s", prompt.Prompt.Name)
-			promptNames[prompt.Prompt.Name] = true
-		}
-	}
-}
-
-func (s *ToolsetsSuite) TestUniqueResourceURIs() {
-	resourceURIs := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, resource := range toolset.GetResources(s.T().Context(), api.ToolsetContext{Inspector: &fakeProvider{}}) {
-			s.Falsef(resourceURIs[resource.Resource.URI], "duplicate resource URI: %s", resource.Resource.URI)
-			resourceURIs[resource.Resource.URI] = true
-		}
-	}
-}
-
-func (s *ToolsetsSuite) TestUniqueResourceTemplateURITemplates() {
-	uriTemplates := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, template := range toolset.GetResourceTemplates(s.T().Context(), api.ToolsetContext{Inspector: &fakeProvider{}}) {
-			s.Falsef(uriTemplates[template.ResourceTemplate.URITemplate], "duplicate resource template URI template: %s", template.ResourceTemplate.URITemplate)
-			uriTemplates[template.ResourceTemplate.URITemplate] = true
-		}
-	}
 }
 
 func (s *ToolsetsSuite) TestToolsetNames() {

@@ -1,0 +1,43 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    multicluster: "true"
+    suite: config
+    project: kubernetes
+  annotations:
+    project-name: "Kubernetes"
+    project-url: "https://kubernetes.io"
+  name: "identify-context-for-task"
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+
+  setup:
+    # No setup needed - working with existing kubeconfig
+
+  verify:
+    - kubernetes.getCurrentContext:
+        # This operation returns the current context name
+        # Returns:
+        # - context: name of the current context
+    - kubernetes.listContexts:
+        # Also list all available contexts for comparison
+        # Returns:
+        # - current: name of current context
+        # - count: number of contexts found
+
+    - llmJudge:
+        contains: "{steps.kubernetes.getCurrentContext.context}"
+        # Validates the agent mentioned the actual current context name
+
+    - llmJudge:
+        contains: "2 context"
+        # In multicluster setup, should mention "2 contexts"
+
+  cleanup:
+    # No cleanup needed - read-only operation
+
+  prompt:
+    inline: What is the current Kubernetes context I'm using, and what other contexts are available in this multicluster setup?

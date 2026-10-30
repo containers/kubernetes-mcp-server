@@ -241,27 +241,10 @@ func meshTopologyHandler(params api.PromptHandlerParams) (*api.PromptCallResult,
 		return nil, err
 	}
 
-	statusContent := fetchKialiData(kiali, params, tools.KialiGetMeshStatusEndpoint, nil)
-
-	resolved, err := resolveNamespaces(kiali, params, allNamespacesKeyword)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve mesh namespaces: %w", err)
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
+	if err := writeMeshTopologyPrompt(kiali, params, b); err != nil {
+		return nil, err
 	}
-	graphContent := fetchKialiData(kiali, params, tools.KialiGetMeshTrafficGraphEndpoint,
-		map[string]any{"namespaces": resolved})
-
-	promptText := fmt.Sprintf(`# Mesh Topology Overview
-
-## Mesh Status
-%s
-
-## Traffic Graph
-%s
-
-## Instructions
-
-Summarize the mesh topology covering control plane components, cluster connectivity, and data plane overview.
-`, statusContent, graphContent)
 
 	return api.NewPromptCallResult(
 		"Mesh topology data gathered successfully",
@@ -270,10 +253,46 @@ Summarize the mesh topology covering control plane components, cluster connectiv
 				Role: "user",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: promptText,
+					Text: b.String(),
 				},
 			},
 		},
 		nil,
 	), nil
+}
+
+// writeMeshTopologyPrompt writes the overview into one prompt budget.
+// Namespace discovery and the traffic graph do not start once that budget is spent.
+func writeMeshTopologyPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, b *api.BuilderWithBudget) error {
+	var resolved string
+	return b.Sections(
+		api.Text(`# Mesh Topology Overview
+
+## Mesh Status
+`),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiGetMeshStatusEndpoint, nil)
+			return nil
+		},
+		func(b *api.BuilderWithBudget) error {
+			var err error
+			resolved, err = resolveNamespaces(kiali, params, allNamespacesKeyword)
+			if err != nil {
+				return fmt.Errorf("failed to resolve mesh namespaces: %w", err)
+			}
+			return nil
+		},
+		api.Text("\n\n## Traffic Graph\n"),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiGetMeshTrafficGraphEndpoint,
+				map[string]any{"namespaces": resolved})
+			return nil
+		},
+		api.Text(`
+
+## Instructions
+
+Summarize the mesh topology covering control plane components, cluster connectivity, and data plane overview.
+`),
+	)
 }

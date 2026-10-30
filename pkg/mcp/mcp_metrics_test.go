@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync/atomic"
 	"testing"
 
@@ -107,9 +108,38 @@ func (s *McpMetricsSuite) TestPrometheusHandlerReflectsToolCalls() {
 		s.Contains(body, "k8s_mcp_tool_duration")
 	})
 
+	s.Run("contains in-flight requests metric", func() {
+		s.Contains(body, "k8s_mcp_requests_in_flight")
+	})
+
 	s.Run("contains server info metric", func() {
 		s.Contains(body, "k8s_mcp_server_info")
 	})
+}
+
+func (s *McpMetricsSuite) TestPrometheusInFlightRequestsReturnToZero() {
+	s.InitMcpClient()
+
+	_, err := s.CallTool("namespaces_list", map[string]interface{}{})
+	s.Require().Nilf(err, "call tool failed %v", err)
+
+	rec := httptest.NewRecorder()
+	s.mcpServer.GetMetrics().PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := rec.Body.String()
+
+	tests := []struct {
+		name   string
+		method string
+	}{
+		{name: "tools/call is back to zero after the call returns", method: "tools/call"},
+		{name: "initialize is back to zero after the handshake", method: "initialize"},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			pattern := `(?m)^k8s_mcp_requests_in_flight\{[^}]*mcp_method_name="` + regexp.QuoteMeta(tt.method) + `"[^}]*\} 0$`
+			s.Regexp(regexp.MustCompile(pattern), body)
+		})
+	}
 }
 
 func (s *McpMetricsSuite) TestStatsInitializedBeforeCalls() {

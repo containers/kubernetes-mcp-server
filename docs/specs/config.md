@@ -226,6 +226,7 @@ the Default cell:
 | `<Default>` | built-in (after downstream default overrides) |
 | `<Env>` | non-empty environment variable |
 | `<Test>` | test helper |
+| `<Stdin>` | main config read from stdin (`--config -`) |
 | a filesystem path | last TOML file that set this key |
 
 Drop-in merge is last-write-wins. The engine records **which file last set
@@ -356,6 +357,14 @@ Not `Config` fields. Path selection is its own ladder: `--config` beats
 and no default. It can be the only file source. Omit it and no directory
 is read. Relative `--config` and `--config-dir` are resolved against the
 working directory, independently of each other.
+
+`--config -` (or `MCP_CONFIG_PATH=-`) reads the main file from stdin. It is
+merged first, like a file, so drop-ins and env override it; its keys have
+Source `<Stdin>` and relative paths in it resolve against the working
+directory. No sibling `conf.d` check applies. The bytes are read once in
+`Complete` and reused on SIGHUP, which re-reads only the drop-ins and env.
+Stdio mode also uses stdin, so an empty `port` after the merge fails
+startup.
 
 <table>
 <thead>
