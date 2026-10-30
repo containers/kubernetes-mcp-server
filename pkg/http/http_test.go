@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -566,6 +567,94 @@ func TestMetricsPort(t *testing.T) {
 			err := ctx.WaitForShutdown()
 			if err != nil {
 				t.Errorf("Expected graceful shutdown, but got error: %v", err)
+			}
+		})
+	})
+}
+
+func TestMetricsPathLabel(t *testing.T) {
+	t.Run("metricsPath keeps known routes and folds everything else", func(t *testing.T) {
+		cases := map[string]string{
+			"/mcp":     "/mcp",
+			"/healthz": "/healthz",
+			"/stats":   "/stats",
+			"/metrics": "/metrics",
+			"/.well-known/oauth-protected-resource/mcp": "/.well-known/*",
+			"/":                                 "other",
+			"":                                  "other",
+			"/mcp/":                             "other",
+			"/MCP":                              "other",
+			"/scan/1":                           "other",
+			"/\xc0\xae\xc0\xae/windows/win.ini": "other",
+		}
+		for in, want := range cases {
+			if got := metricsPath(in); got != want {
+				t.Errorf("metricsPath(%q) = %q, want %q", in, got, want)
+			}
+		}
+	})
+	t.Run("metricsMethod keeps standard methods and folds everything else", func(t *testing.T) {
+		for _, m := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE"} {
+			if got := metricsMethod(m); got != m {
+				t.Errorf("metricsMethod(%q) = %q, want %q", m, got, m)
+			}
+		}
+		for _, m := range []string{"get", "PROPFIND", "SCAN1", ""} {
+			if got := metricsMethod(m); got != "_OTHER" {
+				t.Errorf("metricsMethod(%q) = %q, want _OTHER", m, got)
+			}
+		}
+	})
+	t.Run("/metrics survives invalid UTF-8 and high-cardinality paths", func(t *testing.T) {
+		testCase(t, func(ctx *httpContext) {
+			get := func(path string) {
+				t.Helper()
+				resp, err := http.Get(fmt.Sprintf("http://%s%s", ctx.HttpAddress, path))
+				if err != nil {
+					t.Fatalf("GET %s: %v", path, err)
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
+			// Overlong UTF-8 ".." from #1587; net/http decodes it to invalid UTF-8.
+			get("/%C0%AE%C0%AE/%C0%AE%C0%AE/windows/win.ini")
+			// More distinct paths than the SDK's default cardinality limit (2000).
+			for i := 0; i < 2100; i++ {
+				get(fmt.Sprintf("/scan/%d", i))
+			}
+			get("/mcp")
+			for i := 0; i < 3; i++ {
+				req, err := http.NewRequest(fmt.Sprintf("SCAN%d", i), fmt.Sprintf("http://%s/mcp", ctx.HttpAddress), nil)
+				if err != nil {
+					t.Fatalf("NewRequest: %v", err)
+				}
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("SCAN%d /mcp: %v", i, err)
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
+
+			resp, err := http.Get(fmt.Sprintf("http://%s/metrics", ctx.HttpAddress))
+			if err != nil {
+				t.Fatalf("GET /metrics: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("GET /metrics: expected 200, got %d: %s", resp.StatusCode, body)
+			}
+			out := string(body)
+			for _, want := range []string{`url_path="/mcp"`, `url_path="other"`, `http_request_method="_OTHER"`} {
+				if !strings.Contains(out, want) {
+					t.Errorf("expected /metrics to contain %s", want)
+				}
+			}
+			for _, unwanted := range []string{"/scan/", "otel_metric_overflow", "win.ini", "SCAN0"} {
+				if strings.Contains(out, unwanted) {
+					t.Errorf("expected /metrics not to contain %q", unwanted)
+				}
 			}
 		})
 	})
