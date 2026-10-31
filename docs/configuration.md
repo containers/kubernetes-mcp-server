@@ -173,7 +173,7 @@ pkill -HUP kubernetes-mcp-server
 
 SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change. A main configuration read from stdin (`--config -`) is not read again; the copy read at startup is applied with the reloaded drop-ins.
 
-Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, `max_backend_response_bytes`, `max_in_flight`, `max_result_bytes`, and so on). Toolset registries are rebuilt.
+Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, `list_output_wide`, `list_output_show_labels`, `max_backend_response_bytes`, `max_in_flight`, `max_result_bytes`, and so on). Toolset registries are rebuilt.
 
 If the new files fail to parse (including unknown keys), a non-reloadable option would change, or Validate fails, the process exits. When Validate fails, the rejected configuration is dumped first. `toolset_configs` parsers see the `require_tls` value from this load; a would-be `require_tls` change fails before those parsers run.
 
@@ -201,6 +201,8 @@ SIGHUP is not available on Windows; restart the process.
 | `bind_address` | string | `"0.0.0.0"` | Address to bind the HTTP server to. Set to `127.0.0.1` to restrict to localhost. A warning is logged when listening on all interfaces (`0.0.0.0` or `::`) without TLS or OAuth, and when a separate metrics port is bound to all interfaces (the metrics server never uses TLS or OAuth). |
 | `metrics_port` | string | `""` | When set (in HTTP mode), starts a separate HTTP server on this port serving only `/metrics`, `/stats`, and `/healthz` endpoints. Useful for Kubernetes deployments with network policies to separate metrics scraping from MCP protocol access. The metrics server uses the same `bind_address` but does not use TLS or OAuth. A warning is logged if `bind_address` is all interfaces (`0.0.0.0` or `::`). |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
+| `list_output_wide` | boolean | `true` | When `list_output = "table"`, adds the extra columns that `kubectl get -o wide` shows (for example pod IP and node). Set `false` for smaller list results, closer to plain `kubectl get`. |
+| `list_output_show_labels` | boolean | `true` | When `list_output = "table"`, adds a `LABELS` column, like `kubectl get --show-labels`. Set `false` for smaller list results, especially for resources with many labels such as nodes. |
 | `apps_enabled` | boolean | `false` | Enables MCP Apps resources and interactive views for tools that support them. Requires server restart. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host`. For that sidecar pattern, also set `bind_address = "127.0.0.1"` (see below). |
@@ -1023,6 +1025,8 @@ log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
 bind_address = "0.0.0.0"
 list_output = "table"
+list_output_wide = true
+list_output_show_labels = true
 max_backend_response_bytes = 4194304
 max_result_bytes = 16777216
 max_in_flight = 64

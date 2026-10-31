@@ -44,6 +44,47 @@ func (s *OutputSuite) TestTablePrintObj() {
 	})
 }
 
+func (s *OutputSuite) TestNewTable() {
+	// Pods table as returned by the API server: IP is a wide (priority 1) column.
+	podTable := func() *unstructured.Unstructured {
+		t := &metav1.Table{
+			TypeMeta: metav1.TypeMeta{APIVersion: "meta.k8s.io/v1", Kind: "Table"},
+			ColumnDefinitions: []metav1.TableColumnDefinition{
+				{Name: "Name", Type: "string"},
+				{Name: "IP", Type: "string", Priority: 1},
+			},
+			Rows: []metav1.TableRow{{
+				Cells:  []any{"pod-1", "10.0.0.1"},
+				Object: runtime.RawExtension{Raw: []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"pod-1","namespace":"default","labels":{"app":"nginx"}}}`)},
+			}},
+		}
+		u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(t)
+		s.Require().NoError(err)
+		return &unstructured.Unstructured{Object: u}
+	}
+	s.Run("wide and labels prints wide columns and labels", func() {
+		out, err := NewTable(true, true).PrintObj(podTable())
+		s.Require().NoError(err)
+		s.Regexp(`NAME\s+IP\s+LABELS`, out)
+		s.Contains(out, "app=nginx")
+	})
+	s.Run("not wide omits wide columns", func() {
+		out, err := NewTable(false, true).PrintObj(podTable())
+		s.Require().NoError(err)
+		s.NotContains(out, "10.0.0.1")
+	})
+	s.Run("no labels omits labels column", func() {
+		out, err := NewTable(true, false).PrintObj(podTable())
+		s.Require().NoError(err)
+		s.NotContains(out, "LABELS")
+	})
+	s.Run("Table defaults to wide with labels", func() {
+		out, err := Table.PrintObj(podTable())
+		s.Require().NoError(err)
+		s.Regexp(`NAME\s+IP\s+LABELS`, out)
+	})
+}
+
 func (s *OutputSuite) TestTablePrintObjStructured() {
 	s.Run("returns non-nil result", func() {
 		result, err := Table.PrintObjStructured(s.podList())

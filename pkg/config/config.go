@@ -243,6 +243,10 @@ type Config struct {
 	MetricsPort Option[string]
 	// ListOutput is the output format for resource list operations (yaml or table).
 	ListOutput Option[string]
+	// ListOutputWide adds the extra columns of `kubectl get -o wide` to table list output.
+	ListOutputWide Option[bool]
+	// ListOutputShowLabels adds a LABELS column to table list output.
+	ListOutputShowLabels Option[bool]
 	// MaxBackendResponseBytes is the maximum number of bytes read from one
 	// Kubernetes API, Kiali, NetObserv, Loki, Tempo, Prometheus, or
 	// Alertmanager response. pods_exec counts stdout and stderr together
@@ -419,12 +423,14 @@ func New() *Config {
 // (New / BaseDefault) after optional defaultOverrides.
 func newConfig() *Config {
 	return &Config{
-		LogLevel:    opt("log_level", 0).reload().desc("Log verbosity (0-9)"),
-		LogFile:     opt("log_file", "").reload().desc("Server log file path"),
-		Port:        opt("port", "").desc("HTTP listen port (empty is stdio)"),
-		BindAddress: opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
-		MetricsPort: opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
-		ListOutput:  opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		LogLevel:             opt("log_level", 0).reload().desc("Log verbosity (0-9)"),
+		LogFile:              opt("log_file", "").reload().desc("Server log file path"),
+		Port:                 opt("port", "").desc("HTTP listen port (empty is stdio)"),
+		BindAddress:          opt("bind_address", "0.0.0.0").desc("Address to bind the HTTP server"),
+		MetricsPort:          opt("metrics_port", "").validate(validateMetricsPortNumber).desc("Separate metrics server port"),
+		ListOutput:           opt("list_output", "table").reload().validate(validateListOutput).desc("Output format for resource list operations"),
+		ListOutputWide:       opt("list_output_wide", true).reload().desc("Add wide columns to table list output"),
+		ListOutputShowLabels: opt("list_output_show_labels", true).reload().desc("Add a LABELS column to table list output"),
 		MaxBackendResponseBytes: opt("max_backend_response_bytes", int64(DefaultMaxBackendResponseBytes)).reload().validate(func(v int64) error {
 			if v < 0 {
 				return fmt.Errorf("max_backend_response_bytes must not be negative (got %d)", v)

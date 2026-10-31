@@ -46,6 +46,12 @@ func (s *ConfigSuite) TestBaseDefaultValues() {
 	s.Run("ListOutput is table", func() {
 		s.Equal("table", base.ListOutput.Get())
 	})
+	s.Run("ListOutputWide is true", func() {
+		s.True(base.ListOutputWide.Get())
+	})
+	s.Run("ListOutputShowLabels is true", func() {
+		s.True(base.ListOutputShowLabels.Get())
+	})
 	s.Run("Toolsets are core, config", func() {
 		s.Equal([]string{"core", "config"}, base.Toolsets.Get())
 	})
@@ -258,6 +264,8 @@ func (s *ConfigSuite) TestReadConfigValid() {
 		port = "9999"
 		kubeconfig = "./path/to/config"
 		list_output = "yaml"
+		list_output_wide = false
+		list_output_show_labels = false
 		read_only = true
 		disable_destructive = true
 		stateless = true
@@ -306,6 +314,8 @@ func (s *ConfigSuite) TestReadConfigValid() {
 			{"port", cfg.Port.Get(), "9999"},
 			{"kubeconfig", cfg.KubeConfig.Get(), "./path/to/config"},
 			{"list_output", cfg.ListOutput.Get(), "yaml"},
+			{"list_output_wide", cfg.ListOutputWide.Get(), false},
+			{"list_output_show_labels", cfg.ListOutputShowLabels.Get(), false},
 			{"read_only", cfg.ReadOnly.Get(), true},
 			{"disable_destructive", cfg.DisableDestructive.Get(), true},
 			{"stateless", cfg.Stateless.Get(), true},
