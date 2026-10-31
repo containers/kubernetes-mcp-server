@@ -447,7 +447,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified). Use limit and offset to page the releases returned to you. Helm loads release secrets before applying that page, so a secret list that exceeds max_backend_response_bytes can still fail.
   - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
   - `limit` (`integer`) - Maximum number of releases to return. Omit or set to 0 to return every release Helm loaded. A full page tells you the next offset.
-  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, current namespace if not provided)
   - `offset` (`integer`) - Number of releases to skip. Send the next offset from a full page, with the same limit.
 
 - **helm_uninstall** - Uninstall a Helm release in the current or provided namespace

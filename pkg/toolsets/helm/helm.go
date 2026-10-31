@@ -55,7 +55,7 @@ func initHelm() []api.ServerTool {
 				Properties: map[string]*jsonschema.Schema{
 					"namespace": {
 						Type:        "string",
-						Description: "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
+						Description: "Namespace to list Helm releases from (Optional, current namespace if not provided)",
 					},
 					"all_namespaces": {
 						Type:        "boolean",
