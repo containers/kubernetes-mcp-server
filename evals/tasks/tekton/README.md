@@ -79,4 +79,4 @@ make tekton-status
 3. Use `tekton-eval` as the namespace for consistency across the task stack.
 4. Use the shared `helpers/cleanup-namespace.sh` script for namespace cleanup in setup steps.
 5. Include `ignoreNotFound: true` on all cleanup steps to keep tasks idempotent.
-6. For verify steps that check Kubernetes resource state use `script.inline` with `kubectl`; for verifying agent output use `llmJudge`.
+6. For verify steps that check Kubernetes resource state use `script.inline` with `kubectl`; for verifying literal identifiers or exact markers in agent output use a deterministic `script` check on `{agent.output}`, and reserve `llmJudge` for judging the meaning of the answer.
