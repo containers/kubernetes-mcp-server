@@ -22,12 +22,23 @@ spec:
           setup_diagnosis_scenario missing-secret
 
   verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          require() {
+            if ! grep -qiF -- "$1" <<<"$AGENT_OUTPUT"; then
+              echo "response is missing required evidence: $1" >&2
+              exit 1
+            fi
+          }
+          require 'failed-run'
+          require 'missing-diagnosis-secret'
+          require 'Secret'
     - llmJudge:
-        contains: "failed-run"
-    - llmJudge:
-        contains: "missing-diagnosis-secret"
-    - llmJudge:
-        contains: "Secret"
+        contains: "The response diagnoses the failure as a referenced Secret that does not exist, based on observed runtime evidence."
 
   cleanup:
     - k8s.delete:

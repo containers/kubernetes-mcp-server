@@ -22,12 +22,23 @@ spec:
           setup_diagnosis_scenario permission-denied
 
   verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          require() {
+            if ! grep -qiF -- "$1" <<<"$AGENT_OUTPUT"; then
+              echo "response is missing required evidence: $1" >&2
+              exit 1
+            fi
+          }
+          require 'failed-run'
+          require 'permission denied'
+          require 'failing-step'
     - llmJudge:
-        contains: "failed-run"
-    - llmJudge:
-        contains: "permission denied"
-    - llmJudge:
-        contains: "failing-step"
+        contains: "The response diagnoses the failed step as failing with a permission denied error, based on observed runtime evidence."
 
   cleanup:
     - k8s.delete:
