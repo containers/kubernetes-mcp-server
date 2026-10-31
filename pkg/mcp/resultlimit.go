@@ -30,15 +30,19 @@ func toolResultWithinLimit(limit int64, content string, structured any) error {
 }
 
 // rejectOversizedToolResult rejects a tool result that is still over the cap
-// after aggregators have truncated. A tool error is sent as its error text
-// alone, so that text is the measured size. When ContentBlocks is set, those
+// after aggregators have truncated. A tool error is measured as its error text
+// plus any structured error content. When ContentBlocks is set, those
 // bytes replace Content, including image data.
 func rejectOversizedToolResult(limit int64, result *api.ToolCallResult) error {
 	if limit <= 0 || result == nil {
 		return nil
 	}
 	if result.Error != nil {
-		return overResultLimit(limit, len(result.Error.Error()))
+		size, err := structuredSize(result.StructuredContent)
+		if err != nil {
+			return err
+		}
+		return overResultLimit(limit, len(result.Error.Error())+size)
 	}
 	size, err := toolResultSize(result)
 	if err != nil {
@@ -58,19 +62,26 @@ func toolResultSize(result *api.ToolCallResult) (int, error) {
 	} else {
 		size = len(result.Content)
 	}
-	structured := result.StructuredContent
+	structuredBytes, err := structuredSize(result.StructuredContent)
+	if err != nil {
+		return 0, err
+	}
+	return size + structuredBytes, nil
+}
+
+func structuredSize(structured any) (int, error) {
 	if structured == nil {
-		return size, nil
+		return 0, nil
 	}
 	prepared := ensureStructuredObject(structured)
 	if prepared == nil {
-		return size, nil
+		return 0, nil
 	}
 	raw, err := json.Marshal(prepared)
 	if err != nil {
 		return 0, fmt.Errorf("result structured content: %w", err)
 	}
-	return size + len(raw), nil
+	return len(raw), nil
 }
 
 func promptWithinLimit(limit int64, messages []api.PromptMessage) error {

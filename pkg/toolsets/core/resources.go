@@ -438,14 +438,14 @@ func resourcesScale(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 }
 
 // kubernetesErrorResult keeps the text error and attaches the Kubernetes Status
-// (when err wraps an API status error) as structured content.
+// (when err wraps an API status error) as structured content, limited to the
+// status code and reason.
 func kubernetesErrorResult(err error) *api.ToolCallResult {
 	result := api.NewToolCallResult("", err)
 	var apiStatus apierrors.APIStatus
 	if errors.As(err, &apiStatus) {
 		status := apiStatus.Status()
-		status.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "Status"}
-		result.StructuredContent = status
+		result.StructuredContent = map[string]any{"code": status.Code, "reason": status.Reason}
 	}
 	return result
 }

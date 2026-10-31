@@ -215,15 +215,13 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 func (s *ResourcesSuite) TestResourcesListForbiddenStructuredStatus() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_list (forbidden) returns Forbidden status", func() {
 		result, _ := s.CallTool("resources_list", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap"})
 		s.Require().True(result.IsError, "call tool should fail")
 		structured, ok := result.StructuredContent.(map[string]interface{})
 		s.Require().Truef(ok, "expected structured Status, got %T", result.StructuredContent)
-		s.Equal("Status", structured["kind"])
 		s.Equal("Forbidden", structured["reason"])
 		s.EqualValues(403, structured["code"])
 	})
@@ -429,9 +427,6 @@ func (s *ResourcesSuite) TestResourcesStructuredStatusErrors() {
 		s.NotEmpty(result.Content, "text content is retained")
 		structured, ok := result.StructuredContent.(map[string]interface{})
 		s.Require().Truef(ok, "expected structured Status, got %T", result.StructuredContent)
-		s.Equal("Status", structured["kind"])
-		s.Equal("v1", structured["apiVersion"])
-		s.Equal("Failure", structured["status"])
 		return structured
 	}
 	s.Run("resources_get on missing resource returns NotFound status", func() {
@@ -439,7 +434,6 @@ func (s *ResourcesSuite) TestResourcesStructuredStatusErrors() {
 		st := status(result)
 		s.Equal("NotFound", st["reason"])
 		s.EqualValues(404, st["code"])
-		s.Equal("missing", st["details"].(map[string]interface{})["name"])
 	})
 	s.Run("resources_delete on missing resource returns NotFound status", func() {
 		result, _ := s.CallTool("resources_delete", map[string]interface{}{"apiVersion": "v1", "kind": "ConfigMap", "namespace": "default", "name": "missing"})
@@ -450,7 +444,6 @@ func (s *ResourcesSuite) TestResourcesStructuredStatusErrors() {
 		st := status(result)
 		s.Equal("Invalid", st["reason"])
 		s.EqualValues(422, st["code"])
-		s.NotEmpty(st["details"].(map[string]interface{})["causes"])
 	})
 	s.Run("resources_create_or_update with stale resourceVersion returns Conflict status", func() {
 		kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
