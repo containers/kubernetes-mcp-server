@@ -287,7 +287,9 @@ jobs:
               MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,netobserv")
               ;;
             argocd)
-              MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config")
+              # Argo CD compatibility is evaluated through the generic core tools.
+              # An empty toolsets value lets run-server keep its default toolsets.
+              MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "")
               ;;
             obs)
               MATRIX=$(single_matrix obs "${EVAL_DIR}/eval-obs.yaml" "observability/metrics,observability/traces,observability/logs,observability/otelcol")
