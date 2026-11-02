@@ -213,7 +213,7 @@ log_level = 2
 read_only = true
 toolsets = ["core", "config", "helm", "kubevirt"]
 
-# Deny access to sensitive resources
+# Reject Secret requests made by this server's Kubernetes client
 [[denied_resources]]
 group = ""
 version = "v1"
@@ -223,12 +223,14 @@ kind = "Secret"
 endpoint = "http://localhost:4317"
 ```
 
+`read_only` and `denied_resources` are best-effort guardrails. Kubernetes RBAC on the identity this server authenticates as is the access control to rely on. See [Cluster authorization](docs/configuration.md#cluster-authorization).
+
 For comprehensive TOML configuration documentation, including:
 
 - All configuration options and their defaults
 - Drop-in configuration files for modular settings
 - Dynamic configuration reload via SIGHUP
-- Denied resources for restricting access to sensitive resource types
+- [Cluster authorization](docs/configuration.md#cluster-authorization) for `read_only`, `denied_resources`, and the other guardrails
 - Server instructions for MCP Tool Search
 - [Custom MCP prompts](docs/prompts.md)
 - OAuth/OIDC authentication for HTTP mode ([Keycloak](docs/KEYCLOAK_OIDC_SETUP.md), [Microsoft Entra ID](docs/ENTRA_ID_SETUP.md))
