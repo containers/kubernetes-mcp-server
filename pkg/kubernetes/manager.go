@@ -19,6 +19,9 @@ import (
 type Manager struct {
 	kubernetes  *Kubernetes
 	schemaCache *openAPISchemaCache
+	// kubeContext is the kubeconfig context this manager was resolved to.
+	// RawConfig() ignores the CurrentContext override, so Derived needs it.
+	kubeContext string
 
 	config atomic.Pointer[config.Config]
 }
@@ -55,7 +58,12 @@ func NewKubeconfigManager(ctx context.Context, cfg *config.Config, kubeconfigCon
 		return nil, fmt.Errorf("failed to create kubernetes rest config from kubeconfig: %w", err)
 	}
 
-	return NewManager(ctx, cfg, restConfig, clientCmdConfig)
+	m, err := NewManager(ctx, cfg, restConfig, clientCmdConfig)
+	if err != nil {
+		return nil, err
+	}
+	m.kubeContext = resolvedContext
+	return m, nil
 }
 
 // resolveKubeconfigContext determines which kubeconfig context to use.
@@ -227,6 +235,9 @@ func (m *Manager) Derived(ctx context.Context) (*Kubernetes, error) {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
 	clientCmdApiConfig.AuthInfos = make(map[string]*clientcmdapi.AuthInfo)
+	if m.kubeContext != "" {
+		clientCmdApiConfig.CurrentContext = m.kubeContext
+	}
 	derived, err := newKubernetesFromLive(ctx, &m.config, clientcmd.NewDefaultClientConfig(clientCmdApiConfig, nil), derivedCfg, m.schemaCache)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create derived client: %w", err)
