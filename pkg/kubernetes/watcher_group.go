@@ -17,11 +17,12 @@ import (
 // lock and then Replace, so Close can wait for a watcher swap without
 // re-entering that lock.
 type WatcherGroup struct {
-	mu      sync.RWMutex
-	closed  bool
-	reset   func(context.Context) error
-	primary watcher.Watcher
-	cluster watcher.Watcher
+	mu         sync.RWMutex
+	closed     bool
+	reset      func(context.Context) error
+	invalidate func()
+	primary    watcher.Watcher
+	cluster    watcher.Watcher
 }
 
 // errProviderClosed is returned by a provider reload that arrives after Close.
@@ -32,6 +33,13 @@ var errProviderClosed = errors.New("provider closed")
 // Call it before the provider is shared. It is not synchronized with WatchTargets.
 func (g *WatcherGroup) SetReset(reset func(context.Context) error) {
 	g.reset = reset
+}
+
+// SetInvalidate stores the provider callback the cluster-state watcher runs after
+// the toolsets are applied, to reset cached discovery and REST mappers.
+// Call it before the provider is shared. It is not synchronized with WatchTargets.
+func (g *WatcherGroup) SetInvalidate(invalidate func()) {
+	g.invalidate = invalidate
 }
 
 // ErrClosed reports whether Close has already run.
@@ -91,7 +99,7 @@ func (g *WatcherGroup) WatchTargets(ctx context.Context, reload McpReloader) {
 		primary.Watch(ctx, reloadWithReset)
 	}
 	if !watcherIsNil(cluster) {
-		cluster.Watch(ctx, reload.ClusterStateCallback())
+		cluster.Watch(ctx, reload.ClusterStateCallbackWithInvalidate(g.invalidate))
 	}
 	// Close can win the race after the snapshot above and return before Watch
 	// runs. Stop anything that started in that window.
