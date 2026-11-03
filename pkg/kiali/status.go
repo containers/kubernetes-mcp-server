@@ -143,6 +143,9 @@ func kialiForStatusProbe(baseURL string, kialiCfg *Config, serverCfg *config.Con
 		kialiURL:             probeCfg.Url,
 		kialiInsecure:        probeCfg.Insecure,
 		certificateAuthority: probeCfg.CertificateAuthority,
+		requireTLS:           func() bool { return serverCfg.RequireTLS.Get() },
+		tlsMinVersion:        serverCfg.TLSMinVersion.Get(),
+		tlsCipherSuites:      serverCfg.TLSCipherSuites.Get(),
 	}
 }
 

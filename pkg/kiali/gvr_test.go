@@ -136,6 +136,66 @@ func TestInternalServiceURLs(t *testing.T) {
 			t.Fatalf("unexpected URLs: %v", urls)
 		}
 	})
+
+	t.Run("rejects host-injection via instance_name", func(t *testing.T) {
+		for _, instanceName := range []string{
+			"attacker.example.com:8080#",
+			"x@attacker.example.com#",
+			"attacker.example.com@",
+		} {
+			cr := &KialiCR{
+				ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+				Spec: KialiSpec{
+					Deployment: KialiDeploymentSpec{
+						InstanceName: instanceName,
+						Namespace:    "istio-system",
+					},
+					Server: KialiServerSpec{WebRoot: "/kiali"},
+				},
+			}
+			if urls := internalServiceURLs(cr); len(urls) != 0 {
+				t.Fatalf("expected no URLs for instance_name %q, got %v", instanceName, urls)
+			}
+		}
+	})
+
+	t.Run("rejects host-injection via web_root", func(t *testing.T) {
+		for _, webRoot := range []string{
+			"@attacker.example.com/",
+			"@attacker.example.com/kiali",
+			"//attacker.example.com/",
+			"attacker.example.com/kiali",
+		} {
+			cr := &KialiCR{
+				ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+				Spec: KialiSpec{
+					Deployment: KialiDeploymentSpec{
+						InstanceName: "kiali",
+						Namespace:    "istio-system",
+					},
+					Server: KialiServerSpec{WebRoot: webRoot},
+				},
+			}
+			if urls := internalServiceURLs(cr); len(urls) != 0 {
+				t.Fatalf("expected no URLs for web_root %q, got %v", webRoot, urls)
+			}
+		}
+	})
+
+	t.Run("rejects invalid namespace", func(t *testing.T) {
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+			Spec: KialiSpec{
+				Deployment: KialiDeploymentSpec{
+					InstanceName: "kiali",
+					Namespace:    "evil@attacker",
+				},
+			},
+		}
+		if urls := internalServiceURLs(cr); len(urls) != 0 {
+			t.Fatalf("expected no URLs for invalid namespace, got %v", urls)
+		}
+	})
 }
 
 func TestProbeStatusURL(t *testing.T) {

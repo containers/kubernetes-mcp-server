@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,6 +33,46 @@ func testKialiClient(t *testing.T, cfg *config.Config) *Kiali {
 		t.Fatal(err)
 	}
 	return k
+}
+
+func TestKialiForStatusProbe_HonorsRequireTLS(t *testing.T) {
+	t.Run("blocks HTTP when require_tls is enabled", func(t *testing.T) {
+		var hit atomic.Bool
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hit.Store(true)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": map[string]any{"Kiali state": "running"},
+			})
+		}))
+		defer srv.Close()
+
+		cfg := config.New()
+		cfg.RequireTLS.SetForTest(true)
+		if probeStatusURL(context.Background(), srv.URL, &Config{Url: srv.URL}, cfg, "secret-token") {
+			t.Fatal("expected probe to fail when require_tls blocks HTTP")
+		}
+		if hit.Load() {
+			t.Fatal("HTTP mock must not be reached when require_tls is enabled")
+		}
+	})
+
+	t.Run("allows HTTP when require_tls is disabled", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+				t.Errorf("unexpected Authorization header: %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": map[string]any{"Kiali state": "running"},
+			})
+		}))
+		defer srv.Close()
+
+		cfg := config.New()
+		cfg.RequireTLS.SetForTest(false)
+		if !probeStatusURL(context.Background(), srv.URL, &Config{Url: srv.URL}, cfg, "secret-token") {
+			t.Fatal("expected probe to succeed when require_tls is disabled")
+		}
+	})
 }
 
 func TestKiali_Available(t *testing.T) {
