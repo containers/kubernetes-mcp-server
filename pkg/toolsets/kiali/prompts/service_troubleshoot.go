@@ -148,11 +148,20 @@ Based on the data above, provide:
 // writeKialiData calls a Kiali endpoint and writes the body into b.
 // On error it writes a placeholder instead of failing the prompt.
 // Sections decides whether this call starts.
+// Istio config reads go through ExecuteManageIstioConfigRead so denied_resources apply.
 func writeKialiData(b *api.BuilderWithBudget, kiali *kialiclient.Kiali, params api.PromptHandlerParams, endpoint string, args map[string]any) {
 	if b == nil {
 		return
 	}
-	content, err := kiali.ExecuteRequest(params.Context, endpoint, args)
+	var (
+		content string
+		err     error
+	)
+	if endpoint == tools.KialiManageIstioConfigReadEndpoint {
+		content, err = tools.ExecuteManageIstioConfigRead(params.Context, kiali, params.Config, args)
+	} else {
+		content, err = kiali.ExecuteRequest(params.Context, endpoint, args)
+	}
 	if err != nil {
 		klogutil.LogWarn(klogutil.FromContext(params.Context), "Failed to fetch data from endpoint", klogutil.Field("endpoint", endpoint), klogutil.Err(err))
 		b.WriteString(fmt.Sprintf("(data unavailable: %v)", err))

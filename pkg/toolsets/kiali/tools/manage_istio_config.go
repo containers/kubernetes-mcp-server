@@ -76,8 +76,7 @@ func istioConfigHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
-	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigEndpoint, remapMeshCluster(arguments))
+	content, err := ExecuteManageIstioConfig(params.Context, kiali, params.Config, params.GetArguments())
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to manage istio config: %w", err)), nil
 	}
