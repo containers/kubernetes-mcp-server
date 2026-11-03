@@ -82,8 +82,7 @@ func istioConfigHandlerRead(params api.ToolHandlerParams) (*api.ToolCallResult, 
 	if err != nil {
 		return api.NewToolCallResult("", err), nil
 	}
-	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiManageIstioConfigReadEndpoint, remapMeshCluster(arguments))
+	content, err := ExecuteManageIstioConfigRead(params.Context, kiali, params.Config, params.GetArguments())
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve istio config: %w", err)), nil
 	}

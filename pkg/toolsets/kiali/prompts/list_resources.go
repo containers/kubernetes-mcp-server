@@ -124,7 +124,7 @@ func listIstioConfigHandler(params api.PromptHandlerParams) (*api.PromptCallResu
 	if err != nil {
 		return nil, err
 	}
-	content, err := kiali.ExecuteRequest(params.Context, tools.KialiManageIstioConfigReadEndpoint, reqArgs)
+	content, err := tools.ExecuteManageIstioConfigRead(params.Context, kiali, params.Config, reqArgs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list istio config: %w", err)
 	}
