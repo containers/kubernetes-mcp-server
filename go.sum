@@ -259,8 +259,6 @@ github.com/hashicorp/errwrap v1.1.0 h1:OxrOeh75EUXMY8TBjag2fzXGZ40LB6IKw45YeGUDY
 github.com/hashicorp/errwrap v1.1.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brvKWEqk/Jc4=
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
-github.com/hashicorp/go-uuid v1.0.3 h1:2gKiV6YVmrJ1i2CKKa9obLvRieoRGviZFL26PcT/Co8=
-github.com/hashicorp/go-uuid v1.0.3/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
 github.com/hashicorp/golang-lru v1.0.2 h1:dV3g9Z/unq5DpblPpw+Oqcv4dU/1omnb4Ok8iPY6p1c=
 github.com/hashicorp/golang-lru v1.0.2/go.mod h1:iADmTwqILo4mZ8BN3D2Q6+9jd8WM5uGBxy+E8yxSoD4=
 github.com/hashicorp/golang-lru/arc/v2 v2.0.5 h1:l2zaLDubNhW4XO3LnliVj0GXO3+/CGNJAg1dcN2Fpfw=
@@ -342,8 +340,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/os-observability/redhat-opentelemetry-collector/configschemas v0.0.0-20260712195227-4e7d75e0d2ec h1:VJJl0vOhtCNE78lGxvoJetrxZWGEPfRTaCIbV87zP44=
 github.com/os-observability/redhat-opentelemetry-collector/configschemas v0.0.0-20260712195227-4e7d75e0d2ec/go.mod h1:ThsbZTM538g95wb3Aj/+XHfFfpW/YBHdO5o6W0f+IRw=
-github.com/pandatix/go-abnf v0.5.1 h1:iyLvSu2Aq12iE0r4n948Qw21BHDuckLq/8WIXAAF+HI=
-github.com/pandatix/go-abnf v0.5.1/go.mod h1:VBmbtpFgQNEaQpyAvmi+Ecd9wAYJKzA3TmiB3L93sVg=
+github.com/pandatix/go-abnf v0.5.3 h1:LA9AaxAqwzdxfDe7+HIGUB6tzx2N6wYVEAChmfsoPgo=
+github.com/pandatix/go-abnf v0.5.3/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
 github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen v0.0.0-20260710124846-8bb49fd6ccc7 h1:mUR6Z3GIYvOMUIkcs+2p0ggzkaK7La3ZF7Ki8X9Kx0A=
 github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen v0.0.0-20260710124846-8bb49fd6ccc7/go.mod h1:wW9qWwV3FCBH7YduES6KvpOw9dz5+Y63+yZqiQ9eT2Y=
 github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
@@ -368,8 +366,8 @@ github.com/prometheus/client_golang/exp v0.0.0-20260907100614-57bb367da472 h1:4q
 github.com/prometheus/client_golang/exp v0.0.0-20260907100614-57bb367da472/go.mod h1:7cN4zh+WBVVoFdl124VnR0F9bcpJluTebOnYYSHgyq8=
 github.com/prometheus/client_model v0.6.3 h1:O0jaTVAYNxTHYInEPFJt5I3+sN8zqBtVMPTB1qyxiEo=
 github.com/prometheus/client_model v0.6.3/go.mod h1:gpN5P9S7Rr6Yr92PiQ+Ixvhf6JZEkF1dnxsYL2aPBEM=
-github.com/prometheus/common v0.73.0 h1:NGIOmVi8jrgiiPQgXxD6rP0FfxFsuZxnMQkel0qBy/g=
-github.com/prometheus/common v0.73.0/go.mod h1:Nt+CsVkf/mj4wDAmtSwq1HTPohHSX6fMr6+/f9B5UqM=
+github.com/prometheus/common v0.73.1 h1:SZWh/j4AvhCdhX8jvYSnxvPxhWlC9QZkjJ+tOrEr7kU=
+github.com/prometheus/common v0.73.1/go.mod h1:I9aA/Ukz9s1olOobh8KtCkU7B1mQPQsB9UvQPsUQ1Dk=
 github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEoIwkU+A6qos=
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0oics=
