@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // KialiGVR is the GroupVersionResource for Kiali CRs.
@@ -47,7 +48,8 @@ func internalServiceURLs(cr *KialiCR) []string {
 	if ns == "" {
 		ns = cr.GetNamespace()
 	}
-	if ns == "" {
+	// Reject host-injection via instance_name / namespace (e.g. "x@evil#", "evil.com:80#").
+	if ns == "" || len(validation.IsDNS1123Label(instanceName)) > 0 || len(validation.IsDNS1123Label(ns)) > 0 {
 		return nil
 	}
 
@@ -64,6 +66,11 @@ func internalServiceURLs(cr *KialiCR) []string {
 		// Operator defaults: "/" on OpenShift, "/kiali" elsewhere. Try both.
 		return []string{base, base + "/kiali"}
 	default:
+		// Reject absolute/scheme-relative roots that could rewrite the authority
+		// (e.g. "@evil/", "//evil/").
+		if !strings.HasPrefix(webRoot, "/") || strings.HasPrefix(webRoot, "//") {
+			return nil
+		}
 		return []string{base + strings.TrimSuffix(webRoot, "/")}
 	}
 }
