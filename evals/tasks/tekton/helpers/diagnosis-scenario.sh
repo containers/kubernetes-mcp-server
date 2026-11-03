@@ -44,7 +44,7 @@ EOF
             # OpenShift assigns a namespace UID range, so a fixed UID is rejected by the SCC.
             # Elsewhere the image defaults to root, so an explicit non-root UID is required.
             local run_as_user=""
-            if ! kubectl api-versions 2>/dev/null | grep -qx 'security.openshift.io/v1'; then
+            if ! kubectl api-versions 2>/dev/null | grep -Fx 'security.openshift.io/v1' >/dev/null; then
                 run_as_user=$'\n  runAsUser: 65532'
             fi
             step=$(cat <<EOF
