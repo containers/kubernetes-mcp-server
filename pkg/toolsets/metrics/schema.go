@@ -102,6 +102,11 @@ type Silence struct {
 	Comment   string        `json:"comment" jsonschema:"Comment describing the silence"`
 }
 
+// SilenceWriteOutput is the structured result of creating, updating, or deleting a silence.
+type SilenceWriteOutput struct {
+	SilenceID string `json:"silence_id" jsonschema:"Alertmanager silence ID"`
+}
+
 // SilenceStatus represents the status of a silence.
 type SilenceStatus struct {
 	State string `json:"state" jsonschema:"State of the silence (active, pending, expired)"`

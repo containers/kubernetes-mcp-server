@@ -294,7 +294,7 @@ func TestBuildRoundTripperTLS(t *testing.T) {
 		_, err := BuildRoundTripper(t.Context(), cfg, &rest.Config{}, AuthModeHeader, true, false)
 		require.ErrorContains(t, err, "UNKNOWN_CIPHER")
 	})
-	t.Run("HTTP still forwards the bearer token", func(t *testing.T) {
+	t.Run("HTTP omits the bearer token", func(t *testing.T) {
 		httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Received-Auth", r.Header.Get("Authorization"))
 		}))
@@ -306,7 +306,7 @@ func TestBuildRoundTripperTLS(t *testing.T) {
 		resp, err := rt.RoundTrip(req)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, resp.Body.Close()) }()
-		require.Equal(t, "Bearer my-token", resp.Header.Get("X-Received-Auth"))
+		require.Empty(t, resp.Header.Get("X-Received-Auth"))
 	})
 }
 
@@ -344,4 +344,32 @@ func TestContextWithAuthFromRequest(t *testing.T) {
 			require.Equal(t, tt.wantCtxValue, got)
 		})
 	}
+}
+
+func TestAuthenticatedClientRejectsPlainHTTP(t *testing.T) {
+	rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{BearerToken: "secret"}, AuthModeKubeConfig, true, false)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:1", http.NoBody)
+	require.NoError(t, err)
+	_, err = rt.RoundTrip(req)
+	require.ErrorContains(t, err, "refusing to send credentials without TLS")
+}
+
+func TestClientRejectsHTTPSDowngrade(t *testing.T) {
+	plainReached := false
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { plainReached = true }))
+	defer plain.Close()
+	secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, plain.URL, http.StatusFound) }))
+	defer secure.Close()
+	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: secure.Certificate().Raw})
+	rt, err := BuildRoundTripper(t.Context(), config.BaseDefault(), &rest.Config{BearerToken: "secret", TLSClientConfig: rest.TLSClientConfig{CAData: ca}}, AuthModeKubeConfig, true, false)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, secure.URL, http.NoBody)
+	require.NoError(t, err)
+	resp, err := NewHTTPClient(rt, 0).Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.ErrorIs(t, err, errHTTPSToHTTPRedirect)
+	require.False(t, plainReached)
 }

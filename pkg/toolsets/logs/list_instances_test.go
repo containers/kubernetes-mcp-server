@@ -31,8 +31,8 @@ func (m *mockGatewayResolver) ResolveGatewayURL(_ context.Context, _ dynamic.Int
 	return m.gatewayURL, nil
 }
 
-// TestListInstancesHandler_NoResolver verifies the vanilla Kubernetes code path:
-// when no resolver is set, plain HTTP service DNS is used regardless of tenants mode.
+// TestListInstancesHandler_NoResolver verifies in-cluster service DNS:
+// OpenShift tenant modes use HTTPS + /api/logs/v1 without a Route resolver.
 func TestListInstancesHandler_NoResolver(t *testing.T) {
 	fakeClient := newMockLokiK8sClient(
 		newLokiStack("openshift-logging", "logging-loki"),
@@ -45,7 +45,20 @@ func TestListInstancesHandler_NoResolver(t *testing.T) {
 	require.Len(t, output.Instances, 1)
 	require.Equal(t, "openshift-logging", output.Instances[0].LokiNamespace)
 	require.Equal(t, "logging-loki", output.Instances[0].LokiName)
-	require.Equal(t, "http://logging-loki-gateway-http.openshift-logging.svc:8080", output.Instances[0].URL)
+	require.Equal(t, "https://logging-loki-gateway-http.openshift-logging.svc:8080/api/logs/v1", output.Instances[0].URL)
+}
+
+func TestListInstancesHandler_NoResolverPassthrough(t *testing.T) {
+	fakeClient := newMockLokiK8sClient(
+		newLokiStackWithMode("monitoring", "lokistack", "passthrough"),
+	)
+
+	result, err := listInstancesHandler(newTestParams(t, &Config{UseRoute: false}, fakeClient, nil))
+	require.NoError(t, err)
+	require.NoError(t, result.Error)
+	output := result.StructuredContent.(ListInstancesOutput)
+	require.Len(t, output.Instances, 1)
+	require.Equal(t, "http://lokistack-gateway-http.monitoring.svc:8080", output.Instances[0].URL)
 }
 
 // TestListInstancesHandler_WithResolver verifies that when an EndpointResolver is set,
@@ -69,6 +82,10 @@ func TestListInstancesHandler_WithResolver(t *testing.T) {
 }
 
 func newLokiStack(namespace, name string) *unstructured.Unstructured {
+	return newLokiStackWithMode(namespace, name, "openshift-network")
+}
+
+func newLokiStackWithMode(namespace, name, tenantsMode string) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "loki.grafana.com",
@@ -79,7 +96,7 @@ func newLokiStack(namespace, name string) *unstructured.Unstructured {
 	obj.SetName(name)
 	obj.Object["spec"] = map[string]any{
 		"tenants": map[string]any{
-			"mode": "openshift-network",
+			"mode": tenantsMode,
 		},
 	}
 	obj.Object["status"] = map[string]any{

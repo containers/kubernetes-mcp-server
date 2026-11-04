@@ -3,11 +3,16 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 )
+
+// OpenShiftTenantModePrefix marks LokiStack tenants modes that use the
+// HTTPS gateway path (/api/logs/v1), e.g. "openshift-network".
+const OpenShiftTenantModePrefix = "openshift-"
 
 type LokiInstance struct {
 	Namespace string `json:"lokiNamespace"`
@@ -17,7 +22,8 @@ type LokiInstance struct {
 }
 
 // ListInstances lists all LokiStack CRs and resolves their base URLs.
-// resolver is used for cluster-based discovery (e.g. OpenShift Routes); nil falls back to HTTP service DNS.
+// resolver is used for cluster-based discovery (e.g. OpenShift Routes); nil
+// falls back to in-cluster service DNS.
 func ListInstances(ctx context.Context, k8sClient dynamic.Interface, resolver GatewayResolver) ([]LokiInstance, error) {
 	if k8sClient == nil {
 		return nil, fmt.Errorf("kubernetes dynamic client is not available")
@@ -67,8 +73,17 @@ func resolveBaseURL(ctx context.Context, k8sClient dynamic.Interface, resolver G
 	if resolver != nil {
 		return resolver.ResolveGatewayURL(ctx, k8sClient, namespace, stackName, tenantsMode)
 	}
+	return ServiceDNSGatewayURL(namespace, stackName, tenantsMode), nil
+}
+
+// ServiceDNSGatewayURL is the in-cluster LokiStack gateway URL.
+// OpenShift tenant modes use HTTPS and /api/logs/v1 (service CA).
+func ServiceDNSGatewayURL(namespace, stackName, tenantsMode string) string {
 	gatewaySvcName := fmt.Sprintf("%s-gateway-http", stackName)
-	return fmt.Sprintf("http://%s.%s.svc:8080", gatewaySvcName, namespace), nil
+	if strings.HasPrefix(tenantsMode, OpenShiftTenantModePrefix) {
+		return fmt.Sprintf("https://%s.%s.svc:8080/api/logs/v1", gatewaySvcName, namespace)
+	}
+	return fmt.Sprintf("http://%s.%s.svc:8080", gatewaySvcName, namespace)
 }
 
 func getStatusFromConditions(conditions []metav1.Condition) string {

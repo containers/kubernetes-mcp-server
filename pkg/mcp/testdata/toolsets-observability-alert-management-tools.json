@@ -1,0 +1,901 @@
+[
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Calls the monitoring-plugin management API over HTTP; backend enforces caller RBAC"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Create Alert Rule"
+    },
+    "description": "Create an OpenShift alert rule via POST /api/v1/alerting/rules.\n\nSet prometheus_rule_name and namespace for a user-defined rule in that PrometheusRule. Omit prometheus_rule_name to create a platform alerting rule (AlertingRule platform-alert-rules). Do not invent a PrometheusRule name; if the target is unclear, ask before calling.\nCannot add a user-defined rule to a platform-managed PrometheusRule.\nDo not put secrets in labels or annotations.\nDo not pass cluster or cluster_labels on this operation.\n\nBefore calling this tool:\n1. list_alert_rules and check whether any rule already has the same PromQL expression. If one does, ask the user whether to update that rule instead of creating a duplicate.\n2. If observability/metrics is enabled, verify expr metric names with list_metrics.\n3. preview_alert_rule for the create payload.\n4. Explain the planned create (user-defined vs platform) and wait for the user to agree.\n\nDo not retry a 409/405 GitOps or operator-managed conflict. If the target PrometheusRule is GitOps-managed, present the preview desiredObject YAML. Do not retry 400, 404, or 413.",
+    "inputSchema": {
+      "properties": {
+        "alert": {
+          "description": "Alert name (PrometheusRule alert field).",
+          "type": "string"
+        },
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations to attach to alerts produced by the rule.",
+          "type": "object"
+        },
+        "cluster": {
+          "description": "Not supported on this operation; omit this field.",
+          "type": "string"
+        },
+        "cluster_labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Not supported on this operation; omit this field.",
+          "type": "object"
+        },
+        "expr": {
+          "description": "PromQL expression to evaluate.",
+          "type": "string"
+        },
+        "for": {
+          "description": "Duration the condition must be true before firing (for example 5m).",
+          "type": "string"
+        },
+        "group_name": {
+          "description": "Optional rule group name within the PrometheusRule.",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Labels to attach to the rule. severity is merged from the severity parameter when set.",
+          "type": "object"
+        },
+        "namespace": {
+          "description": "PrometheusRule namespace for user-defined rules. Required with prometheus_rule_name. Otherwise stored as a namespace label on a platform rule.",
+          "type": "string"
+        },
+        "prometheus_rule_name": {
+          "description": "PrometheusRule resource name for a user-defined rule. Omit to create a platform rule.",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Alert severity: critical, warning, info, or none.",
+          "enum": [
+            "critical",
+            "warning",
+            "info",
+            "none"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "alert",
+        "expr"
+      ],
+      "type": "object"
+    },
+    "name": "create_alert_rule",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Computed stable ID for the created alert rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "title": "Create Alert Rule"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Calls the monitoring-plugin management API over HTTP; backend enforces caller RBAC"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Delete Alert Rules"
+    },
+    "description": "Delete alert rules by stable ID via DELETE /api/v1/alerting/rules.\n\nUser-created in a user-owned PrometheusRule: yes. GitOps/operator user-defined: no.\nPlatform rules in a writable AlertingRule (created via this API): yes. CMO/operator-managed platform: no — drop with alerting_rule_enabled=false instead of delete.\nGitOps: never delete through this API.\nDo not use this to mute notifications (create_silence) or to hide a CMO platform rule (drop).\nProvide rule_id or rule_ids (1-100) the user has confirmed. The response always includes per-rule statusCode and optional message so partial success is visible; report each failure.\nDo not pass cluster or cluster_labels on this operation.\n\nIf the user asked by name and several rules share that name, ask which id to delete. Do not delete all matches unless the user explicitly asks for that and confirms.\nIf management_status is gitops, present the preview desiredObject (remove or revert in Git).\nIf source=user and management_status is operator, the rule cannot be deleted here; they can silence it or create a replacement user-defined rule in a PrometheusRule they own.\nDo not retry 400, 404, or 413.",
+    "inputSchema": {
+      "properties": {
+        "cluster": {
+          "description": "Not supported on this operation; omit this field.",
+          "type": "string"
+        },
+        "cluster_labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Not supported on this operation; omit this field.",
+          "type": "object"
+        },
+        "rule_id": {
+          "description": "Single stable alert rule ID to delete.",
+          "type": "string"
+        },
+        "rule_ids": {
+          "description": "Stable alert rule IDs to delete (at most 100 combined with rule_id).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_alert_rules",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "description": "Per-rule deletion results",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "Stable alert rule ID that was processed",
+                "type": "string"
+              },
+              "message": {
+                "description": "Error message if the operation failed",
+                "type": "string"
+              },
+              "statusCode": {
+                "description": "HTTP status code for this rule",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "statusCode"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
+    },
+    "title": "Delete Alert Rules"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Calls the monitoring-plugin management API over HTTP; backend enforces caller RBAC"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Alert Rules"
+    },
+    "description": "List managed OpenShift alert rules from the monitoring-plugin management API.\n\nReturns each rule's stable ID, PromQL expression, severity, namespace, source (platform or user), and management_status (user-created, gitops, or operator).\nThis is rule definitions, not firing instances (use list_alerts for those). Use this before create (to detect the same expr) and before update/delete (to resolve names to ids).\nAlert name is not unique: if several rows share a name, present them to the user and wait; do not pick one or change all of them.\nIf id is empty, do not invent an id. Surface warnings from the response.\nGitOps-managed rules cannot be created into, updated, dropped, or deleted through this API. Operator-managed user-defined rules cannot be updated, dropped, or deleted; silence or create a replacement. Operator-managed platform rules may still support drop/restore and ARC label/classification updates; they cannot be deleted.\n\nOptional filters: namespace, severity, state (inactive, pending, firing), source, the exact cluster label, matchers, and extra label equality filters. cluster_labels is not supported by the management API.",
+    "inputSchema": {
+      "properties": {
+        "cluster": {
+          "description": "Exact cluster label filter (query parameter cluster); does not select a remote cluster.",
+          "type": "string"
+        },
+        "cluster_labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Not supported on this operation; omit this field.",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional label equality filters forwarded as query parameters.",
+          "type": "object"
+        },
+        "matchers": {
+          "description": "Prometheus-style match[] selectors (for example severity=\"critical\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "namespace": {
+          "description": "Filter by namespace label (Thanos tenancy for user-workload rules).",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Alert severity: critical, warning, info, or none.",
+          "enum": [
+            "critical",
+            "warning",
+            "info",
+            "none"
+          ],
+          "type": "string"
+        },
+        "source": {
+          "description": "Filter by openshift_io_alert_source: platform or user.",
+          "enum": [
+            "platform",
+            "user"
+          ],
+          "type": "string"
+        },
+        "state": {
+          "description": "Filter by state. Omit for all states.",
+          "enum": [
+            "inactive",
+            "pending",
+            "firing"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_alert_rules",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "description": "Managed alert rules matching the filters",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "annotations": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Rule annotations",
+                "type": "object"
+              },
+              "cluster": {
+                "description": "cluster or managed_cluster label when present",
+                "type": "string"
+              },
+              "expr": {
+                "description": "PromQL expression",
+                "type": "string"
+              },
+              "group": {
+                "description": "Prometheus rule group name",
+                "type": "string"
+              },
+              "health": {
+                "description": "Prometheus rule health",
+                "type": "string"
+              },
+              "id": {
+                "description": "Stable alert rule ID (openshift_io_alert_rule_id)",
+                "type": "string"
+              },
+              "labels": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Rule labels",
+                "type": "object"
+              },
+              "management_status": {
+                "description": "user-created, gitops, or operator",
+                "type": "string"
+              },
+              "name": {
+                "description": "Alert name",
+                "type": "string"
+              },
+              "namespace": {
+                "description": "namespace label",
+                "type": "string"
+              },
+              "severity": {
+                "description": "severity label",
+                "type": "string"
+              },
+              "source": {
+                "description": "platform or user",
+                "type": "string"
+              },
+              "type": {
+                "description": "alerting or recording",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "management_status"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "warnings": {
+          "description": "Non-fatal backend warnings from the management API",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
+    },
+    "title": "List Alert Rules"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Calls the monitoring-plugin management API over HTTP; backend enforces caller RBAC"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Alerts"
+    },
+    "description": "List OpenShift alert instances from the monitoring-plugin management API (GET /api/v1/alerting/alerts).\n\nReturns firing, pending, and/or silenced instances with labels, state, and rule_id when the API attached a stable id.\nThis is alert instances, not rule definitions (use list_alert_rules for expr and management_status).\nPrefer this over get_alerts when you need a rule_id for update_alert_rule or delete_alert_rules.\nSurface warnings from the response.\n\nOptional filters: namespace, severity, state (pending, firing, silenced), source, the exact cluster label, and extra label equality filters. matchers and cluster_labels are not supported by this endpoint.",
+    "inputSchema": {
+      "properties": {
+        "cluster": {
+          "description": "Exact cluster label filter (query parameter cluster); does not select a remote cluster.",
+          "type": "string"
+        },
+        "cluster_labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Not supported on this operation; omit this field.",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Additional label equality filters forwarded as query parameters.",
+          "type": "object"
+        },
+        "namespace": {
+          "description": "Filter by namespace label (Thanos tenancy for user-workload rules).",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Alert severity: critical, warning, info, or none.",
+          "enum": [
+            "critical",
+            "warning",
+            "info",
+            "none"
+          ],
+          "type": "string"
+        },
+        "source": {
+          "description": "Filter by openshift_io_alert_source: platform or user.",
+          "enum": [
+            "platform",
+            "user"
+          ],
+          "type": "string"
+        },
+        "state": {
+          "description": "Filter by state. Omit for all states.",
+          "enum": [
+            "pending",
+            "firing",
+            "silenced"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_alerts",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alerts": {
+          "description": "Alert instances matching the filters",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "active_at": {
+                "description": "When the instance became active (RFC3339)",
+                "type": "string"
+              },
+              "annotations": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Alert instance annotations",
+                "type": "object"
+              },
+              "cluster": {
+                "description": "cluster or managed_cluster label when present",
+                "type": "string"
+              },
+              "component": {
+                "description": "Classification component",
+                "type": "string"
+              },
+              "labels": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Alert instance labels",
+                "type": "object"
+              },
+              "layer": {
+                "description": "Classification layer",
+                "type": "string"
+              },
+              "name": {
+                "description": "Alert name (alertname label)",
+                "type": "string"
+              },
+              "namespace": {
+                "description": "namespace label",
+                "type": "string"
+              },
+              "rule_id": {
+                "description": "Stable alert rule ID when the management API attached one",
+                "type": "string"
+              },
+              "severity": {
+                "description": "severity label",
+                "type": "string"
+              },
+              "source": {
+                "description": "platform or user",
+                "type": "string"
+              },
+              "state": {
+                "description": "pending, firing, or silenced",
+                "type": "string"
+              },
+              "value": {
+                "description": "Current evaluated value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "warnings": {
+          "description": "Non-fatal backend warnings from the management API",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "alerts"
+      ],
+      "type": "object"
+    },
+    "title": "List Alerts"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Calls the monitoring-plugin management API over HTTP; backend enforces caller RBAC"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Preview Alert Rule"
+    },
+    "description": "Dry-run a create or update without persisting cluster changes via POST /api/v1/alerting/rules/preview.\n\nRequires a monitoring-plugin build containing the preview API (PR #1331). If the endpoint is missing, stop; do not bypass preview.\nCreate preview: set alert and expr. Include prometheus_rule_name and namespace for a user-defined rule; omit prometheus_rule_name for a platform rule. Do not invent a PrometheusRule name.\nUpdate preview: set rule_id plus labels, severity, classification, or alerting_rule_enabled. PATCH/preview cannot send expr, alert name, for, or annotation changes (platform cannot change those at all; user-created needs a replacement create).\nDo not pass cluster or cluster_labels on this operation.\n\nRequired before create_alert_rule or update_alert_rule. After preview, explain the plan (writable, managedBy, resources, desiredRule) and wait for the user to agree.\nIf create_alert_rule or update_alert_rule is not in the tool list, do not call it. Tell the user writes are disabled (--read-only=false standalone, or read_only = false and disable_destructive = false in openshift-mcp-server). Do not claim the change was applied.\nIf writable is false, do not call create_alert_rule or update_alert_rule.\nwritable reports ownership restrictions, not write permission; applying the plan can still return HTTP 403.\nIf managedBy is gitops, present each resources[] kind/namespace/name, changes, and full desiredObject YAML. Follow gitApplyHint.\nIf managedBy is operator and source is user, the rule cannot be edited. Offer create_silence, or creating a new user-defined rule in a PrometheusRule the user names.",
+    "inputSchema": {
+      "properties": {
+        "alert": {
+          "description": "Alert name for create preview.",
+          "type": "string"
+        },
+        "alerting_rule_enabled": {
+          "description": "When false, drop a platform alert rule via AlertRelabelConfig. When true, restore a previously dropped rule. Cannot be combined with labels or classification.",
+          "type": "boolean"
+        },
+        "annotations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations for create preview.",
+          "type": "object"
+        },
+        "classification_component": {
+          "description": "Set openshift_io_alert_rule_component. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classification_component_from": {
+          "description": "Set openshift_io_alert_rule_component_from. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classification_layer": {
+          "description": "Set openshift_io_alert_rule_layer. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classification_layer_from": {
+          "description": "Set openshift_io_alert_rule_layer_from. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cluster": {
+          "description": "Not supported on this operation; omit this field.",
+          "type": "string"
+        },
+        "cluster_labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Not supported on this operation; omit this field.",
+          "type": "object"
+        },
+        "expr": {
+          "description": "PromQL expression for create preview.",
+          "type": "string"
+        },
+        "for": {
+          "description": "Pending duration for create preview (for example 5m).",
+          "type": "string"
+        },
+        "group_name": {
+          "description": "Optional rule group name for user-defined create preview.",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Label key/value pairs to set.",
+          "type": "object"
+        },
+        "labels_to_remove": {
+          "description": "Label keys to remove (sent as null values on the management API).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "namespace": {
+          "description": "PrometheusRule namespace for user-defined create preview.",
+          "type": "string"
+        },
+        "prometheus_rule_name": {
+          "description": "PrometheusRule name for user-defined create preview. Omit for platform rules.",
+          "type": "string"
+        },
+        "rule_id": {
+          "description": "Single stable alert rule ID.",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Alert severity: critical, warning, info, or none.",
+          "enum": [
+            "critical",
+            "warning",
+            "info",
+            "none"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "preview_alert_rule",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "desiredRule": {
+          "additionalProperties": true,
+          "description": "Desired alerting rule after the planned change",
+          "type": "object"
+        },
+        "gitApplyHint": {
+          "description": "When managedBy is gitops: how to apply this preview in Git via a git or GitHub MCP or the host; this toolset does not open pull requests",
+          "type": "string"
+        },
+        "managedBy": {
+          "description": "gitops or operator when the target is not writable",
+          "type": "string"
+        },
+        "resources": {
+          "description": "Each item has resource.kind/namespace/name, changes, and desiredObject (full Kubernetes manifest to commit)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "changes": {
+                "description": "Semantic field changes for this object",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "currentValue": {
+                      "description": "Value before the change"
+                    },
+                    "field": {
+                      "description": "Field that would change",
+                      "type": "string"
+                    },
+                    "newValue": {
+                      "description": "Value after the change"
+                    },
+                    "operation": {
+                      "description": "add, replace, or remove",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "desiredObject": {
+                "additionalProperties": true,
+                "description": "Complete desired Kubernetes manifest to commit in Git",
+                "type": "object"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "description": "Object identity (kind, namespace, name)",
+                "properties": {
+                  "apiVersion": {
+                    "description": "apiVersion of the object",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "PrometheusRule, AlertingRule, or AlertRelabelConfig",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Object name",
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "description": "Object namespace",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "resource"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "writable": {
+          "description": "Whether resource ownership permits this change; caller write RBAC is still required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "writable"
+      ],
+      "type": "object"
+    },
+    "title": "Preview Alert Rule"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Calls the monitoring-plugin management API over HTTP; backend enforces caller RBAC"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Update Alert Rule"
+    },
+    "description": "Update via PATCH /api/v1/alerting/rules: labels, severity, classification, or drop/restore (alerting_rule_enabled).\n\nLabels/classification: user-created labels and severity yes. The HTTP API does not accept expr, alert name, for, or annotations (create a replacement then delete the old id). Platform: labels via ARC or AlertingRule (cannot drop severity; alertname and rule-id labels are ignored). Classification is platform-only via ARC.\nDisable/enable: alerting_rule_enabled false/true is platform only. Operator-managed platform is allowed. GitOps and user-defined: 405.\nGitOps: do not call this tool. Operator user-defined: cannot be edited.\nProvide rule_id or rule_ids (1-100) of rules the user has confirmed. At least one mutation field is required.\nalerting_rule_enabled cannot be combined with labels, severity, or classification in the same request.\nDo not use this tool to silence an alert; use create_silence.\nDo not pass cluster or cluster_labels on this operation.\n\nNever resolve an alert name to every matching id. If list_alert_rules returns more than one rule with that name, ask which id to use. Do not update all matches unless the user explicitly asks for that and confirms.\nCall preview_alert_rule, explain the change, and wait for agreement before this call.\nRead each per-rule statusCode. After a label update, use the returned id; it may differ from the id you sent. Classification runs before labels and is not rolled back if the label update fails; inspect the result before retrying.\n\nmanagement_status gitops: do not call this tool; present preview desiredObject YAML.\nsource=user and (management_status operator or preview writable=false): do not retry. That rule cannot be edited. Offer create_silence, or a new user-defined rule in a PrometheusRule the user names.\nDo not retry 400, 404, or 413.",
+    "inputSchema": {
+      "properties": {
+        "alerting_rule_enabled": {
+          "description": "When false, drop a platform alert rule via AlertRelabelConfig. When true, restore a previously dropped rule. Cannot be combined with labels or classification.",
+          "type": "boolean"
+        },
+        "classification_component": {
+          "description": "Set openshift_io_alert_rule_component. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classification_component_from": {
+          "description": "Set openshift_io_alert_rule_component_from. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classification_layer": {
+          "description": "Set openshift_io_alert_rule_layer. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classification_layer_from": {
+          "description": "Set openshift_io_alert_rule_layer_from. Empty or null clears the override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cluster": {
+          "description": "Not supported on this operation; omit this field.",
+          "type": "string"
+        },
+        "cluster_labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Not supported on this operation; omit this field.",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Label key/value pairs to set.",
+          "type": "object"
+        },
+        "labels_to_remove": {
+          "description": "Label keys to remove (sent as null values on the management API).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule_id": {
+          "description": "Single stable alert rule ID.",
+          "type": "string"
+        },
+        "rule_ids": {
+          "description": "Stable alert rule IDs (at most 100 combined with rule_id).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "severity": {
+          "description": "Alert severity: critical, warning, info, or none.",
+          "enum": [
+            "critical",
+            "warning",
+            "info",
+            "none"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "update_alert_rule",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "description": "Per-rule update results",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "Stable alert rule ID that was processed",
+                "type": "string"
+              },
+              "message": {
+                "description": "Error message if the operation failed",
+                "type": "string"
+              },
+              "statusCode": {
+                "description": "HTTP status code for this rule",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "statusCode"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
+    },
+    "title": "Update Alert Rule"
+  }
+]
