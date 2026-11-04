@@ -526,20 +526,21 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset               | Description                                                                                                                                                                                                                             | Default |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
-| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
-| helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
-| kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
-| kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
-| kubevirt              | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
-| netobserv             | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| observability/logs    | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
-| observability/metrics | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                                                                                           |         |
-| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
-| observability/traces  | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
-| tekton                | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
+| Toolset                        | Description                                                                                                                                                                                                                             | Default |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config                         | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core                           | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| helm                           | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp                            | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali                          | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt                       | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv                      | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| observability/alert-management | Toolset for listing OpenShift alerts and managing alert rules via the monitoring-plugin management API.                                                                                                                                 |         |
+| observability/logs             | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
+| observability/metrics          | Toolset for querying Prometheus and Alertmanager, including listing, creating, updating, and deleting silences.                                                                                                                         |         |
+| observability/otelcol          | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
+| observability/traces           | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
+| tekton                         | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -923,6 +924,8 @@ message = "Accessing a Secret."
 ### Toolset-Specific Configuration
 
 Some toolsets accept additional configuration via the `toolset_configs` map.
+
+For the opt-in alert management toolset, see [Alert management](alert-management.md).
 
 | Field | Type | Description |
 |-------|------|-------------|

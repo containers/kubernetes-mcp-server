@@ -3,7 +3,6 @@ package logs
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -223,10 +222,7 @@ func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
 
 	rt = instrumentation.RoundTripper(rt, cfg.ClientMetrics, "loki")
 
-	httpClient := &http.Client{
-		Timeout:   loki.RequestTimeout,
-		Transport: rt,
-	}
+	httpClient := auth.NewHTTPClient(rt, loki.RequestTimeout)
 	return loki.NewHTTPLoader(httpClient, url, tenant, kubernetes.LiveBackendLimit(params.Config)), nil
 }
 

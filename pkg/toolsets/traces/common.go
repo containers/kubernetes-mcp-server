@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -66,10 +65,7 @@ func getTempoClient(params api.ToolHandlerParams) (tempoclient.Loader, error) {
 
 	rt = instrumentation.RoundTripper(rt, cfg.ClientMetrics, "tempo")
 
-	httpClient := &http.Client{
-		Timeout:   tempoclient.RequestTimeout,
-		Transport: rt,
-	}
+	httpClient := auth.NewHTTPClient(rt, tempoclient.RequestTimeout)
 	return tempoclient.NewTempoLoader(httpClient, url, kubernetes.LiveBackendLimit(params.Config)), nil
 }
 

@@ -10,6 +10,148 @@
     },
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Create Silence"
+    },
+    "description": "Create an Alertmanager silence that mutes matching alerts.\n\nWHEN TO USE:\n- The user asks to silence or mute an alert or set of alerts\n- Operator-managed or GitOps-managed rules cannot be edited; mute notifications with a silence instead\n\nBEFORE CALLING:\n- Call get_alerts (and get_silences) so matchers are specific. Prefer alertname plus namespace and other labels from the firing alert.\n- Tell the user which label matchers will apply and for how long. Wait for explicit agreement.\n- alertname alone silences every instance of that alert name.\n\nPARAMETERS:\n- comment is required.\n- Provide labels (equality map) and/or matchers. At least one matcher is required after combining them.\n- duration defaults to 2h when endsAt is omitted. Do not set both duration and endsAt.\n- createdBy defaults to obs-mcp if omitted.",
+    "inputSchema": {
+      "properties": {
+        "comment": {
+          "description": "Reason for the silence. Required on create; optional on update (keeps the existing comment).",
+          "type": "string"
+        },
+        "createdBy": {
+          "description": "Who created the silence. Defaults to obs-mcp if omitted.",
+          "type": "string"
+        },
+        "duration": {
+          "description": "How long the silence lasts from startsAt (for example 2h). Default 2h when endsAt is omitted. Do not set together with endsAt.",
+          "type": "string"
+        },
+        "endsAt": {
+          "description": "Silence end time. Do not set together with duration.",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Equality matchers as a label map (for example alertname=Watchdog, namespace=app). Combined with matchers.",
+          "type": "object"
+        },
+        "matchers": {
+          "description": "Alertmanager matchers. Use with or instead of labels. alertname alone mutes every instance of that alert.",
+          "items": {
+            "properties": {
+              "isEqual": {
+                "description": "Equality matcher when true (default). False is a negative matcher.",
+                "type": "boolean"
+              },
+              "isRegex": {
+                "description": "Treat value as a regular expression. Default false.",
+                "type": "boolean"
+              },
+              "name": {
+                "description": "Label name (for example alertname).",
+                "type": "string"
+              },
+              "value": {
+                "description": "Label value to match.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "startsAt": {
+          "description": "Silence start time (RFC3339, Unix, NOW, or NOW±duration). Defaults to now.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comment"
+      ],
+      "type": "object"
+    },
+    "name": "create_silence",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "silence_id": {
+          "description": "Alertmanager silence ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "silence_id"
+      ],
+      "type": "object"
+    },
+    "title": "Create Silence"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Delete Silence"
+    },
+    "description": "Expire (delete) an Alertmanager silence by UUID.\n\nWHEN TO USE:\n- The user asks to un-silence, expire, or remove a silence\n- silence_id is required (from get_silences)\n\nExplain which silence will be removed and wait for the user to agree. This calls DELETE /api/v2/silence/{id}.",
+    "inputSchema": {
+      "properties": {
+        "silence_id": {
+          "description": "Alertmanager silence UUID to expire (delete).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "silence_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_silence",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "silence_id": {
+          "description": "Alertmanager silence ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "silence_id"
+      ],
+      "type": "object"
+    },
+    "title": "Delete Silence"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
@@ -621,7 +763,7 @@
       "readOnlyHint": true,
       "title": "Get Silences"
     },
-    "description": "Get silences from Alertmanager.\n\nWHEN TO USE:\n- To see which alerts are currently silenced\n- To check active, pending, or expired silences\n- To investigate why certain alerts are not firing notifications\n\nFILTERING:\n- Use 'filter' to apply label matchers to find specific silences\n\nSilences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.",
+    "description": "Get silences from Alertmanager.\n\nWHEN TO USE:\n- To see which alerts are currently silenced\n- To check active, pending, or expired silences\n- To investigate why certain alerts are not firing notifications\n\nFILTERING:\n- Use 'filter' to apply label matchers to find specific silences\n\nSilences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.\nTo create, change, or expire a silence, use create_silence, update_silence, or delete_silence.",
     "inputSchema": {
       "properties": {
         "filter": {
@@ -846,5 +988,106 @@
     },
     "name": "show_timeseries",
     "title": "Show Timeseries Chart"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {
+          "reason": "Queries Prometheus/Thanos/Alertmanager over HTTP; does not access the Kubernetes API"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Update Silence"
+    },
+    "description": "Update an existing Alertmanager silence (POST /api/v2/silences with silence_id).\n\nWHEN TO USE:\n- Extend, shorten, or retarget a silence returned by get_silences\n- silence_id is required (UUID)\n\nOmitted comment, createdBy, matchers/labels, and times keep the existing silence values.\nduration replaces endsAt relative to startsAt.\nExplain the change and wait for the user to agree before calling.",
+    "inputSchema": {
+      "properties": {
+        "comment": {
+          "description": "Reason for the silence. Required on create; optional on update (keeps the existing comment).",
+          "type": "string"
+        },
+        "createdBy": {
+          "description": "Who created the silence. Omitted on update keeps the existing createdBy.",
+          "type": "string"
+        },
+        "duration": {
+          "description": "How long the silence lasts from startsAt (for example 2h). Omitted on update keeps the existing endsAt unless duration or endsAt is set. Do not set together with endsAt.",
+          "type": "string"
+        },
+        "endsAt": {
+          "description": "Silence end time. Do not set together with duration. Omitted on update keeps the existing endsAt unless duration is set.",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Equality matchers as a label map (for example alertname=Watchdog, namespace=app). Combined with matchers.",
+          "type": "object"
+        },
+        "matchers": {
+          "description": "Alertmanager matchers. Use with or instead of labels. alertname alone mutes every instance of that alert.",
+          "items": {
+            "properties": {
+              "isEqual": {
+                "description": "Equality matcher when true (default). False is a negative matcher.",
+                "type": "boolean"
+              },
+              "isRegex": {
+                "description": "Treat value as a regular expression. Default false.",
+                "type": "boolean"
+              },
+              "name": {
+                "description": "Label name (for example alertname).",
+                "type": "string"
+              },
+              "value": {
+                "description": "Label value to match.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "silence_id": {
+          "description": "Alertmanager silence UUID from get_silences or create_silence.",
+          "type": "string"
+        },
+        "startsAt": {
+          "description": "Silence start time (RFC3339, Unix, NOW, or NOW±duration). Omitted on update keeps the existing startsAt.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "silence_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_silence",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "silence_id": {
+          "description": "Alertmanager silence ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "silence_id"
+      ],
+      "type": "object"
+    },
+    "title": "Update Silence"
   }
 ]
