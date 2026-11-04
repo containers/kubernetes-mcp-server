@@ -306,7 +306,11 @@ type Config struct {
 	// Toolsets lists the MCP toolsets to enable.
 	Toolsets Option[[]string]
 	// Tool configuration
-	EnabledTools  Option[[]string]
+	// EnabledTools is an explicit allowlist of tools to enable from enabled toolsets.
+	EnabledTools Option[[]string]
+	// OptInTools enables additional tools on top of the current tool selection.
+	// The owning toolset must be enabled; DisabledTools takes precedence.
+	OptInTools    Option[[]string]
 	DisabledTools Option[[]string]
 	ToolOverrides Option[map[string]ToolOverride]
 	// Prompt configuration
@@ -459,7 +463,8 @@ func newConfig() *Config {
 		EnableTargetCompatibilityToolFilters: opt("experimental_enable_target_compatibility_tool_filters", false).reload().
 			desc("Filter tools based on cluster target compatibility"),
 		Toolsets:      opt("toolsets", []string{"core", "config"}).reload().desc("MCP toolsets to enable"),
-		EnabledTools:  opt("enabled_tools", []string(nil)).reload().desc("If set, only these tools are exposed"),
+		EnabledTools:  opt("enabled_tools", []string(nil)).reload().desc("Explicit allowlist of tools to enable from enabled toolsets"),
+		OptInTools:    opt("opt_in_tools", []string(nil)).reload().desc("Additional tools to enable from enabled toolsets, on top of the current selection; disabled_tools takes precedence"),
 		DisabledTools: opt("disabled_tools", []string(nil)).reload().desc("Tools to hide"),
 		ToolOverrides: opt("tool_overrides", map[string]ToolOverride(nil)).reload().desc("Per-tool configuration overrides"),
 		Prompts:       opt("prompts", []Prompt(nil)).reload().desc("Custom MCP prompts"),

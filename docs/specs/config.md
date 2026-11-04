@@ -717,6 +717,17 @@ startup.
 <td></td>
 </tr>
 <tr>
+<td>opt_in_tools</td>
+<td>[]string</td>
+<td>empty</td>
+<td><code>opt_in_tools</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td></td>
+</tr>
+<tr>
 <td>disabled_tools</td>
 <td>[]string</td>
 <td>empty</td>

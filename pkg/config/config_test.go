@@ -119,7 +119,27 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.True(paths["max_in_flight"].Reloadable)
 	s.Contains(paths, "max_result_bytes")
 	s.True(paths["max_result_bytes"].Reloadable)
+	s.Contains(paths, "opt_in_tools")
+	s.True(paths["opt_in_tools"].Reloadable)
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
+}
+
+func (s *ConfigSuite) TestOptInTools() {
+	s.Run("no additional tools by default", func() {
+		s.Empty(BaseDefault().OptInTools.Get())
+	})
+	s.Run("reads additional tools from TOML", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`opt_in_tools = ["configuration_view"]`), WithBaseDefault())
+		s.Require().NoError(err)
+		s.Equal([]string{"configuration_view"}, cfg.OptInTools.Get())
+	})
+	s.Run("reload can clear additional tools", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`opt_in_tools = ["configuration_view"]`), WithBaseDefault())
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(`opt_in_tools = []`), WithPrevious(prev), WithBaseDefault())
+		s.Require().NoError(err)
+		s.Empty(next.OptInTools.Get())
+	})
 }
 
 func (s *ConfigSuite) TestMaxBackendResponseBytes() {
