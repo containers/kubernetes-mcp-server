@@ -36,7 +36,6 @@ spec:
           }
           require 'failed-run'
           require 'missing-diagnosis-secret'
-          require 'Secret'
     - llmJudge:
         contains: "The response diagnoses the failure as a referenced Secret that does not exist, based on observed runtime evidence."
 
