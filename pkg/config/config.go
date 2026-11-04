@@ -293,6 +293,8 @@ type Config struct {
 	ReadOnly Option[bool]
 	// When true, disable tools annotated with destructiveHint=true.
 	DisableDestructive Option[bool]
+	// When true, disable tools marked as multimodal.
+	DisableMultimodal Option[bool]
 	// ValidationEnabled enables pre-execution validation of tool calls.
 	// When enabled, validates resources, schemas, and RBAC before execution.
 	// Defaults to false.
@@ -455,6 +457,7 @@ func newConfig() *Config {
 		DeniedResources:    opt("denied_resources", []GroupVersionKind(nil)).reload().desc("GVKs that tools must not access"),
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
+		DisableMultimodal:  opt("disable_multimodal", false).reload().desc("Disable tools that return non-text content, such as images"),
 		ValidationEnabled:  opt("validation_enabled", false).reload().desc("Enable pre-execution validation of tool calls"),
 		EnableTargetCompatibilityToolFilters: opt("experimental_enable_target_compatibility_tool_filters", false).reload().
 			desc("Filter tools based on cluster target compatibility"),

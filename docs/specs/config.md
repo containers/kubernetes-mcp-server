@@ -653,6 +653,17 @@ startup.
 <td>DROP <code>--disable-destructive</code></td>
 </tr>
 <tr>
+<td>disable_multimodal</td>
+<td>bool</td>
+<td><code>false</code></td>
+<td><code>disable_multimodal</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td></td>
+</tr>
+<tr>
 <td>validation_enabled</td>
 <td>bool</td>
 <td><code>false</code></td>

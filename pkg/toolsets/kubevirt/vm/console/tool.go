@@ -53,7 +53,8 @@ func Tools(inspector api.ClusterInspector) []api.ServerTool {
 					ResourceName: &api.RBACResourceName{Argument: "name"},
 				},
 			),
-			Handler: screenshot,
+			Handler:    screenshot,
+			Multimodal: true,
 			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 				kubevirt.HasVirtualMachine(inspector),
 			},

@@ -74,6 +74,9 @@ func (c *Configuration) isToolApplicable(ctx context.Context) ToolFilter {
 		if c.DisableDestructive.Get() && ptr.Deref(tool.Tool.Annotations.DestructiveHint, false) {
 			return false
 		}
+		if c.DisableMultimodal.Get() && tool.Multimodal {
+			return false
+		}
 		if c.EnabledTools.Get() != nil && !slices.Contains(c.EnabledTools.Get(), tool.Tool.Name) {
 			return false
 		}
