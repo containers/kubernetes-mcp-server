@@ -524,3 +524,26 @@ config:
             name: loki_query_range
         minToolCalls: 2
         maxToolCalls: 10
+
+    # Requires the opt-in observability/alert-management toolset and management API.
+    - path: ../../tasks/obs/list-alert-rules/list-alert-rules.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_alert_rules
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/list-alerts/list-alerts.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: list_alerts
+        minToolCalls: 1
+        maxToolCalls: 5
+    - path: ../../tasks/obs/preview-alert-rule/preview-alert-rule.yaml
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: preview_alert_rule
+        minToolCalls: 1
+        maxToolCalls: 5
