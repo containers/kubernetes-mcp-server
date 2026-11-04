@@ -100,7 +100,7 @@
           "type": "integer"
         },
         "namespace": {
-          "description": "Namespace to list Helm releases from (Optional, all namespaces if not provided)",
+          "description": "Namespace to list Helm releases from (Optional, current namespace if not provided)",
           "type": "string"
         },
         "offset": {
