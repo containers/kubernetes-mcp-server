@@ -77,7 +77,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","ubuntu-24.04-arm","windows-latest","macos-15-intel","macos-latest"]') }}
+        # TODO: s/macos-15/macos-latest/ once https://github.com/orgs/community/discussions/211885 is resolved
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","ubuntu-24.04-arm","windows-latest","macos-15-intel","macos-15"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
