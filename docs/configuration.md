@@ -96,19 +96,56 @@ The server reads stdin once, at startup. A `SIGHUP` reload applies the same stdi
 
 ### Sensitive Values
 
-Fields marked with 🔒 in the reference tables hold, or point to, credentials. When the server runs in a cluster, keep them in a Secret instead of a ConfigMap, and mount the Secret as a file.
+Some configuration values are sensitive: an inline client secret, or paths to private keys, tokens and kubeconfigs. Fields marked with 🔒 in the reference tables are the ones to protect:
 
 | Field | What is sensitive |
 |-------|-------------------|
 | `token_exchange.client_auth.client_secret` | The secret itself, written inline in TOML. The server shows it as `<redacted>` when it logs the resolved configuration |
-| `tls_key` | Path to the TLS private key. Mount the key file from a Secret |
-| `token_exchange.client_auth.private_key_file` | Path to the private key used by `private_key_jwt`. Mount the key file from a Secret |
-| `token_exchange.client_auth.token_file` | Path to the JWT read by `jwt_file`. Mount the file from a Secret |
-| `kubeconfig` | Path to a kubeconfig, which usually contains tokens or client keys. Mount the file from a Secret |
+| `tls_key` | Path to the TLS private key |
+| `token_exchange.client_auth.private_key_file` | Path to the private key used by `private_key_jwt` |
+| `token_exchange.client_auth.token_file` | Path to the JWT read by `jwt_file` |
+| `kubeconfig` | Path to a kubeconfig, which usually contains tokens or client keys |
 
-Certificates (`tls_cert`, `certificate_authority`, `token_exchange.client_auth.certificate_file`) are public and can live in a ConfigMap.
+Certificates (`tls_cert`, `certificate_authority`, `token_exchange.client_auth.certificate_file`) are public.
 
-Only `client_secret` is a literal value in TOML. To keep it out of the ConfigMap, put it in its own drop-in file stored in a Secret, and load that directory with `--config-dir`:
+**Best practice: mount the configuration from a Secret.** When the server runs in a cluster, store `config.toml` in a Secret instead of a ConfigMap, and mount the files the 🔒 paths point to from a Secret too. Then a sensitive value can't end up in a ConfigMap by mistake, and you don't need to split the configuration across several objects:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-server-config
+  namespace: mcp
+type: Opaque
+stringData:
+  config.toml: |
+    port = "8080"
+    require_oauth = true
+    authorization_url = "https://keycloak.example.com/realms/mcp"
+    oauth_audience = "kubernetes-mcp-server"
+
+    [token_exchange]
+    strategy = "rfc8693"
+    audience = "kubernetes-api"
+
+    [token_exchange.client_auth]
+    method = "client_secret_basic"
+    client_id = "mcp-backend"
+    client_secret = "your-client-secret"
+---
+# In the Deployment's pod spec:
+#   args: ["--config", "/etc/kubernetes-mcp-server/config.toml"]
+#   volumeMounts:
+#     - name: config
+#       mountPath: /etc/kubernetes-mcp-server
+#       readOnly: true
+#   volumes:
+#     - name: config
+#       secret:
+#         secretName: mcp-server-config
+```
+
+**ConfigMaps still work.** You can mount the configuration from a ConfigMap instead of a Secret, or use both. A ConfigMap is handy if people who can't read Secrets should still see most of the settings. If you use one, keep the 🔒 values out of it: put `client_secret` in its own drop-in file stored in a Secret, load that directory with `--config-dir`, and mount the key, token and kubeconfig files from a Secret:
 
 ```yaml
 apiVersion: v1
@@ -122,7 +159,7 @@ stringData:
     [token_exchange.client_auth]
     client_secret = "your-client-secret"
 ---
-# In the Deployment's pod spec:
+# In the Deployment's pod spec, next to the ConfigMap mount for config.toml:
 #   args: ["--config", "/etc/kubernetes-mcp-server/config.toml",
 #          "--config-dir", "/etc/kubernetes-mcp-server/secrets.d"]
 #   volumeMounts:
@@ -135,7 +172,7 @@ stringData:
 #         secretName: mcp-server-secrets
 ```
 
-The other `[token_exchange]` settings (`strategy`, `audience`, `client_auth.method`, `client_auth.client_id`) stay in the ConfigMap. For a full Deployment that mounts a Secret, see [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod).
+The other `[token_exchange]` settings (`strategy`, `audience`, `client_auth.method`, `client_auth.client_id`) can stay in the ConfigMap. For a full Deployment that mounts a Secret, see [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod).
 
 ## Drop-in Configuration
 
