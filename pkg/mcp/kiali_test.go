@@ -36,6 +36,8 @@ func (s *KialiSuite) SetupTest() {
 	readOnly := s.Cfg.ReadOnly.Get()
 	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
+		read_only = false
+		disable_destructive = false
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host)))
