@@ -1,7 +1,9 @@
 name: mcpchecker MCP Evaluation - Report
 
 on:
-  workflow_run:
+  # Intentional privileged reporter: validates untrusted artifact schema, matches
+  # the gate-approved PR/SHA in API job metadata, and verifies the current PR head.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["mcpchecker MCP Evaluation"]
     types: [completed]
 
@@ -22,8 +24,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          JOB_CONCLUSION=$(gh api "repos/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs" \
-            --jq '[.jobs[] | select(.name | startswith("Run MCP Evaluation")) | .conclusion] | first')
+          JOB_CONCLUSION=$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select((.name | startswith("Run MCP Evaluation")) or (.name | startswith("Run Config Multicluster Evaluation"))) | select(.conclusion != null and .conclusion != "skipped") | .conclusion')
 
           if [[ -n "$JOB_CONCLUSION" && "$JOB_CONCLUSION" != "skipped" ]]; then
             echo "should-report=true" >> $GITHUB_OUTPUT
@@ -37,10 +39,124 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: eval-context-*
-          merge-multiple: true
+          # Keep suites isolated; do not let one context overwrite another.
+          merge-multiple: false
           path: eval-context/
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate evaluation contexts and authorization
+        if: steps.check.outputs.should-report == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          CONTEXT_ROOT: eval-context
+          MULTICLUSTER: 'false'
+        with:
+          # Shared with the multicluster job: validate all contexts before posting.
+          script: &validate-contexts |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { owner, repo } = context.repo;
+            const run_id = context.payload.workflow_run.id;
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id });
+            if (run.path !== '.github/workflows/mcpchecker.yaml' ||
+                run.event !== 'workflow_run' || run.status !== 'completed' ||
+                run.repository.full_name !== `${owner}/${repo}`) {
+              throw new Error('Unexpected source workflow provenance');
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun,
+              { owner, repo, run_id, per_page: 100 });
+
+            const root = process.env.CONTEXT_ROOT;
+            const multicluster = process.env.MULTICLUSTER === 'true';
+            if (!fs.lstatSync(root).isDirectory()) throw new Error('Invalid context directory');
+            const directories = multicluster ? [root] : fs.readdirSync(root).map(name => path.join(root, name));
+            if (!directories.length) throw new Error('No evaluation contexts');
+            const suites = new Set(['core', 'helm', 'kubevirt', 'kiali', 'tekton',
+              'netobserv', 'argocd', 'obs', 'all', 'config-multicluster']);
+            function readReportFile(file, limit) {
+              const stat = fs.lstatSync(file);
+              if (!stat.isFile() || stat.size > limit) {
+                throw new Error(`Report must be a regular file of at most ${limit} bytes: ${file}`);
+              }
+              return fs.readFileSync(file, 'utf8');
+            }
+
+            function validateReport(report) {
+              const requiredFields = ['pr_number', 'pr_sha', 'tasks_passed', 'tasks_total',
+                'task_pass_rate', 'assertions_passed', 'assertions_total', 'passed', 'has_diff'];
+              if (!report || Array.isArray(report) || typeof report !== 'object') {
+                throw new Error('Evaluation context must be a JSON object');
+              }
+              if (Object.keys(report).length !== requiredFields.length) {
+                throw new Error('Evaluation context has missing or unexpected fields');
+              }
+              for (const field of requiredFields) {
+                if (!Object.hasOwn(report, field) || typeof report[field] !== 'string' || /[\r\n]/.test(report[field])) {
+                  throw new Error(`Expected a single-line string: ${field}`);
+                }
+              }
+              for (const field of ['pr_number', 'tasks_passed', 'tasks_total', 'assertions_passed', 'assertions_total']) {
+                const value = report[field];
+                const isCanonicalInteger = /^(0|[1-9][0-9]*)$/.test(value) && String(Number(value)) === value;
+                if (!isCanonicalInteger || !Number.isSafeInteger(Number(value))) {
+                  throw new Error(`Expected a non-negative safe integer: ${field}`);
+                }
+              }
+              if (Number(report.pr_number) === 0) throw new Error('PR number must be positive');
+              if (!/^[0-9a-f]{40}$/.test(report.pr_sha)) throw new Error('Expected a full commit SHA');
+              if (!/^(0(?:\.[0-9]+)?|1(?:\.0+)?)$/.test(report.task_pass_rate)) {
+                throw new Error('Task pass rate must be a decimal between 0 and 1');
+              }
+              for (const field of ['passed', 'has_diff']) {
+                if (!['true', 'false'].includes(report[field])) {
+                  throw new Error(`Expected "true" or "false": ${field}`);
+                }
+              }
+              for (const metric of ['tasks', 'assertions']) {
+                if (Number(report[`${metric}_passed`]) > Number(report[`${metric}_total`])) {
+                  throw new Error(`${metric} passed cannot exceed total`);
+                }
+              }
+            }
+
+            async function verifyAuthorization(report, suite) {
+              // This name is assigned by the trusted default-branch gate's outputs,
+              // not by artifact contents or checked-out PR code. Match it exactly.
+              const specialJobNames = {
+                'kiali-multicluster': 'Run MCP Multicluster Evaluation',
+                'config-multicluster': 'Run Config Multicluster Evaluation',
+              };
+              const jobName = specialJobNames[suite] || `Run MCP Evaluation (${suite})`;
+              const authorizedJobName = `${jobName} [PR ${report.pr_number} @ ${report.pr_sha}]`;
+              const evaluationJob = jobs.find(job => job.name === authorizedJobName);
+              if (!evaluationJob || evaluationJob.status !== 'completed' ||
+                  !evaluationJob.conclusion || evaluationJob.conclusion === 'skipped') {
+                throw new Error('Artifact PR/SHA was not authorized for this evaluation job');
+              }
+              const { data: pr } = await github.rest.pulls.get({
+                owner, repo, pull_number: Number(report.pr_number),
+              });
+              if (pr.base.repo.full_name !== `${owner}/${repo}` || pr.head.sha !== report.pr_sha) {
+                throw new Error('Report commit is no longer the PR head');
+              }
+            }
+
+            for (const directory of directories) {
+              if (!fs.lstatSync(directory).isDirectory()) throw new Error('Invalid artifact directory');
+              const artifactName = path.basename(directory);
+              const suite = multicluster ? 'kiali-multicluster' : artifactName.replace(/^eval-context-/, '');
+              if (!multicluster && (!artifactName.startsWith('eval-context-') || !suites.has(suite))) {
+                throw new Error(`Unknown evaluation artifact: ${artifactName}`);
+              }
+              const report = JSON.parse(readReportFile(path.join(directory, 'context.json'), 16384));
+              validateReport(report);
+              await verifyAuthorization(report, suite);
+
+              const diff = path.join(directory, 'diff-output.txt');
+              if (fs.existsSync(diff)) readReportFile(diff, 48000);
+              core.info(`Validated ${suite}: PR ${report.pr_number} at ${report.pr_sha}`);
+            }
 
       - name: Post results comment
         if: steps.check.outputs.should-report == 'true'
@@ -50,17 +166,25 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
-          PR_NUMBER=$(jq -r '.pr_number' eval-context/context.json)
-          PR_SHA=$(jq -r '.pr_sha' eval-context/context.json)
-          TASKS_PASSED=$(jq -r '.tasks_passed' eval-context/context.json)
-          TASKS_TOTAL=$(jq -r '.tasks_total' eval-context/context.json)
-          TASK_PASS_RATE=$(jq -r '.task_pass_rate' eval-context/context.json)
-          ASSERTIONS_PASSED=$(jq -r '.assertions_passed' eval-context/context.json)
-          ASSERTIONS_TOTAL=$(jq -r '.assertions_total' eval-context/context.json)
-          PASSED=$(jq -r '.passed' eval-context/context.json)
-          HAS_DIFF=$(jq -r '.has_diff // "false"' eval-context/context.json)
+          for CONTEXT_FILE in eval-context/eval-context-*/context.json; do
+          CONTEXT_DIR=$(dirname "$CONTEXT_FILE")
+          PR_NUMBER=$(jq -r '.pr_number' "$CONTEXT_FILE")
+          PR_SHA=$(jq -r '.pr_sha' "$CONTEXT_FILE")
+          TASKS_PASSED=$(jq -r '.tasks_passed' "$CONTEXT_FILE")
+          TASKS_TOTAL=$(jq -r '.tasks_total' "$CONTEXT_FILE")
+          # The producer writes strings. Accept only decimal rates between 0 and 1.
+          TASK_PASS_RATE=$(jq -er '
+            .task_pass_rate
+            | select(type == "string")
+            | select(test("\\A(0(\\.[0-9]+)?|1(\\.0+)?)\\z"))
+          ' "$CONTEXT_FILE")
+          ASSERTIONS_PASSED=$(jq -r '.assertions_passed' "$CONTEXT_FILE")
+          ASSERTIONS_TOTAL=$(jq -r '.assertions_total' "$CONTEXT_FILE")
+          PASSED=$(jq -r '.passed' "$CONTEXT_FILE")
+          HAS_DIFF=$(jq -r '.has_diff' "$CONTEXT_FILE")
 
-          PASS_RATE=$(awk "BEGIN {printf \"%.1f\", $TASK_PASS_RATE * 100}")
+          PASS_RATE=$(awk -v rate="$TASK_PASS_RATE" \
+            'BEGIN {printf "%.1f", rate * 100}')
 
           if [[ "$RUN_CONCLUSION" != "success" ]]; then
             OVERALL="⚠️ Workflow failed"
@@ -72,8 +196,8 @@ jobs:
 
           # Build diff section if available
           DIFF_SECTION=""
-          if [[ "$HAS_DIFF" == "true" ]] && [[ -f eval-context/diff-output.txt ]]; then
-            DIFF_CONTENT=$(cat eval-context/diff-output.txt)
+          if [[ "$HAS_DIFF" == "true" ]] && [[ -f "$CONTEXT_DIR/diff-output.txt" ]]; then
+            DIFF_CONTENT=$(cat "$CONTEXT_DIR/diff-output.txt")
             DIFF_SECTION=$(cat <<DIFF_EOF
 
           ### Diff vs. Baseline (main)
@@ -104,6 +228,7 @@ jobs:
           [View full results](https://github.com/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID})
           EOF
           )"
+          done
 
   # Kiali only: posts a separate PR comment when suite=kiali triggers multicluster eval.
   report-multicluster:
@@ -118,8 +243,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          JOB_CONCLUSION=$(gh api "repos/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs" \
-            --jq '.jobs[] | select(.name == "Run MCP Multicluster Evaluation") | .conclusion')
+          JOB_CONCLUSION=$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name | startswith("Run MCP Multicluster Evaluation [PR ")) | select(.conclusion != null and .conclusion != "skipped") | .conclusion')
 
           if [[ -n "$JOB_CONCLUSION" && "$JOB_CONCLUSION" != "skipped" ]]; then
             echo "should-report=true" >> $GITHUB_OUTPUT
@@ -137,6 +262,15 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate multicluster context and authorization
+        if: steps.check.outputs.should-report == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          CONTEXT_ROOT: eval-context-multicluster
+          MULTICLUSTER: 'true'
+        with:
+          script: *validate-contexts
+
       - name: Post multicluster results comment
         if: steps.check.outputs.should-report == 'true'
         env:
@@ -149,13 +283,19 @@ jobs:
           PR_SHA=$(jq -r '.pr_sha' eval-context-multicluster/context.json)
           TASKS_PASSED=$(jq -r '.tasks_passed' eval-context-multicluster/context.json)
           TASKS_TOTAL=$(jq -r '.tasks_total' eval-context-multicluster/context.json)
-          TASK_PASS_RATE=$(jq -r '.task_pass_rate' eval-context-multicluster/context.json)
+          # The producer writes strings. Accept only decimal rates between 0 and 1.
+          TASK_PASS_RATE=$(jq -er '
+            .task_pass_rate
+            | select(type == "string")
+            | select(test("\\A(0(\\.[0-9]+)?|1(\\.0+)?)\\z"))
+          ' eval-context-multicluster/context.json)
           ASSERTIONS_PASSED=$(jq -r '.assertions_passed' eval-context-multicluster/context.json)
           ASSERTIONS_TOTAL=$(jq -r '.assertions_total' eval-context-multicluster/context.json)
           PASSED=$(jq -r '.passed' eval-context-multicluster/context.json)
           HAS_DIFF=$(jq -r '.has_diff // "false"' eval-context-multicluster/context.json)
 
-          PASS_RATE=$(awk "BEGIN {printf \"%.1f\", $TASK_PASS_RATE * 100}")
+          PASS_RATE=$(awk -v rate="$TASK_PASS_RATE" \
+            'BEGIN {printf "%.1f", rate * 100}')
 
           if [[ "$RUN_CONCLUSION" != "success" ]]; then
             OVERALL="⚠️ Workflow failed"
