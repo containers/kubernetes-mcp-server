@@ -24,9 +24,34 @@ var KialiGVR = schema.GroupVersionResource{
 
 const defaultKialiPort int64 = 20001
 
+// serviceURLSchemes returns HTTP scheme(s) to use for in-cluster Service URL candidates.
+// When requireTLS is true, only https is used unless the CR explicitly sets web_schema to http
+// (those candidates are omitted). When the CR enables a server identity cert or web_schema https,
+// https is used. Otherwise http is used for backward-compatible in-cluster probes.
+func serviceURLSchemes(cr *KialiCR, requireTLS bool) []string {
+	if cr != nil {
+		if cert := strings.TrimSpace(cr.Spec.Identity.CertFile); cert != "" {
+			return []string{"https"}
+		}
+		switch strings.ToLower(strings.TrimSpace(cr.Spec.Server.WebSchema)) {
+		case "https":
+			return []string{"https"}
+		case "http":
+			if requireTLS {
+				return nil
+			}
+			return []string{"http"}
+		}
+	}
+	if requireTLS {
+		return []string{"https"}
+	}
+	return []string{"http"}
+}
+
 // internalServiceURLs builds candidate in-cluster Service base URLs for a Kiali CR.
 // Prefer values from status/spec; fall back to CR metadata and Kiali defaults.
-func internalServiceURLs(cr *KialiCR) []string {
+func internalServiceURLs(cr *KialiCR, requireTLS bool) []string {
 	if cr == nil {
 		return nil
 	}
@@ -58,21 +83,29 @@ func internalServiceURLs(cr *KialiCR) []string {
 		port = defaultKialiPort
 	}
 
-	webRoot := cr.Spec.Server.WebRoot
-	base := fmt.Sprintf("http://%s.%s.svc:%d", instanceName, ns, port)
-
-	switch webRoot {
-	case "", "/":
-		// Operator defaults: "/" on OpenShift, "/kiali" elsewhere. Try both.
-		return []string{base, base + "/kiali"}
-	default:
-		// Reject absolute/scheme-relative roots that could rewrite the authority
-		// (e.g. "@evil/", "//evil/").
-		if !strings.HasPrefix(webRoot, "/") || strings.HasPrefix(webRoot, "//") {
-			return nil
-		}
-		return []string{base + strings.TrimSuffix(webRoot, "/")}
+	schemes := serviceURLSchemes(cr, requireTLS)
+	if len(schemes) == 0 {
+		return nil
 	}
+
+	webRoot := cr.Spec.Server.WebRoot
+	out := make([]string, 0, len(schemes)*2)
+	for _, scheme := range schemes {
+		base := fmt.Sprintf("%s://%s.%s.svc:%d", scheme, instanceName, ns, port)
+		switch webRoot {
+		case "", "/":
+			// Operator defaults: "/" on OpenShift, "/kiali" elsewhere. Try both.
+			out = append(out, base, base+"/kiali")
+		default:
+			// Reject absolute/scheme-relative roots that could rewrite the authority
+			// (e.g. "@evil/", "//evil/").
+			if !strings.HasPrefix(webRoot, "/") || strings.HasPrefix(webRoot, "//") {
+				return nil
+			}
+			out = append(out, base+strings.TrimSuffix(webRoot, "/"))
+		}
+	}
+	return out
 }
 
 func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
@@ -123,9 +156,10 @@ func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterIn
 		return "", false
 	}
 
+	requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
 	candidates := make([]string, 0, len(crs)*2)
 	for _, cr := range crs {
-		candidates = append(candidates, internalServiceURLs(cr)...)
+		candidates = append(candidates, internalServiceURLs(cr, requireTLS)...)
 	}
 	url, ok := probeCandidateURLs(ctx, candidates, kialiCfg, serverCfg, bearerToken)
 	if ok {

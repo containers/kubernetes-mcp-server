@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,7 +106,7 @@ func TestInternalServiceURLs(t *testing.T) {
 				},
 			},
 		}
-		urls := internalServiceURLs(cr)
+		urls := internalServiceURLs(cr, false)
 		if len(urls) != 2 {
 			t.Fatalf("expected 2 candidates, got %v", urls)
 		}
@@ -131,7 +132,7 @@ func TestInternalServiceURLs(t *testing.T) {
 				},
 			},
 		}
-		urls := internalServiceURLs(cr)
+		urls := internalServiceURLs(cr, false)
 		if len(urls) != 1 || urls[0] != "http://my-kiali.mesh.svc:20001/kiali" {
 			t.Fatalf("unexpected URLs: %v", urls)
 		}
@@ -153,7 +154,7 @@ func TestInternalServiceURLs(t *testing.T) {
 					Server: KialiServerSpec{WebRoot: "/kiali"},
 				},
 			}
-			if urls := internalServiceURLs(cr); len(urls) != 0 {
+			if urls := internalServiceURLs(cr, false); len(urls) != 0 {
 				t.Fatalf("expected no URLs for instance_name %q, got %v", instanceName, urls)
 			}
 		}
@@ -176,7 +177,7 @@ func TestInternalServiceURLs(t *testing.T) {
 					Server: KialiServerSpec{WebRoot: webRoot},
 				},
 			}
-			if urls := internalServiceURLs(cr); len(urls) != 0 {
+			if urls := internalServiceURLs(cr, false); len(urls) != 0 {
 				t.Fatalf("expected no URLs for web_root %q, got %v", webRoot, urls)
 			}
 		}
@@ -192,8 +193,74 @@ func TestInternalServiceURLs(t *testing.T) {
 				},
 			},
 		}
-		if urls := internalServiceURLs(cr); len(urls) != 0 {
+		if urls := internalServiceURLs(cr, false); len(urls) != 0 {
 			t.Fatalf("expected no URLs for invalid namespace, got %v", urls)
+		}
+	})
+
+	t.Run("uses https when require_tls is enabled", func(t *testing.T) {
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+			Status: KialiStatus{
+				Deployment: KialiDeploymentStatus{
+					InstanceName: "kiali",
+					Namespace:    "istio-system",
+				},
+			},
+		}
+		urls := internalServiceURLs(cr, true)
+		if len(urls) != 2 {
+			t.Fatalf("expected 2 candidates, got %v", urls)
+		}
+		if urls[0] != "https://kiali.istio-system.svc:20001" {
+			t.Errorf("unexpected first URL: %s", urls[0])
+		}
+	})
+
+	t.Run("honors spec.server.web_schema https", func(t *testing.T) {
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+			Spec: KialiSpec{
+				Server: KialiServerSpec{WebSchema: "https"},
+				Deployment: KialiDeploymentSpec{
+					InstanceName: "kiali",
+					Namespace:    "istio-system",
+				},
+			},
+		}
+		urls := internalServiceURLs(cr, false)
+		if len(urls) != 2 || !strings.HasPrefix(urls[0], "https://") {
+			t.Fatalf("expected https URLs, got %v", urls)
+		}
+	})
+
+	t.Run("omits http CR candidates when require_tls and web_schema is http", func(t *testing.T) {
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+			Spec: KialiSpec{
+				Server: KialiServerSpec{WebSchema: "http"},
+				Deployment: KialiDeploymentSpec{
+					InstanceName: "kiali",
+					Namespace:    "istio-system",
+				},
+			},
+		}
+		if urls := internalServiceURLs(cr, true); len(urls) != 0 {
+			t.Fatalf("expected no URLs, got %v", urls)
+		}
+	})
+
+	t.Run("uses https when identity cert_file is set", func(t *testing.T) {
+		cr := &KialiCR{
+			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
+			Spec: KialiSpec{
+				Identity:   KialiIdentitySpec{CertFile: "/kiali-cert/tls.crt"},
+				Deployment: KialiDeploymentSpec{InstanceName: "kiali", Namespace: "istio-system"},
+			},
+		}
+		urls := internalServiceURLs(cr, false)
+		if len(urls) != 2 || !strings.HasPrefix(urls[0], "https://") {
+			t.Fatalf("expected https URLs, got %v", urls)
 		}
 	})
 }
