@@ -27,9 +27,11 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
   - [Kubernetes Connection](#kubernetes-connection)
     - [Client Limits and Watcher Timing](#client-limits-and-watcher-timing)
     - [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod)
+  - [Cluster Authorization](#cluster-authorization)
   - [Access Control](#access-control)
   - [Toolsets](#toolsets)
   - [Tool Filtering](#tool-filtering)
+  - [Target Compatibility](#target-compatibility)
   - [Tool Overrides](#tool-overrides)
   - [Denied Resources](#denied-resources)
   - [Server Instructions](#server-instructions)
@@ -573,35 +575,49 @@ If the server starts but operations fail (e.g., `failed to list namespaces: unkn
 3. **Permissions** — The credentials in the kubeconfig must have sufficient RBAC permissions on the target cluster.
 4. **TLS certificates** — If the external cluster uses a private CA, the CA certificate must be included in the kubeconfig or mounted separately.
 
+### Cluster Authorization
+
+Kubernetes RBAC on the identity this server authenticates as is the access control to rely on for Kubernetes API calls. That identity is either the client's bearer token or a server credential such as a kubeconfig user or an in-cluster ServiceAccount. Scope a server credential with a Role or ClusterRole, as described in the [Kubernetes setup guide](getting-started-kubernetes.md). That boundary still holds when a tool annotation is wrong or the same credentials are used outside this process. [Tool RBAC metadata](tool-rbac-metadata.md) tells a client which permissions a tool may need so it can prepare that RBAC. The metadata does not grant access.
+
+Non-Kubernetes backends enforce their own checks on the credential this server presents. Kiali, NetObserv, Prometheus, Loki, and Tempo receive a bearer token: the client token in passthrough mode, after token exchange when configured, otherwise the kubeconfig or in-cluster ServiceAccount token. The backend decides whether that token is allowed. Helm registry fetches use registry credentials.
+
+`read_only`, `disable_destructive`, `toolsets`, `enabled_tools`, `disabled_tools`, `denied_resources`, `confirmation_rules`, `confirmation_fallback`, and the RBAC pre-check inside `validation_enabled` are best-effort guardrails. They narrow what an MCP client is offered or reject some calls before they are sent. They do not change the cluster permissions of the identity the server authenticates as.
+
+- **Tool hiding.** `read_only`, `disable_destructive`, `toolsets`, `enabled_tools`, and `disabled_tools` unregister tools. A hidden tool cannot be called. `read_only` keeps tools annotated `readOnlyHint=true`, which can still read any object that identity can get, including Secrets. `disable_destructive` unregisters tools annotated `destructiveHint=true`.
+- **Request denial.** `denied_resources` rejects matching group/version/kind calls on the Kubernetes client and omits those kinds from discovery. A match is by kind and API version. Verb, namespace, and name are ignored. An empty `kind` matches every kind in that group and version. Calls made with another HTTP client — Kiali, NetObserv, Prometheus, Loki, Tempo, and Helm registry fetches — do not consult this list.
+- **Prompts and pre-checks.** `confirmation_rules` prompt at tool invocation and on the Kubernetes client path. If the client cannot elicit a confirmation, the call proceeds unless `confirmation_fallback` is `"deny"` (the default is `"allow"`). With `validation_enabled`, the server sends a `SelfSubjectAccessReview` before the Kubernetes call. The API server still authorizes the real request. Schema validation from that flag checks the manifest.
+
+`experimental_enable_target_compatibility_tool_filters` hides tools whose required APIs are absent. See [Target compatibility](#target-compatibility). That filter reflects which APIs the cluster advertises.
+
+OAuth settings (`require_oauth`, `authorization_url`, `skip_jwt_verification`, and the rest of [OAuth and Authorization](#oauth-and-authorization)), `cluster_auth_mode`, and TLS settings configure how clients authenticate to this server and which identity is sent to the cluster. Those settings stand apart from the guardrails in this section. With `cluster_auth_mode = "passthrough"` (the default when a bearer token is present), the API server authorizes that token, after token exchange when configured. With `cluster_auth_mode = "kubeconfig"`, or when no token is present and passthrough falls back, the API server authorizes the kubeconfig or in-cluster ServiceAccount identity.
+
 ### Access Control
 
-Control what operations the MCP server can perform on your Kubernetes cluster. These options help enforce the principle of least privilege, ensuring AI assistants only have the permissions they need for their intended tasks.
+`read_only` and `disable_destructive` unregister tools. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `read_only` | boolean | `false` | When `true`, only exposes tools annotated with `readOnlyHint=true`. Prevents any write operations on the cluster. |
-| `disable_destructive` | boolean | `false` | When `true`, disables tools annotated with `destructiveHint=true` (delete, update operations). Has no effect when `read_only` is `true`. |
-| `experimental_enable_target_compatibility_tool_filters` | boolean | `false` | Controls cluster-capability tool filtering. Tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). **NOTE:** This feature is experimental, and this option is subject to change or removal in a future release. |
+| `read_only` | boolean | `false` | When `true`, only tools annotated with `readOnlyHint=true` are registered. See [Cluster authorization](#cluster-authorization). |
+| `disable_destructive` | boolean | `false` | When `true`, tools annotated with `destructiveHint=true` are not registered. Has no effect when `read_only` is `true`. See [Cluster authorization](#cluster-authorization). |
 
 **Example:**
 ```toml
-# Production-safe configuration
+# Register only tools annotated readOnlyHint=true
 read_only = true
 
-# Or allow writes but prevent deletions
+# Or keep other write tools, and hide tools annotated destructiveHint=true
 disable_destructive = true
-
-# Probe every target for API-group compatibility
-experimental_enable_target_compatibility_tool_filters = true
 ```
 
 ### Toolsets
 
 Toolsets group related tools together. Enable only the toolsets you need to reduce context size and improve LLM tool selection accuracy.
 
+Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `toolsets` | string[] | `["core", "config"]` | List of toolsets to enable. |
+| `toolsets` | string[] | `["core", "config"]` | List of toolsets to enable. See [Cluster authorization](#cluster-authorization). |
 
 **Available Toolsets:**
 
@@ -651,11 +667,13 @@ See [Tool requirements](tool-requirements.md) for availability prerequisites.
 
 Fine-grained control over individual tools within enabled toolsets.
 
+`enabled_tools` and `disabled_tools` unregister tools. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled_tools` | string[] | `[]` | Explicit allowlist of all tools to enable. When set, replaces the default tool selection. |
+| `enabled_tools` | string[] | `[]` | Allowlist of specific tools to enable. When set, only these tools are registered. See [Cluster authorization](#cluster-authorization). |
 | `opt_in_tools` | string[] | `[]` | Additional tools to enable on top of the current selection, whether that is the default selection or an explicit `enabled_tools` allowlist. |
-| `disabled_tools` | string[] | `[]` | Denylist of tools to disable. Takes precedence over both `enabled_tools` and `opt_in_tools`. |
+| `disabled_tools` | string[] | `[]` | Denylist of specific tools to unregister. Applied after `enabled_tools`. See [Cluster authorization](#cluster-authorization). |
 
 The owning toolset must be enabled in `toolsets` for a tool to be available. Neither `enabled_tools` nor `opt_in_tools` enables a toolset automatically. All selections remain subject to `read_only`, `disable_destructive`, and other tool availability filters.
 
@@ -675,6 +693,20 @@ enabled_tools = ["pods_list", "pods_get", "pods_log"]
 
 # Or disable specific tools from enabled toolsets
 disabled_tools = ["resources_delete", "pods_delete"]
+```
+
+### Target Compatibility
+
+Hides tools that require API groups the target cluster does not advertise. This reflects cluster capabilities. See [Cluster authorization](#cluster-authorization).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `experimental_enable_target_compatibility_tool_filters` | boolean | `false` | When `true`, tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). **NOTE:** This feature is experimental, and this option is subject to change or removal in a future release. |
+
+**Example:**
+```toml
+# Probe every target for API-group compatibility
+experimental_enable_target_compatibility_tool_filters = true
 ```
 
 ### Tool Overrides
@@ -701,15 +733,17 @@ description = "Get a Kubernetes resource by name. Always specify the namespace e
 
 ### Denied Resources
 
-Prevent access to specific Kubernetes resource types.
+Reject Kubernetes API calls for specific group/version/kind combinations, and omit those kinds from discovery.
+
+Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `denied_resources` | array | `[]` | List of GroupVersionKind objects that should not be accessible. |
+| `denied_resources` | array | `[]` | GroupVersionKind entries to reject on the Kubernetes client. An empty `kind` matches every kind in that group and version. See [Cluster authorization](#cluster-authorization). |
 
 **Example:**
 ```toml
-# Deny access to Secrets and ConfigMaps
+# Reject Secret and ConfigMap calls on the Kubernetes client
 [[denied_resources]]
 group = ""
 version = "v1"
@@ -720,7 +754,7 @@ group = ""
 version = "v1"
 kind = "ConfigMap"
 
-# Deny access to RBAC resources for additional security
+# Also reject common RBAC kinds on the Kubernetes client
 [[denied_resources]]
 group = "rbac.authorization.k8s.io"
 version = "v1"
@@ -942,12 +976,12 @@ Pre-execution validation catches errors before they reach the Kubernetes API, pr
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `validation_enabled` | boolean | `false` | When `true`, enables schema validation and RBAC pre-checks for all API requests. Resource existence is always checked regardless of this setting. |
+| `validation_enabled` | boolean | `false` | When `true`, enables schema validation and RBAC pre-checks for Kubernetes API requests made through this server's Kubernetes client. Resource existence is always checked regardless of this setting. See [Cluster authorization](#cluster-authorization). |
 
-When enabled, the validation layer runs at the HTTP RoundTripper level, intercepting all Kubernetes API calls (including those from plugins like Helm, KubeVirt, and Kiali). It performs:
+When enabled, the validation layer runs at the HTTP RoundTripper level, intercepting Kubernetes API calls made through this server's Kubernetes client (including those from plugins like Helm, KubeVirt, and Kiali). It performs:
 
 - **Schema validation** — Validates resource manifests against the cluster's OpenAPI schema for create/update operations
-- **RBAC pre-checks** — Verifies permissions using `SelfSubjectAccessReview` before attempting operations
+- **RBAC pre-checks** — Sends a `SelfSubjectAccessReview` before attempting operations. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as; schema validation is unchanged. See [Cluster authorization](#cluster-authorization).
 
 Resource existence validation (catching typos like "Deploymnt" instead of "Deployment") runs as part of access control regardless of this setting.
 
@@ -960,7 +994,9 @@ validation_enabled = true
 
 ### Confirmation Rules
 
-Prompt users for confirmation before dangerous actions. Rules operate at two levels:
+Prompt users for confirmation before dangerous actions. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
+
+Rules operate at two levels:
 
 - **Tool-level** — matches on tool name or `DestructiveHint` annotation. Fires once before the tool handler runs.
 - **Kube-level** — matches on Kubernetes API verb, kind, group, version, name, or namespace. Fires per API call during handler execution.
@@ -971,7 +1007,7 @@ If multiple rules match at the same level, their messages are merged into a sing
 
 | Field | Type | Level | Description |
 |-------|------|-------|-------------|
-| `confirmation_fallback` | string | global | Default fallback: `"allow"` or `"deny"` (default: `"allow"`) |
+| `confirmation_fallback` | string | global | Default fallback: `"allow"` or `"deny"` (default: `"allow"`). See [Cluster authorization](#cluster-authorization). |
 | `tool` | string | tool | Tool name to match (e.g. `"helm_uninstall"`) |
 | `destructive` | boolean | tool | Match tools with `DestructiveHint` annotation |
 | `verb` | string | kube | Kubernetes verb (`"get"`, `"delete"`, `"list"`, etc.) |
@@ -1157,8 +1193,7 @@ kind = "Secret"
 # Server instructions for MCP clients
 server_instructions = """
 Use this server for Kubernetes cluster management including pods, deployments,
-services, and Helm releases. This server is configured with read-only access
-to Secrets.
+services, and Helm releases. Secret is listed in denied_resources.
 """
 
 # Custom prompts
@@ -1196,3 +1231,4 @@ allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 - [KIALI.md](KIALI.md) - Kiali toolset configuration
 - [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) - OAuth/OIDC setup guide
 - [getting-started-kubernetes.md](getting-started-kubernetes.md) - Kubernetes setup guide
+- [tool-rbac-metadata.md](tool-rbac-metadata.md) - Permission metadata for planning RBAC

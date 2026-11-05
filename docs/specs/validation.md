@@ -109,7 +109,7 @@ Pre-checks permissions using Kubernetes `SelfSubjectAccessReview` before attempt
 Validation Error [PERMISSION_DENIED]: Cannot create deployments.apps in namespace "production"
 ```
 
-**Note:** RBAC validation uses the same credentials as the actual operation - either the server's service account or the user's token (when OAuth is enabled).
+**Note:** RBAC validation uses the same credentials as the actual operation - either the server's service account or the user's token (when OAuth is enabled). This pre-check does not grant or replace cluster authorization. The API server still authorizes the request. See [Cluster authorization](../configuration.md#cluster-authorization).
 
 ## Error Codes
 
