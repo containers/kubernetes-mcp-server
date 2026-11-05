@@ -23,7 +23,10 @@ name: Toolset triage
 # head or run any code/scripts originating from the PR.
 
 on:
-  pull_request_target:
+  # API-only labeling/comments require a write token for fork PRs. Ownership is
+  # read at the base SHA; PR code is never checked out or executed (see SECURITY above).
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
@@ -32,6 +35,7 @@ permissions:
 
 jobs:
   triage:
+    if: github.repository == 'containers/kubernetes-mcp-server'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v9
