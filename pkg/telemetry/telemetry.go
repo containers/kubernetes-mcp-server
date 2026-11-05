@@ -48,6 +48,10 @@ func InitTracerWithConfig(ctx context.Context, cfg *config.TelemetryConfig, serv
 		return func() {}, nil
 	}
 
+	if name := cfg.ServiceName.Get(); name != "" {
+		serviceName = name
+	}
+
 	// Create resource with service information
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
