@@ -11,6 +11,7 @@ For release-to-release migrations, see [Configuration Changes](configuration-cha
 - [Configuration Loading](#configuration-loading)
   - [Usage](#usage)
   - [Reading the Configuration from stdin](#reading-the-configuration-from-stdin)
+  - [Sensitive Values](#sensitive-values)
 - [Drop-in Configuration](#drop-in-configuration)
   - [How Drop-in Files Work](#how-drop-in-files-work)
   - [Example Directory Structure](#example-directory-structure)
@@ -92,6 +93,86 @@ EOF
 The stdio transport also uses stdin, so `--config -` only works in HTTP mode. If neither stdin nor a drop-in sets `port`, the server exits with an error instead of starting in stdio mode.
 
 The server reads stdin once, at startup. A `SIGHUP` reload applies the same stdin configuration again and re-reads the `--config-dir` files and environment variables.
+
+### Sensitive Values
+
+Some configuration values are sensitive: an inline client secret, or paths to private keys, tokens and kubeconfigs. Fields marked with 🔒 in the reference tables are the ones to protect:
+
+| Field | What is sensitive |
+|-------|-------------------|
+| `token_exchange.client_auth.client_secret` | The secret itself, written inline in TOML. The server shows it as `<redacted>` when it logs the resolved configuration |
+| `tls_key` | Path to the TLS private key |
+| `token_exchange.client_auth.private_key_file` | Path to the private key used by `private_key_jwt` |
+| `token_exchange.client_auth.token_file` | Path to the JWT read by `jwt_file` |
+| `kubeconfig` | Path to a kubeconfig, which usually contains tokens or client keys |
+
+Certificates (`tls_cert`, `certificate_authority`, `token_exchange.client_auth.certificate_file`) are public.
+
+**Best practice: mount the configuration from a Secret.** When the server runs in a cluster, store `config.toml` in a Secret instead of a ConfigMap, and mount the files the 🔒 paths point to from a Secret too. Then a sensitive value can't end up in a ConfigMap by mistake, and you don't need to split the configuration across several objects:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-server-config
+  namespace: mcp
+type: Opaque
+stringData:
+  config.toml: |
+    port = "8080"
+    require_oauth = true
+    authorization_url = "https://keycloak.example.com/realms/mcp"
+    oauth_audience = "kubernetes-mcp-server"
+
+    [token_exchange]
+    strategy = "rfc8693"
+    audience = "kubernetes-api"
+
+    [token_exchange.client_auth]
+    method = "client_secret_basic"
+    client_id = "mcp-backend"
+    client_secret = "your-client-secret"
+---
+# In the Deployment's pod spec:
+#   args: ["--config", "/etc/kubernetes-mcp-server/config.toml"]
+#   volumeMounts:
+#     - name: config
+#       mountPath: /etc/kubernetes-mcp-server
+#       readOnly: true
+#   volumes:
+#     - name: config
+#       secret:
+#         secretName: mcp-server-config
+```
+
+**ConfigMaps still work.** You can mount the configuration from a ConfigMap instead of a Secret, or use both. A ConfigMap is handy if people who can't read Secrets should still see most of the settings. If you use one, keep the 🔒 values out of it: put `client_secret` in its own drop-in file stored in a Secret, load that directory with `--config-dir`, and mount the key, token and kubeconfig files from a Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-server-secrets
+  namespace: mcp
+type: Opaque
+stringData:
+  50-token-exchange.toml: |
+    [token_exchange.client_auth]
+    client_secret = "your-client-secret"
+---
+# In the Deployment's pod spec, next to the ConfigMap mount for config.toml:
+#   args: ["--config", "/etc/kubernetes-mcp-server/config.toml",
+#          "--config-dir", "/etc/kubernetes-mcp-server/secrets.d"]
+#   volumeMounts:
+#     - name: mcp-secrets
+#       mountPath: /etc/kubernetes-mcp-server/secrets.d
+#       readOnly: true
+#   volumes:
+#     - name: mcp-secrets
+#       secret:
+#         secretName: mcp-server-secrets
+```
+
+The other `[token_exchange]` settings (`strategy`, `audience`, `client_auth.method`, `client_auth.client_id`) can stay in the ConfigMap. For a full Deployment that mounts a Secret, see [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod).
 
 ## Drop-in Configuration
 
@@ -205,7 +286,7 @@ SIGHUP is not available on Windows; restart the process.
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
 | `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host`. For that sidecar pattern, also set `bind_address = "127.0.0.1"` (see below). |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
-| `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
+| `tls_key` 🔒 | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
 | `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata). |
 | `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
@@ -358,7 +439,7 @@ max_in_flight = 64
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `kubeconfig` | string | `""` | Path to the Kubernetes configuration file. A non-empty path selects the kubeconfig provider (including from a pod). If empty, client-go uses in-cluster config or `$KUBECONFIG` / `~/.kube/config`. `$KUBECONFIG` is not a server option. |
+| `kubeconfig` 🔒 | string | `""` | Path to the Kubernetes configuration file. A non-empty path selects the kubeconfig provider (including from a pod). If empty, client-go uses in-cluster config or `$KUBECONFIG` / `~/.kube/config`. `$KUBECONFIG` is not a server option. |
 | `cluster_provider_strategy` | string | auto-detect | How the server finds clusters. Valid values: `kubeconfig`, `in-cluster`, `kcp`, `disabled`. Optional when `kubeconfig` is set. Use this to pin `in-cluster`, `kcp`, `disabled`, or a custom/downstream provider. |
 
 **Example:**
@@ -745,10 +826,10 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 | `token_exchange.token_url` | string | *(falls back to OIDC discovery)* | Explicit token-exchange endpoint. Falls back to the endpoint discovered from `authorization_url` **only when unset** — a set-but-invalid value is rejected at startup, never silently ignored. Use this to point token exchange at a separate STS gateway (cross-realm deployments), or to enable token exchange when no `authorization_url` is configured (e.g., with `skip_jwt_verification=true`). |
 | `token_exchange.client_auth.method` | string | none | Required when client credentials are configured: `client_secret_basic`, `client_secret_post`, `private_key_jwt`, or `jwt_file`. May be omitted when only `client_id` is set for a public client. |
 | `token_exchange.client_auth.client_id` | string | `""` | OAuth client ID. May be configured without a method or secret for a public client. |
-| `token_exchange.client_auth.client_secret` | string | `""` | Required by the client-secret methods. |
+| `token_exchange.client_auth.client_secret` 🔒 | string | `""` | Required by the client-secret methods. |
 | `token_exchange.client_auth.certificate_file` | string | `""` | Certificate PEM required by `private_key_jwt`. |
-| `token_exchange.client_auth.private_key_file` | string | `""` | Private-key PEM required by `private_key_jwt`. |
-| `token_exchange.client_auth.token_file` | string | `""` | JWT file required by `jwt_file`. |
+| `token_exchange.client_auth.private_key_file` 🔒 | string | `""` | Private-key PEM required by `private_key_jwt`. |
+| `token_exchange.client_auth.token_file` 🔒 | string | `""` | JWT file required by `jwt_file`. |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
