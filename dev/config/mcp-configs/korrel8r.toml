@@ -1,0 +1,5 @@
+# Local Korrel8r eval backend (see evals/tasks/korrel8r/README.md).
+# The backend uses --unsafe-shared-session: localhost port-forward ONLY.
+[toolset_configs."observability/korrel8r"]
+url = "http://127.0.0.1:18080"
+auth_mode = "kubeconfig"

@@ -623,20 +623,21 @@ Best-effort guardrail. It does not change the cluster permissions of the identit
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset               | Description                                                                                                                                                                                                                             | Default |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
-| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
-| helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
-| kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
-| kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
-| kubevirt              | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
-| netobserv             | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| observability/logs    | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
-| observability/metrics | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                                                                                           |         |
-| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
-| observability/traces  | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
-| tekton                | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
+| Toolset                | Description                                                                                                                                                                                                                             | Default |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config                 | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core                   | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| helm                   | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp                    | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali                  | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt               | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv              | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| observability/korrel8r | Correlate Kubernetes resources with logs, metrics, alerts, and traces using Korrel8r.                                                                                                                                                   |         |
+| observability/logs     | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
+| observability/metrics  | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                                                                                           |         |
+| observability/otelcol  | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
+| observability/traces   | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
+| tekton                 | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -662,6 +663,27 @@ See [Tool requirements](tool-requirements.md) for availability prerequisites.
 
 
 <!-- AVAILABLE-TOOLSETS-RESOURCES-TEMPLATES-END -->
+
+#### Korrel8r Configuration
+
+Enable the opt-in `observability/korrel8r` toolset and point it at an existing Korrel8r REST service:
+
+```toml
+toolsets = ["core", "config", "observability/korrel8r"]
+
+[toolset_configs."observability/korrel8r"]
+url = "https://korrel8r.example.com"
+# auth_mode = "header"
+# timeout = "2m"
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | string | Required for live calls. HTTP(S) base URL; userinfo, query and fragment are unsupported. `korrel8r_instructions` works without it. |
+| `auth_mode` | string | `header` (default) forwards the MCP caller's bearer token; `kubeconfig` uses the Kubernetes REST config identity. |
+| `timeout` | duration | Optional per-REST-call backstop; defaults to `"2m"`. |
+
+The endpoint is global and not selected by Kubernetes context. With `kubeconfig`, callers share the kubeconfig or ServiceAccount bearer token; client-certificate and exec-plugin credentials are not forwarded. `max_backend_response_bytes` caps individual REST responses (0 disables it), and `max_result_bytes` caps completed MCP results. See the [Korrel8r guide](korrel8r.md) for TLS and troubleshooting. On OpenShift, optional console tools require a console connected as the same user to the same Korrel8r service.
 
 ### Tool Filtering
 

@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: korrel8r
+    project: korrel8r
+    requires: korrel8r
+  name: "Investigate resources related to the Korrel8r eval Deployment"
+  category: "Kubernetes correlation"
+  description: "Correlates the deployed Korrel8r eval fixture to its live ReplicaSet and Pods."
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        file: ../shared/setup.sh
+        timeout: 240s
+  verify:
+    - llmJudge:
+        contains: "The korrel8r-eval/korrel8r Deployment, with evidence of a related ReplicaSet and at least one related Pod (real names, not invented); no claim that logs, metrics or traces are available in this API-only setup."
+  prompt:
+    inline: >-
+      What Kubernetes resources are related to the korrel8r Deployment in
+      namespace korrel8r-eval? Follow its correlations to the workload running
+      it and give the names of any ReplicaSets and Pods you can actually find.
+      Do not guess at resources or claim signals from unavailable backends.
