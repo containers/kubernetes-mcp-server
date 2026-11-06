@@ -31,7 +31,8 @@ jobs:
           cache: false
       - name: Build
         run: make build-all-platforms
-      - name: Upload artifacts
+      # Retain the release action's existing creation, update, and asset-upload behavior.
+      - name: Upload artifacts # zizmor: ignore[superfluous-actions]
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           generate_release_notes: true
