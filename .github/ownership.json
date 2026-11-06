@@ -55,6 +55,17 @@
       "approvers": ["@ksimon1", "@lyarwood"]
     },
     {
+      "toolset": "observability/korrel8r",
+      "paths": [
+        "/pkg/toolsets/korrel8r/",
+        "/pkg/mcp/korrel8r*",
+        "/pkg/mcp/testdata/toolsets-observability-korrel8r-tools.json",
+        "/docs/korrel8r.md"
+      ],
+      "reviewers": [],
+      "approvers": ["@andreasgerstmayr", "@iNecas", "@saswatamcode", "@slashpai"]
+    },
+    {
       "toolset": "observability/logs",
       "paths": [
         "/pkg/toolsets/logs/",

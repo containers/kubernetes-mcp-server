@@ -24,7 +24,7 @@ evals/
 ```
 
 Tasks are grouped into suites via a `suite: <name>` label. The available suites are
-`core`, `config`, `helm`, `kiali`, `kubevirt`, `tekton`, `netobserv`, and `obs`.
+`core`, `config`, `helm`, `kiali`, `kubevirt`, `tekton`, `netobserv`, `obs`, and `korrel8r`.
 
 A second, orthogonal `readonly: "true"` label marks tasks that are safe to run
 against a server started with `read_only = true`. It cuts across the `suite:` label
@@ -184,6 +184,9 @@ make run-evals SUITE=netobserv AGENT=builtin-openai
 
 # obs tasks (needs Prometheus, Tempo, Loki + port-forwards; see tasks/obs/README.md)
 make run-obs-evals
+
+# Korrel8r API-only correlation (deploys, port-forwards and cleans up; see tasks/korrel8r/README.md)
+make run-korrel8r-evals
 ```
 
 If you omit `--label-selector`, the eval config's own `labelSelector` settings in

@@ -22,6 +22,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/korrel8r"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/logs"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/metrics"
@@ -405,6 +406,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&config.Toolset{},
 		&helm.Toolset{},
 		&kiali.Toolset{},
+		&korrel8r.Toolset{},
 		&kubevirt.Toolset{},
 		&logs.Toolset{},
 		&metrics.Toolset{},

@@ -1,0 +1,45 @@
+kind: Eval
+metadata:
+  name: "korrel8r-e2e"
+config:
+  agent:
+    type: file
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+  taskSets:
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: core
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: config
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "configuration_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: korrel8r
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "korrel8r_create_.*_graph"
+          - server: kubernetes
+            toolPattern: "korrel8r_get_objects"
+        minToolCalls: 2
+        maxToolCalls: 20

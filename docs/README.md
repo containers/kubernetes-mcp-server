@@ -26,6 +26,7 @@ Choose the guide that matches your needs:
 
 - **[Kiali](KIALI.md)** - Tools for Kiali ServiceMesh with Istio
 - **[NetObserv](NETOBSERV.md)** - Network observability flows, metrics, and alerts (Helm on OpenShift)
+- **[Korrel8r](korrel8r.md)** - Correlate Kubernetes resources with observability signals
 - **[KubeVirt](kubevirt.md)** - KubeVirt virtual machine management tools
 - **[Tekton](tekton.md)** - Tekton PipelineRun, TaskRun, and troubleshooting tools
 
