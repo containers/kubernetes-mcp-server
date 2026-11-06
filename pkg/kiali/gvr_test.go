@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -107,14 +108,19 @@ func TestInternalServiceURLs(t *testing.T) {
 			},
 		}
 		urls := internalServiceURLs(cr, false)
-		if len(urls) != 2 {
-			t.Fatalf("expected 2 candidates, got %v", urls)
+		if len(urls) != 4 {
+			t.Fatalf("expected 4 candidates (https+http × web_root variants), got %v", urls)
 		}
-		if urls[0] != "http://kiali.istio-system.svc:20001" {
-			t.Errorf("unexpected first URL: %s", urls[0])
+		want := []string{
+			"https://kiali.istio-system.svc:20001",
+			"https://kiali.istio-system.svc:20001/kiali",
+			"http://kiali.istio-system.svc:20001",
+			"http://kiali.istio-system.svc:20001/kiali",
 		}
-		if urls[1] != "http://kiali.istio-system.svc:20001/kiali" {
-			t.Errorf("unexpected second URL: %s", urls[1])
+		for i, w := range want {
+			if urls[i] != w {
+				t.Errorf("urls[%d] = %q, want %q", i, urls[i], w)
+			}
 		}
 	})
 
@@ -133,7 +139,10 @@ func TestInternalServiceURLs(t *testing.T) {
 			},
 		}
 		urls := internalServiceURLs(cr, false)
-		if len(urls) != 1 || urls[0] != "http://my-kiali.mesh.svc:20001/kiali" {
+		if len(urls) != 2 {
+			t.Fatalf("expected 2 candidates (https+http), got %v", urls)
+		}
+		if urls[0] != "https://my-kiali.mesh.svc:20001/kiali" || urls[1] != "http://my-kiali.mesh.svc:20001/kiali" {
 			t.Fatalf("unexpected URLs: %v", urls)
 		}
 	})
@@ -217,7 +226,7 @@ func TestInternalServiceURLs(t *testing.T) {
 		}
 	})
 
-	t.Run("honors spec.server.web_schema https", func(t *testing.T) {
+	t.Run("web_schema does not affect candidate schemes (tries https and http)", func(t *testing.T) {
 		cr := &KialiCR{
 			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
 			Spec: KialiSpec{
@@ -229,12 +238,15 @@ func TestInternalServiceURLs(t *testing.T) {
 			},
 		}
 		urls := internalServiceURLs(cr, false)
-		if len(urls) != 2 || !strings.HasPrefix(urls[0], "https://") {
-			t.Fatalf("expected https URLs, got %v", urls)
+		if len(urls) != 4 {
+			t.Fatalf("expected 4 candidates, got %v", urls)
+		}
+		if !strings.HasPrefix(urls[0], "https://") || !strings.HasPrefix(urls[2], "http://") {
+			t.Fatalf("expected https then http candidates, got %v", urls)
 		}
 	})
 
-	t.Run("omits http CR candidates when require_tls and web_schema is http", func(t *testing.T) {
+	t.Run("require_tls probes https only even when web_schema is http", func(t *testing.T) {
 		cr := &KialiCR{
 			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
 			Spec: KialiSpec{
@@ -245,22 +257,14 @@ func TestInternalServiceURLs(t *testing.T) {
 				},
 			},
 		}
-		if urls := internalServiceURLs(cr, true); len(urls) != 0 {
-			t.Fatalf("expected no URLs, got %v", urls)
+		urls := internalServiceURLs(cr, true)
+		if len(urls) != 2 {
+			t.Fatalf("expected 2 https candidates, got %v", urls)
 		}
-	})
-
-	t.Run("uses https when identity cert_file is set", func(t *testing.T) {
-		cr := &KialiCR{
-			ObjectMeta: metav1.ObjectMeta{Name: "kiali", Namespace: "istio-system"},
-			Spec: KialiSpec{
-				Identity:   KialiIdentitySpec{CertFile: "/kiali-cert/tls.crt"},
-				Deployment: KialiDeploymentSpec{InstanceName: "kiali", Namespace: "istio-system"},
-			},
-		}
-		urls := internalServiceURLs(cr, false)
-		if len(urls) != 2 || !strings.HasPrefix(urls[0], "https://") {
-			t.Fatalf("expected https URLs, got %v", urls)
+		for _, u := range urls {
+			if !strings.HasPrefix(u, "https://") {
+				t.Fatalf("expected only https URLs, got %v", urls)
+			}
 		}
 	})
 }
@@ -364,6 +368,37 @@ func TestProbeCandidateURLs(t *testing.T) {
 		}, nil, nil, "")
 		if !ok || url != srv.URL {
 			t.Fatalf("expected reachable URL %q, got %q ok=%v", srv.URL, url, ok)
+		}
+	})
+
+	t.Run("probes https before http and skips http when https works", func(t *testing.T) {
+		var httpHits atomic.Int32
+		handler := func(hits *atomic.Int32) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"status": map[string]any{"Kiali state": "running"},
+				})
+			}
+		}
+		httpSrv := httptest.NewServer(handler(&httpHits))
+		defer httpSrv.Close()
+		httpsSrv := httptest.NewTLSServer(handler(new(atomic.Int32)))
+		defer httpsSrv.Close()
+
+		cfg := &Config{Insecure: true}
+		url, ok := probeCandidateURLs(context.Background(), []string{
+			httpSrv.URL, // listed first on purpose
+			httpsSrv.URL,
+		}, cfg, nil, "")
+		if !ok {
+			t.Fatal("expected a reachable URL")
+		}
+		if !strings.HasPrefix(url, "https://") {
+			t.Fatalf("expected https to win, got %q", url)
+		}
+		if httpHits.Load() != 0 {
+			t.Fatalf("expected http not to be probed when https succeeds, got %d hits", httpHits.Load())
 		}
 	})
 }

@@ -24,29 +24,15 @@ var KialiGVR = schema.GroupVersionResource{
 
 const defaultKialiPort int64 = 20001
 
-// serviceURLSchemes returns HTTP scheme(s) to use for in-cluster Service URL candidates.
-// When requireTLS is true, only https is used unless the CR explicitly sets web_schema to http
-// (those candidates are omitted). When the CR enables a server identity cert or web_schema https,
-// https is used. Otherwise http is used for backward-compatible in-cluster probes.
-func serviceURLSchemes(cr *KialiCR, requireTLS bool) []string {
-	if cr != nil {
-		if cert := strings.TrimSpace(cr.Spec.Identity.CertFile); cert != "" {
-			return []string{"https"}
-		}
-		switch strings.ToLower(strings.TrimSpace(cr.Spec.Server.WebSchema)) {
-		case "https":
-			return []string{"https"}
-		case "http":
-			if requireTLS {
-				return nil
-			}
-			return []string{"http"}
-		}
-	}
+// serviceURLSchemes returns scheme(s) for in-cluster Service URL candidates.
+// With requireTLS, only https is used (plain http is not allowed). Otherwise both
+// https and http are listed; probeCandidateURLs tries https first and only falls
+// back to http if no https candidate answers GET /api/status.
+func serviceURLSchemes(requireTLS bool) []string {
 	if requireTLS {
 		return []string{"https"}
 	}
-	return []string{"http"}
+	return []string{"https", "http"}
 }
 
 // internalServiceURLs builds candidate in-cluster Service base URLs for a Kiali CR.
@@ -83,7 +69,7 @@ func internalServiceURLs(cr *KialiCR, requireTLS bool) []string {
 		port = defaultKialiPort
 	}
 
-	schemes := serviceURLSchemes(cr, requireTLS)
+	schemes := serviceURLSchemes(requireTLS)
 	if len(schemes) == 0 {
 		return nil
 	}

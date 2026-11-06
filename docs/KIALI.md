@@ -34,9 +34,8 @@ When the top-level `require_tls = true` option is enabled, the MCP server reject
 
 In-cluster URL discovery follows the same rule:
 
-- Discovery builds **https://** Service URLs when `require_tls` is enabled (and when the Kiali CR indicates HTTPS via `spec.server.web_schema: https` or a non-empty `spec.identity.cert_file`).
-- If the Kiali CR sets `spec.server.web_schema: http`, discovery skips that CR while `require_tls` is on.
-- Many clusters expose Kiali over plain HTTP on the in-cluster Service (`http://…svc:20001`). With `require_tls`, those endpoints are not probed and discovery usually fails unless Kiali serves TLS on the Service (for example OpenShift serving certificates) or you set an external HTTPS route.
+- When `require_tls` is enabled, discovery only builds **https://** Service URL candidates (plain `http://` is never probed). When `require_tls` is off, discovery builds **both** `https://` and `http://` candidates for the same host/port, probes HTTPS first, and only falls back to HTTP if no HTTPS candidate answers `GET /api/status`—CR fields like `web_schema` or identity paths are not used to pick the scheme.
+- With `require_tls`, clusters that only expose plain HTTP on the in-cluster Service will not succeed via discovery; set `[toolset_configs.kiali].url` to an HTTPS endpoint (route, ingress, or gateway). In-cluster candidates use `http(s)://<instance>.<namespace>.svc:<spec.server.port>`.
 
 When `require_tls` is on and discovery cannot find a reachable HTTPS endpoint, set `[toolset_configs.kiali].url` to the HTTPS URL you use to reach Kiali (console route, ingress, or gateway). Provide `certificate_authority` when verification is required (`insecure = false`).
 

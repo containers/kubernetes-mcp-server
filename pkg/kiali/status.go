@@ -149,7 +149,32 @@ func kialiForStatusProbe(baseURL string, kialiCfg *Config, serverCfg *config.Con
 	}
 }
 
+func isHTTPSURL(u string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(u)), "https://")
+}
+
+// probeCandidateURLs probes HTTPS candidates first (in parallel). Only if none
+// succeed does it fall back to plain HTTP. That way cleartext is never chosen
+// when HTTPS works, without racing both schemes.
 func probeCandidateURLs(ctx context.Context, candidates []string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
+	if len(candidates) == 0 {
+		return "", false
+	}
+	var httpsCandidates, httpCandidates []string
+	for _, c := range candidates {
+		if isHTTPSURL(c) {
+			httpsCandidates = append(httpsCandidates, c)
+		} else {
+			httpCandidates = append(httpCandidates, c)
+		}
+	}
+	if url, ok := probeURLGroup(ctx, httpsCandidates, kialiCfg, serverCfg, bearerToken); ok {
+		return url, true
+	}
+	return probeURLGroup(ctx, httpCandidates, kialiCfg, serverCfg, bearerToken)
+}
+
+func probeURLGroup(ctx context.Context, candidates []string, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
 	if len(candidates) == 0 {
 		return "", false
 	}

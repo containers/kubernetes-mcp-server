@@ -18,7 +18,6 @@ type KialiSpec struct {
 }
 
 type KialiIdentitySpec struct {
-	// CertFile set means Kiali serves HTTPS (see Kiali CR spec.identity.cert_file).
 	CertFile string `json:"cert_file,omitempty"`
 }
 

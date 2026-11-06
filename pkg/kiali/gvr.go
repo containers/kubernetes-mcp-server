@@ -133,19 +133,18 @@ func bearerTokenFromInspector(ctx context.Context, inspector api.ClusterInspecto
 }
 
 func wellKnownInternalURLs(requireTLS bool) []string {
-	scheme := "http"
-	if requireTLS {
-		scheme = "https"
-	}
+	schemes := serviceURLSchemes(requireTLS)
 	hosts := []string{
 		"kiali.istio-system.svc",
 		"kiali.kiali.svc",
 		"kiali.openshift-operators.svc",
 	}
-	out := make([]string, 0, len(hosts)*2)
+	out := make([]string, 0, len(hosts)*len(schemes)*2)
 	for _, host := range hosts {
-		base := scheme + "://" + host + ":20001"
-		out = append(out, base, base+"/kiali")
+		for _, scheme := range schemes {
+			base := scheme + "://" + host + ":20001"
+			out = append(out, base, base+"/kiali")
+		}
 	}
 	return out
 }
