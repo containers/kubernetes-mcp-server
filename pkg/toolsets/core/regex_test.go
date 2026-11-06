@@ -40,6 +40,11 @@ var validFieldSelectors = []struct{ selector string }{
 	{"metadata.name=my-service"},
 	{"involvedObject.apiVersion=apps/v1"},
 	{"status.phase=Running,metadata.name=my-pod"},
+	{"spec.nodeName="},
+	{"spec.nodeName!="},
+	{"spec.nodeName=,status.phase=Pending"},
+	{"status.podIP=fd00:10:244::5"},
+	{"involvedObject.fieldPath=spec.containers{nginx}"},
 }
 
 func Test_FieldSelectorRegex_is_valid(t *testing.T) {
@@ -61,6 +66,9 @@ var invalidFieldSelectors = []struct{ selector string }{
 	{"metadata.name= my-service"},
 	{"metadata.name=my service"},
 	{"!!!"},
+	{"="},
+	{"metadata.name=,"},
+	{"status.phase=Running,"},
 }
 
 func Test_FieldSelectorRegex_is_invalid(t *testing.T) {
