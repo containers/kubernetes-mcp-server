@@ -10,22 +10,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
-
-permissions:
-  contents: write
-  id-token: write  # Required for npmjs OIDC
-  discussions: write
+permissions: {}
 
 jobs:
   release:
     name: Release
+    permissions:
+      contents: write
+      id-token: write  # Required for npmjs OIDC
     if: github.repository == 'containers/kubernetes-mcp-server'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -52,6 +51,8 @@ jobs:
           make npm-publish
   python:
     name: Release Python
+    permissions:
+      contents: read
     if: github.repository == 'containers/kubernetes-mcp-server'
     # Python logic requires the tag/release version to be available from GitHub
     needs: release
@@ -59,9 +60,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: false
       - name: Publish Python
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
         run:
           make python-publish

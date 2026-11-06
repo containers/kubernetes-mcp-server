@@ -7,13 +7,14 @@ on:
     workflows: ["mcpchecker MCP Evaluation"]
     types: [completed]
 
-permissions:
-  pull-requests: write
-  actions: read
+permissions: {}
 
 jobs:
   report:
     name: Post Evaluation Results
+    permissions:
+      pull-requests: write
+      actions: read
     runs-on: ubuntu-latest
     if: github.event.workflow_run.event == 'workflow_run'
     steps:
@@ -233,6 +234,9 @@ jobs:
   # Kiali only: posts a separate PR comment when suite=kiali triggers multicluster eval.
   report-multicluster:
     name: Post Kiali Multicluster Results
+    permissions:
+      pull-requests: write
+      actions: read
     runs-on: ubuntu-latest
     if: github.event.workflow_run.event == 'workflow_run'
     steps:
