@@ -86,31 +86,36 @@ func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
 	return &cr, nil
 }
 
-// listKialiCRs returns all Kiali CRs across namespaces. Returns nil when none exist or on error.
-func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiCR {
-	if inspector == nil {
+// listKialiCRs returns Kiali CRs in the given namespaces. Returns nil when none exist or on error.
+func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespaces []string) []*KialiCR {
+	if inspector == nil || len(namespaces) == 0 {
 		return nil
 	}
 	unstructuredAPI := inspector.Unstructured()
 	if unstructuredAPI == nil {
 		return nil
 	}
-	list, err := unstructuredAPI.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
-	if err != nil {
-		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs", "error", err)
-		return nil
-	}
-	if list == nil || len(list.Items) == 0 {
-		return nil
-	}
-	out := make([]*KialiCR, 0, len(list.Items))
-	for i := range list.Items {
-		cr, err := kialiFromUnstructured(&list.Items[i])
+	out := make([]*KialiCR, 0)
+	for _, ns := range namespaces {
+		list, err := unstructuredAPI.Resource(KialiGVR).Namespace(ns).List(ctx, metav1.ListOptions{}).Default()
 		if err != nil {
-			klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
+			klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs", "namespace", ns, "error", err)
 			continue
 		}
-		out = append(out, cr)
+		if list == nil || len(list.Items) == 0 {
+			continue
+		}
+		for i := range list.Items {
+			cr, err := kialiFromUnstructured(&list.Items[i])
+			if err != nil {
+				klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
+				continue
+			}
+			out = append(out, cr)
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -118,7 +123,8 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiC
 // discoverAndValidateInternalURL finds a Kiali CR, builds in-cluster Service URL candidates,
 // and returns the first base URL that responds successfully to GET /api/status.
 func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
-	crs := listKialiCRs(ctx, inspector)
+	namespaces := urlDiscoveryNamespaces(kialiCfg)
+	crs := listKialiCRs(ctx, inspector, namespaces)
 	if len(crs) == 0 {
 		return "", false
 	}

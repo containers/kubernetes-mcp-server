@@ -178,6 +178,23 @@ func (s *ConfigSuite) TestValidate() {
 		cfg := &Config{}
 		err := cfg.Validate()
 		s.NoError(err, "empty URL should be allowed so discovery can fill it in")
+		s.Equal([]string{"istio-system"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("invalid allowed_namespaces returns error", func() {
+		cfg := &Config{AllowedNamespaces: []string{"not a valid ns"}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "allowed_namespaces")
+	})
+	s.Run("allowed_namespaces override discovery scope", func() {
+		cfg := &Config{AllowedNamespaces: []string{"openshift-operators", "mesh"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"openshift-operators", "mesh"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("allowed_namespaces deduplicates preserving first occurrence order", func() {
+		cfg := &Config{AllowedNamespaces: []string{"mesh", " mesh ", "openshift-operators", "mesh"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"mesh", "openshift-operators"}, cfg.URLDiscoveryNamespaces())
 	})
 	s.Run("invalid URL returns error", func() {
 		cfg := &Config{Url: "://bad-url"}

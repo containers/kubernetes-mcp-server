@@ -77,7 +77,7 @@ func discoverInjectAndProbe(ctx context.Context, serverCfg *config.Config, kiali
 	token := bearerTokenFromInspector(ctx, inspector)
 	url, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
 	if !ok {
-		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(), kialiCfg, serverCfg, token)
+		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(urlDiscoveryNamespaces(kialiCfg)), kialiCfg, serverCfg, token)
 	}
 	if !ok {
 		setDiscoveredURL("")
@@ -121,14 +121,17 @@ func bearerTokenFromInspector(ctx context.Context, inspector api.ClusterInspecto
 	return token
 }
 
-func wellKnownInternalURLs() []string {
-	hosts := []string{
-		"kiali.istio-system.svc",
-		"kiali.kiali.svc",
-		"kiali.openshift-operators.svc",
+func urlDiscoveryNamespaces(kialiCfg *Config) []string {
+	if kialiCfg == nil {
+		return (&Config{}).URLDiscoveryNamespaces()
 	}
-	out := make([]string, 0, len(hosts)*2)
-	for _, host := range hosts {
+	return kialiCfg.URLDiscoveryNamespaces()
+}
+
+func wellKnownInternalURLs(namespaces []string) []string {
+	out := make([]string, 0, len(namespaces)*2)
+	for _, ns := range namespaces {
+		host := "kiali." + ns + ".svc"
 		base := "http://" + host + ":20001"
 		out = append(out, base, base+"/kiali")
 	}
