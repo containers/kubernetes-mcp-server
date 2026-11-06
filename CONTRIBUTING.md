@@ -16,6 +16,8 @@ Please don't include any private or sensitive information in your issue. Securit
 
 ## Contributing Code
 
+For release cadence, versioning, and published artifacts, see [Releases](docs/releases.md).
+
 ### Prerequisites
 
 - [Go](https://go.dev/dl/) (version specified in `go.mod`)
