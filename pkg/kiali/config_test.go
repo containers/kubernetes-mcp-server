@@ -191,6 +191,11 @@ func (s *ConfigSuite) TestValidate() {
 		s.NoError(cfg.Validate())
 		s.Equal([]string{"openshift-operators", "mesh"}, cfg.URLDiscoveryNamespaces())
 	})
+	s.Run("allowed_namespaces deduplicates preserving first occurrence order", func() {
+		cfg := &Config{AllowedNamespaces: []string{"mesh", " mesh ", "openshift-operators", "mesh"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"mesh", "openshift-operators"}, cfg.URLDiscoveryNamespaces())
+	})
 	s.Run("invalid URL returns error", func() {
 		cfg := &Config{Url: "://bad-url"}
 		err := cfg.Validate()
