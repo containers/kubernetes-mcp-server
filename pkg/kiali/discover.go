@@ -24,9 +24,20 @@ var KialiGVR = schema.GroupVersionResource{
 
 const defaultKialiPort int64 = 20001
 
+// serviceURLSchemes returns scheme(s) for in-cluster Service URL candidates.
+// With requireTLS, only https is used (plain http is not allowed). Otherwise both
+// https and http are listed; probeCandidateURLs tries https first and only falls
+// back to http if no https candidate answers GET /api/status.
+func serviceURLSchemes(requireTLS bool) []string {
+	if requireTLS {
+		return []string{"https"}
+	}
+	return []string{"https", "http"}
+}
+
 // internalServiceURLs builds candidate in-cluster Service base URLs for a Kiali CR.
 // Prefer values from status/spec; fall back to CR metadata and Kiali defaults.
-func internalServiceURLs(cr *KialiCR) []string {
+func internalServiceURLs(cr *KialiCR, requireTLS bool) []string {
 	if cr == nil {
 		return nil
 	}
@@ -58,21 +69,29 @@ func internalServiceURLs(cr *KialiCR) []string {
 		port = defaultKialiPort
 	}
 
-	webRoot := cr.Spec.Server.WebRoot
-	base := fmt.Sprintf("http://%s.%s.svc:%d", instanceName, ns, port)
-
-	switch webRoot {
-	case "", "/":
-		// Operator defaults: "/" on OpenShift, "/kiali" elsewhere. Try both.
-		return []string{base, base + "/kiali"}
-	default:
-		// Reject absolute/scheme-relative roots that could rewrite the authority
-		// (e.g. "@evil/", "//evil/").
-		if !strings.HasPrefix(webRoot, "/") || strings.HasPrefix(webRoot, "//") {
-			return nil
-		}
-		return []string{base + strings.TrimSuffix(webRoot, "/")}
+	schemes := serviceURLSchemes(requireTLS)
+	if len(schemes) == 0 {
+		return nil
 	}
+
+	webRoot := cr.Spec.Server.WebRoot
+	out := make([]string, 0, len(schemes)*2)
+	for _, scheme := range schemes {
+		base := fmt.Sprintf("%s://%s.%s.svc:%d", scheme, instanceName, ns, port)
+		switch webRoot {
+		case "", "/":
+			// Operator defaults: "/" on OpenShift, "/kiali" elsewhere. Try both.
+			out = append(out, base, base+"/kiali")
+		default:
+			// Reject absolute/scheme-relative roots that could rewrite the authority
+			// (e.g. "@evil/", "//evil/").
+			if !strings.HasPrefix(webRoot, "/") || strings.HasPrefix(webRoot, "//") {
+				return nil
+			}
+			out = append(out, base+strings.TrimSuffix(webRoot, "/"))
+		}
+	}
+	return out
 }
 
 func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
@@ -123,9 +142,10 @@ func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterIn
 		return "", false
 	}
 
+	requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
 	candidates := make([]string, 0, len(crs)*2)
 	for _, cr := range crs {
-		candidates = append(candidates, internalServiceURLs(cr)...)
+		candidates = append(candidates, internalServiceURLs(cr, requireTLS)...)
 	}
 	url, ok := probeCandidateURLs(ctx, candidates, kialiCfg, serverCfg, bearerToken)
 	if ok {

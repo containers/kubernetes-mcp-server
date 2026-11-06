@@ -28,6 +28,17 @@ When that flag is enabled:
 
 When the `kiali` toolset is enabled with an explicit HTTPS URL and `insecure = false`, `certificate_authority` is still required at config load time.
 
+### Interaction with `require_tls`
+
+When the top-level `require_tls = true` option is enabled, the MCP server rejects outbound `http://` connections (including Kiali API calls). Config load also rejects an explicit `[toolset_configs.kiali].url` that uses `http://`.
+
+In-cluster URL discovery follows the same rule:
+
+- When `require_tls` is enabled, discovery only builds **https://** Service URL candidates (plain `http://` is never probed). When `require_tls` is off, discovery builds **both** `https://` and `http://` candidates for the same host/port, probes HTTPS first, and only falls back to HTTP if no HTTPS candidate answers `GET /api/status`—CR fields like `web_schema` or identity paths are not used to pick the scheme.
+- With `require_tls`, clusters that only expose plain HTTP on the in-cluster Service will not succeed via discovery; set `[toolset_configs.kiali].url` to an HTTPS endpoint (route, ingress, or gateway). In-cluster candidates use `http(s)://<instance>.<namespace>.svc:<spec.server.port>`.
+
+When `require_tls` is on and discovery cannot find a reachable HTTPS endpoint, set `[toolset_configs.kiali].url` to the HTTPS URL you use to reach Kiali (console route, ingress, or gateway). Provide `certificate_authority` when verification is required (`insecure = false`).
+
 ### How authentication works
 
 - The server uses your existing Kubernetes credentials (from kubeconfig or in-cluster) to set a bearer token for Kiali calls.
@@ -85,6 +96,7 @@ curl -sk -X POST "${KIALI_URL}api/chat/mcp/list_clusters" \
 ### Troubleshooting
 
 - Kiali tools missing from `tools/list` → enable `experimental_enable_target_compatibility_tool_filters = true`, then set `[toolset_configs.kiali].url` or ensure a Kiali CR is installed so the in-cluster Service URL can be discovered.
+- Kiali tools missing with `require_tls = true` → discovery uses HTTPS only; set `[toolset_configs.kiali].url` to your HTTPS Kiali endpoint if in-cluster HTTP is all that is available.
 - Tools still missing with a Kiali CR installed → `GET {url}/api/status` is probably failing (often **401**). Bind the MCP ServiceAccount to **`kiali-viewer`** and re-test the curl probe above from the MCP pod.
 - Invalid or unreachable URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL and that `GET {url}/api/status` succeeds from the MCP server with the MCP server's bearer token.
 - TLS certificate validation:

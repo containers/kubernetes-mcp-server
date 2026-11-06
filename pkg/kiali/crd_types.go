@@ -13,7 +13,12 @@ type KialiCR struct {
 
 type KialiSpec struct {
 	Deployment KialiDeploymentSpec `json:"deployment,omitempty"`
+	Identity   KialiIdentitySpec   `json:"identity,omitempty"`
 	Server     KialiServerSpec     `json:"server,omitempty"`
+}
+
+type KialiIdentitySpec struct {
+	CertFile string `json:"cert_file,omitempty"`
 }
 
 type KialiDeploymentSpec struct {
@@ -22,8 +27,9 @@ type KialiDeploymentSpec struct {
 }
 
 type KialiServerSpec struct {
-	Port    int64  `json:"port,omitempty"`
-	WebRoot string `json:"web_root,omitempty"`
+	Port      int64  `json:"port,omitempty"`
+	WebRoot   string `json:"web_root,omitempty"`
+	WebSchema string `json:"web_schema,omitempty"`
 }
 
 type KialiStatus struct {
