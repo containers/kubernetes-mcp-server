@@ -18,9 +18,9 @@ const defaultURLDiscoveryNamespace = "istio-system"
 
 // Config holds Kiali toolset configuration
 type Config struct {
-	Url                  string   `toml:"url"`
-	Insecure             bool     `toml:"insecure,omitempty"`
-	CertificateAuthority string   `toml:"certificate_authority,omitempty"`
+	Url                  string `toml:"url"`
+	Insecure             bool   `toml:"insecure,omitempty"`
+	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 	// AllowedNamespaces limits in-cluster URL autodiscovery (Kiali CR list and
 	// well-known Service DNS fallbacks) to these namespaces. Defaults to
 	// istio-system when unset.
@@ -82,8 +82,13 @@ func (c *Config) URLDiscoveryNamespaces() []string {
 		return []string{defaultURLDiscoveryNamespace}
 	}
 	out := make([]string, 0, len(c.AllowedNamespaces))
+	seen := make(map[string]struct{}, len(c.AllowedNamespaces))
 	for _, ns := range c.AllowedNamespaces {
 		if trimmed := strings.TrimSpace(ns); trimmed != "" {
+			if _, dup := seen[trimmed]; dup {
+				continue
+			}
+			seen[trimmed] = struct{}{}
 			out = append(out, trimmed)
 		}
 	}
