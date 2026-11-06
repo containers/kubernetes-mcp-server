@@ -315,6 +315,25 @@ func (s *PodsSuite) TestPodsListAsTable() {
 	})
 }
 
+func (s *PodsSuite) TestPodsListAsTableNotWideNoLabels() {
+	s.Cfg.ListOutput.SetForTest("table")
+	s.Cfg.ListOutputWide.SetForTest(false)
+	s.Cfg.ListOutputShowLabels.SetForTest(false)
+	s.InitMcpClient()
+	s.Run("pods_list (list_output_wide=false, list_output_show_labels=false)", func() {
+		podsList, err := s.CallTool("pods_list", map[string]interface{}{})
+		s.Require().NoError(err)
+		s.Require().False(podsList.IsError, "call tool failed")
+		out := podsList.Content[0].(*mcp.TextContent).Text
+		s.Run("returns column headers without wide columns or labels", func() {
+			s.Regexp("(?m)^NAMESPACE\\s+APIVERSION\\s+KIND\\s+NAME\\s+READY\\s+STATUS\\s+RESTARTS\\s+AGE[ \t]*$", out)
+		})
+		s.Run("omits labels", func() {
+			s.NotContains(out, "app=nginx")
+		})
+	})
+}
+
 func (s *PodsSuite) TestPodsGet() {
 	s.InitMcpClient()
 	s.Run("pods_get with nil name returns error", func() {

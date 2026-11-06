@@ -12,7 +12,14 @@ import (
 
 var Yaml = &yaml{}
 
-var Table = &table{}
+// Table prints wide output with labels. Use NewTable for other table options.
+var Table = NewTable(true, true)
+
+// NewTable returns a table Output. wide adds the extra columns of
+// `kubectl get -o wide`; showLabels adds a LABELS column.
+func NewTable(wide, showLabels bool) Output {
+	return &table{wide: wide, showLabels: showLabels}
+}
 
 // PrintResult holds both the text representation and optional structured data
 // extracted from a Kubernetes object.
@@ -82,7 +89,10 @@ func (p *yaml) PrintObjStructured(obj runtime.Unstructured) (*PrintResult, error
 	return &PrintResult{Text: text}, nil
 }
 
-type table struct{}
+type table struct {
+	wide       bool
+	showLabels bool
+}
 
 func (p *table) GetName() string {
 	return "table"
@@ -141,8 +151,8 @@ func (p *table) printTable(obj runtime.Unstructured) (string, *metav1.Table, err
 	printer := printers.NewTablePrinter(printers.PrintOptions{
 		WithNamespace: withNamespace,
 		WithKind:      true,
-		Wide:          true,
-		ShowLabels:    true,
+		Wide:          p.wide,
+		ShowLabels:    p.showLabels,
 	})
 	err := printer.PrintObj(objectToPrint, buf)
 	return buf.String(), parsedTable, err
