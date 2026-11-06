@@ -437,11 +437,13 @@ jobs:
 
       - name: Cleanup
         if: always()
+        env:
+          SUITE: ${{ matrix.suite }}
         run: |
           make stop-server || true
-          if [[ "${{ matrix.suite }}" == "kiali-multicluster" ]]; then
+          if [[ "$SUITE" == "kiali-multicluster" ]]; then
             make kind-delete-multicluster || true
-          elif [[ "${{ matrix.suite }}" == "config-multicluster" ]]; then
+          elif [[ "$SUITE" == "config-multicluster" ]]; then
             make config-multicluster-cleanup || true
           else
             make stop-obs || true

@@ -34,6 +34,8 @@ jobs:
           - runner: ubuntu-latest
             tag: ppc64le
     runs-on: ${{ matrix.platform.runner }}
+    env:
+      PLATFORM_TAG: ${{ matrix.platform.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,27 +46,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman
       - name: Quay Login
+        env:
+          REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
         run: |
-          echo ${{ secrets.QUAY_PASSWORD }} | podman login quay.io -u ${{ secrets.QUAY_USERNAME }} --password-stdin
+          printf '%s\n' "$REGISTRY_PASSWORD" | podman login quay.io -u "$REGISTRY_USER" --password-stdin
       - name: GHCR Login
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+          printf '%s\n' "$REGISTRY_PASSWORD" | podman login ghcr.io -u "$REGISTRY_USER" --password-stdin
       - name: Build Image
         run: |
           podman build \
-            --platform "linux/${{ matrix.platform.tag }}" \
+            --platform "linux/${PLATFORM_TAG}" \
             -f Dockerfile \
-            -t "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}" \
-            -t "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}" \
+            -t "${QUAY_IMAGE_NAME}:${TAG}-linux-${PLATFORM_TAG}" \
+            -t "${GHCR_IMAGE_NAME}:${TAG}-linux-${PLATFORM_TAG}" \
             .
       - name: Push Image to Quay
         run: |
           podman push \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}"
+            "${QUAY_IMAGE_NAME}:${TAG}-linux-${PLATFORM_TAG}"
       - name: Push Image to GHCR
         run: |
           podman push \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-${{ matrix.platform.tag }}"
+            "${GHCR_IMAGE_NAME}:${TAG}-linux-${PLATFORM_TAG}"
 
   publish-manifest:
     name: Publish Manifest
@@ -75,28 +83,34 @@ jobs:
     needs: publish-platform-images
     steps:
       - name: Quay Login
+        env:
+          REGISTRY_USER: ${{ secrets.QUAY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
         run: |
-          echo ${{ secrets.QUAY_PASSWORD }} | podman login quay.io -u ${{ secrets.QUAY_USERNAME }} --password-stdin
+          printf '%s\n' "$REGISTRY_PASSWORD" | podman login quay.io -u "$REGISTRY_USER" --password-stdin
       - name: GHCR Login
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+          printf '%s\n' "$REGISTRY_PASSWORD" | podman login ghcr.io -u "$REGISTRY_USER" --password-stdin
       - name: Create and Push Quay Manifest
         run: |
           podman manifest create \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}" \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64" \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-s390x" \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}-linux-ppc64le"
+            "${QUAY_IMAGE_NAME}:${TAG}" \
+            "${QUAY_IMAGE_NAME}:${TAG}-linux-amd64" \
+            "${QUAY_IMAGE_NAME}:${TAG}-linux-arm64" \
+            "${QUAY_IMAGE_NAME}:${TAG}-linux-s390x" \
+            "${QUAY_IMAGE_NAME}:${TAG}-linux-ppc64le"
           podman manifest push \
-            "${{ env.QUAY_IMAGE_NAME }}:${{ env.TAG }}"
+            "${QUAY_IMAGE_NAME}:${TAG}"
       - name: Create and Push GHCR Manifest
         run: |
           podman manifest create \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}" \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-amd64" \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-arm64" \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-s390x" \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}-linux-ppc64le"
+            "${GHCR_IMAGE_NAME}:${TAG}" \
+            "${GHCR_IMAGE_NAME}:${TAG}-linux-amd64" \
+            "${GHCR_IMAGE_NAME}:${TAG}-linux-arm64" \
+            "${GHCR_IMAGE_NAME}:${TAG}-linux-s390x" \
+            "${GHCR_IMAGE_NAME}:${TAG}-linux-ppc64le"
           podman manifest push \
-            "${{ env.GHCR_IMAGE_NAME }}:${{ env.TAG }}"
+            "${GHCR_IMAGE_NAME}:${TAG}"
