@@ -41,12 +41,7 @@ spec:
         inline: |-
           #!/usr/bin/env bash
           set -euo pipefail
-          require() {
-            if ! grep -qiF -- "$1" <<<"$AGENT_OUTPUT"; then
-              echo "response is missing required evidence: $1" >&2
-              exit 1
-            fi
-          }
+          source ../helpers/require-output.sh
           require 'failed-run'
           require '23'
           require 'diagnosis-eval exit marker'
