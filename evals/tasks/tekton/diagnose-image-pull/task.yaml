@@ -22,12 +22,16 @@ spec:
           setup_diagnosis_scenario image-pull
 
   verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          source ../helpers/require-output.sh
+          require 'failed-run'
     - llmJudge:
-        contains: "failed-run"
-    - llmJudge:
-        contains: "image"
-    - llmJudge:
-        contains: "pull"
+        contains: "The response diagnoses the failure as the step image failing to be pulled, based on observed runtime evidence."
 
   cleanup:
     - k8s.delete:
