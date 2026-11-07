@@ -206,3 +206,15 @@ useful than an empty array — return text-only via `api.NewToolCallResult` and
 leave `StructuredContent` nil. Do **not** pass an empty slice / map / struct;
 a typed nil leaking into the `any` interface would create a non-nil interface
 value, which is a footgun for downstream nil checks.
+
+## Kubernetes error status
+
+When a core resource tool (`resources_get`, `resources_list`,
+`resources_create_or_update`, `resources_delete`, `resources_scale`) fails with
+a Kubernetes API error, the result keeps `isError: true` and the human-readable
+`TextContent`, and also sets `structuredContent` to the original
+an object with only the Kubernetes Status `code` and `reason`. Its size counts
+toward `max_result_bytes`. Clients should read `reason` / `code`
+instead of parsing the message. Errors that are not Kubernetes API errors (e.g.
+argument validation) carry no `structuredContent`. Reasons are not reinterpreted:
+`resources_create_or_update` (server-side apply) reports the actual reason.
