@@ -18,6 +18,7 @@ Each contains:
 - `eval-kiali-multicluster.yaml` — eval config for multicluster `kiali` tasks only (requires east/west Kind setup; see `docs/KIALI.md`)
 - `eval-tekton.yaml` — eval config for the `tekton` task suite (+ core/config)
 - `eval-netobserv.yaml` — eval config for the `netobserv` task suite (+ core/config)
+- `eval-guest-observability.yaml` — eval config for the `guest-observability` task suite (+ core/config)
 - `eval-all.yaml` — eval config that runs all task suites
 - `eval-core-readonly.yaml` (`builtin-openai` only so far) — eval config for the
   `core-readonly` suite. Proves a model can still complete real diagnostic

@@ -1,0 +1,53 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+
+metadata:
+  labels:
+    suite: guest-observability
+    project: kubevirt
+    requires: guest-observability
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "windows-event-129"
+  category: "Guest failure investigation"
+  description: "Detect and attribute a Windows storage reset using the complete guest telemetry contract."
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+          GUEST_OBSERVABILITY_SCENARIO=event129 \
+            "${REPO_ROOT}/evals/tasks/guest-observability/shared/setup-mock.sh"
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+          bash "${REPO_ROOT}/evals/tasks/guest-observability/windows-event-129/verify.sh"
+        timeout: 30s
+    - llmJudge:
+        contains: "Event 129"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+          bash "${REPO_ROOT}/evals/tasks/guest-observability/shared/cleanup-mock.sh"
+        timeout: 180s
+  prompt:
+    inline: |
+      Check whether any Windows VM in the
+      guest-observability-eval namespace experienced a storage reset
+      during the last hour.
+      Identify the affected VM only if the available telemetry
+      reliably establishes its identity, and summarize the evidence.
