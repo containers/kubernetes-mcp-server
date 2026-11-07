@@ -84,7 +84,7 @@ func (p *singleClusterProvider) resetLocked(ctx context.Context) error {
 	p.manager = manager
 	return p.Replace(
 		watcher.NewKubeconfig(ctx, p.manager.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get()),
-		watcher.NewClusterState(ctx, p.manager.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
+		newClusterStateWatcher(ctx, p.cfg, p.manager.kubernetes),
 	)
 }
 

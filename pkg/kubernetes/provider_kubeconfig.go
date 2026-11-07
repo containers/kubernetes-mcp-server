@@ -105,7 +105,7 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 	p.defaultContext = defaultContext
 	return p.Replace(
 		watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get()),
-		watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
+		newClusterStateWatcher(ctx, p.cfg, m.kubernetes),
 	)
 }
 
