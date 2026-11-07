@@ -26,6 +26,30 @@ toolsets = ["core", "netobserv"]
 
 When `netobserv` is listed in `toolsets`, configuration is loaded from `[toolset_configs.netobserv]` if present. Without `url`, the in-cluster plugin URL defaults to `https://netobserv-plugin.netobserv.svc.cluster.local:9001` on OpenShift and `http://…` on other clusters. On OpenShift, the projected service CA at `/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt` is used when present. For port-forward or custom TLS, set `insecure` or `certificate_authority` in config.
 
+### Cluster compatibility filtering
+
+With `experimental_enable_target_compatibility_tool_filters = true`, all three
+NetObserv tools are hidden unless at least one target cluster exposes the
+`flows.netobserv.io` `FlowCollector` kind in any served API version.
+
+An explicit, nonblank `[toolset_configs.netobserv].url` bypasses the API-presence
+check, supporting external plugins, port-forwards, and mock backends. It does not
+bypass backend configuration checks: tools may still be omitted when their
+backends are disabled. A blank or whitespace-only URL does not bypass the
+API-presence check; neither do `namespace`, `service`, or `port` overrides.
+Disabling compatibility filtering skips the API-presence check but does not
+change backend configuration checks.
+
+Discovery errors follow the provider's existing fail-open policy: tools remain
+available rather than treating an uncertain result as confirmed absence. Changes
+to the API groups or configuration are handled by the existing
+cluster-state/configuration reload paths.
+
+API presence is an installation signal, not a plugin health check. It should not
+be treated as verification that a FlowCollector instance exists, the plugin is
+reachable, or the caller is authorized. Authentication and plugin authorization
+still apply when tools run.
+
 ### Tools
 
 | Tool | Description |

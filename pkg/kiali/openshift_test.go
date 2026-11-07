@@ -33,6 +33,16 @@ func (m *mockInspector) GetTargets(context.Context) ([]string, error) {
 func (m *mockInspector) GetDefaultTarget() string       { return "" }
 func (m *mockInspector) GetTargetParameterName() string { return "" }
 func (m *mockInspector) IsMultiTarget() bool            { return false }
+func (m *mockInspector) ServerResourcesForGroup(ctx context.Context, _ string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, m, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		list := &metav1.APIResourceList{}
+		if m.available {
+			list.APIResources = []metav1.APIResource{{Kind: openshiftProjectGVK.Kind}}
+		}
+		return []*metav1.APIResourceList{list}, m.discoveryErr
+	})
+}
+
 func (m *mockInspector) ServerResourcesForGroupVersion(ctx context.Context, groupVersion string) api.Results[*metav1.APIResourceList] {
 	m.lastGroupVersion = groupVersion
 	return api.NewResults(ctx, m, func(context.Context, string) (*metav1.APIResourceList, error) {

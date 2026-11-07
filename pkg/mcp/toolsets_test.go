@@ -538,6 +538,14 @@ func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return f }
 func (f *fakeProvider) BearerToken(ctx context.Context) api.Results[string] {
 	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
 }
+func (f *fakeProvider) ServerResourcesForGroup(ctx context.Context, _ string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		return []*metav1.APIResourceList{{APIResources: []metav1.APIResource{
+			{Kind: "Project"}, {Kind: "Route"}, {Kind: "NodeMetrics"}, {Kind: "PodMetrics"},
+			{Kind: "VirtualMachine"}, {Kind: "VirtualMachineTemplate"},
+		}}}, nil
+	})
+}
 func (f *fakeProvider) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
 		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
