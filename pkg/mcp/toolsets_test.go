@@ -182,6 +182,70 @@ func (s *ToolsetsSuite) TestMetricsToolsPresentWithFilteringEnabled() {
 	})
 }
 
+func (s *ToolsetsSuite) TestTektonToolsFilteredWithoutTektonAPIs() {
+	s.Cfg.Toolsets.SetForTest([]string{"tekton"})
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.Empty(tools.Tools)
+}
+
+func (s *ToolsetsSuite) TestTektonToolsFilteredByRequiredAPI() {
+	s.ResetHandlers()
+	s.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
+		GroupVersion: "tekton.dev/v1",
+		APIResources: []metav1.APIResource{{Name: "pipelineruns", Kind: "PipelineRun", Namespaced: true}},
+	}))
+	s.Cfg.Toolsets.SetForTest([]string{"tekton"})
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	names := make([]string, 0, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		names = append(names, tool.Name)
+	}
+	s.ElementsMatch([]string{
+		"tekton_pipelinerun_lifecycle",
+		"tekton_pipelinerun_diagnose",
+	}, names)
+}
+
+func (s *ToolsetsSuite) TestTektonToolsPresentWithTektonAPIs() {
+	s.ResetHandlers()
+	s.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
+		GroupVersion: "tekton.dev/v1",
+		APIResources: []metav1.APIResource{
+			{Name: "pipelines", Kind: "Pipeline", Namespaced: true},
+			{Name: "pipelineruns", Kind: "PipelineRun", Namespaced: true},
+			{Name: "tasks", Kind: "Task", Namespaced: true},
+			{Name: "taskruns", Kind: "TaskRun", Namespaced: true},
+		},
+	}))
+	s.Cfg.Toolsets.SetForTest([]string{"tekton"})
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	names := make([]string, 0, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		names = append(names, tool.Name)
+	}
+	s.ElementsMatch([]string{
+		"tekton_pipeline_start",
+		"tekton_pipelinerun_lifecycle",
+		"tekton_pipelinerun_logs",
+		"tekton_pipelinerun_diagnose",
+		"tekton_task_start",
+		"tekton_taskrun_restart",
+		"tekton_taskrun_logs",
+	}, names)
+}
+
 func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 	s.Run("Kubevirt tools are filtered out when VirtualMachine GVK is not present", func() {
 		s.Cfg.Toolsets.SetForTest([]string{"kubevirt"})
