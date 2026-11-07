@@ -18,6 +18,7 @@ var (
 	seriesOutputSchema       = tools.MustSchema[SeriesOutput]()
 	alertsOutputSchema       = tools.MustSchema[AlertsOutput]()
 	silencesOutputSchema     = tools.MustSchema[SilencesOutput]()
+	silenceWriteOutputSchema = tools.MustSchema[SilenceWriteOutput]()
 )
 
 func initListMetrics() api.ServerTool {
@@ -364,6 +365,163 @@ func initGetSilences() api.ServerTool {
 			},
 		},
 		Handler:      getSilencesHandler,
+		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
+	}
+}
+
+func silenceMatcherSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"name": {
+				Type:        "string",
+				Description: "Label name (for example alertname).",
+			},
+			"value": {
+				Type:        "string",
+				Description: "Label value to match.",
+			},
+			"isRegex": {
+				Type:        "boolean",
+				Description: "Treat value as a regular expression. Default false.",
+			},
+			"isEqual": {
+				Type:        "boolean",
+				Description: "Equality matcher when true (default). False is a negative matcher.",
+			},
+		},
+		Required: []string{"name", "value"},
+	}
+}
+
+func silenceWriteProperties(includeID bool) map[string]*jsonschema.Schema {
+	createdByDesc := "Who created the silence. Defaults to obs-mcp if omitted."
+	startsAtDesc := "Silence start time (RFC3339, Unix, NOW, or NOW±duration). Defaults to now."
+	endsAtDesc := "Silence end time. Do not set together with duration."
+	durationDesc := "How long the silence lasts from startsAt (for example 2h). Default 2h when endsAt is omitted. Do not set together with endsAt."
+	if includeID {
+		createdByDesc = "Who created the silence. Omitted on update keeps the existing createdBy."
+		startsAtDesc = "Silence start time (RFC3339, Unix, NOW, or NOW±duration). Omitted on update keeps the existing startsAt."
+		endsAtDesc = "Silence end time. Do not set together with duration. Omitted on update keeps the existing endsAt unless duration is set."
+		durationDesc = "How long the silence lasts from startsAt (for example 2h). Omitted on update keeps the existing endsAt unless duration or endsAt is set. Do not set together with endsAt."
+	}
+	props := map[string]*jsonschema.Schema{
+		"comment": {
+			Type:        "string",
+			Description: "Reason for the silence. Required on create; optional on update (keeps the existing comment).",
+		},
+		"createdBy": {
+			Type:        "string",
+			Description: createdByDesc,
+		},
+		"labels": {
+			Type:                 "object",
+			Description:          "Equality matchers as a label map (for example alertname=Watchdog, namespace=app). Combined with matchers.",
+			AdditionalProperties: &jsonschema.Schema{Type: "string"},
+		},
+		"matchers": {
+			Type:        "array",
+			Description: "Alertmanager matchers. Use with or instead of labels. alertname alone mutes every instance of that alert.",
+			Items:       silenceMatcherSchema(),
+		},
+		"startsAt": {
+			Type:        "string",
+			Description: startsAtDesc,
+		},
+		"endsAt": {
+			Type:        "string",
+			Description: endsAtDesc,
+		},
+		"duration": {
+			Type:        "string",
+			Description: durationDesc,
+		},
+	}
+	if includeID {
+		props["silence_id"] = &jsonschema.Schema{
+			Type:        "string",
+			Description: "Alertmanager silence UUID from get_silences or create_silence.",
+		}
+	}
+	return props
+}
+
+func initCreateSilence() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name:        "create_silence",
+			Description: CreateSilencePrompt,
+			InputSchema: &jsonschema.Schema{
+				Type:       "object",
+				Properties: silenceWriteProperties(false),
+				Required:   []string{"comment"},
+			},
+			OutputSchema: silenceWriteOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "Create Silence",
+				ReadOnlyHint:    new(false),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(false),
+				OpenWorldHint:   new(true),
+			},
+		},
+		Handler:      createSilenceHandler,
+		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
+	}
+}
+
+func initUpdateSilence() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name:        "update_silence",
+			Description: UpdateSilencePrompt,
+			InputSchema: &jsonschema.Schema{
+				Type:       "object",
+				Properties: silenceWriteProperties(true),
+				Required:   []string{"silence_id"},
+			},
+			OutputSchema: silenceWriteOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "Update Silence",
+				ReadOnlyHint:    new(false),
+				DestructiveHint: new(false),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
+			},
+		},
+		Handler:      updateSilenceHandler,
+		ClusterAware: new(false),
+		RBAC:         rbacNoKubernetes(),
+	}
+}
+
+func initDeleteSilence() api.ServerTool {
+	return api.ServerTool{
+		Tool: api.Tool{
+			Name:        "delete_silence",
+			Description: DeleteSilencePrompt,
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"silence_id": {
+						Type:        "string",
+						Description: "Alertmanager silence UUID to expire (delete).",
+					},
+				},
+				Required: []string{"silence_id"},
+			},
+			OutputSchema: silenceWriteOutputSchema,
+			Annotations: api.ToolAnnotations{
+				Title:           "Delete Silence",
+				ReadOnlyHint:    new(false),
+				DestructiveHint: new(true),
+				IdempotentHint:  new(true),
+				OpenWorldHint:   new(true),
+			},
+		},
+		Handler:      deleteSilenceHandler,
 		ClusterAware: new(false),
 		RBAC:         rbacNoKubernetes(),
 	}

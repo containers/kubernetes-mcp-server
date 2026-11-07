@@ -3,10 +3,13 @@ package auth
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
@@ -29,6 +32,7 @@ const (
 )
 
 const (
+	maxRedirects  = 10
 	serviceCAFile = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 )
 
@@ -92,12 +96,40 @@ func createRoundTripperWithToken(ctx context.Context, cfg *config.Config, restCo
 	}
 
 	transport := config.NewTLSEnforcingTransport(rt, func() bool { return cfg.RequireTLS.Get() })
-	if token != "" {
-		transport = promcfg.NewAuthorizationCredentialsRoundTripper(
-			"Bearer", promcfg.NewInlineSecret(token), transport)
+	if token != "" && useTLS {
+		transport = &httpsOnlyCredentialsRoundTripper{next: promcfg.NewAuthorizationCredentialsRoundTripper(
+			"Bearer", promcfg.NewInlineSecret(token), transport)}
 	}
 
 	return transport, nil
+}
+
+var errHTTPSToHTTPRedirect = errors.New("HTTPS-to-HTTP redirects are not allowed")
+
+// CheckRedirect rejects HTTPS-to-HTTP redirects so a bearer token attached
+// for TLS is not forwarded onto plaintext. Same-scheme redirects are allowed
+// up to maxRedirects.
+func CheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
+	}
+	if req.URL != nil && req.URL.Scheme == "http" &&
+		slices.ContainsFunc(via, func(prev *http.Request) bool {
+			return prev != nil && prev.URL != nil && prev.URL.Scheme == "https"
+		}) {
+		return errHTTPSToHTTPRedirect
+	}
+	return nil
+}
+
+// NewHTTPClient returns a client that uses rt and refuses HTTPS-to-HTTP
+// redirects.
+func NewHTTPClient(rt http.RoundTripper, timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout:       timeout,
+		Transport:     rt,
+		CheckRedirect: CheckRedirect,
+	}
 }
 
 // createCertPoolFromRESTConfig combines system, REST config, and service CA certificates.
@@ -147,4 +179,14 @@ func ContextWithAuthFromRequest(ctx context.Context, r *http.Request) context.Co
 		ctx = context.WithValue(ctx, kubernetes.OAuthAuthorizationHeader, "Bearer "+parts[1])
 	}
 	return ctx
+}
+
+// httpsOnlyCredentialsRoundTripper checks every request, including redirects.
+type httpsOnlyCredentialsRoundTripper struct{ next http.RoundTripper }
+
+func (t *httpsOnlyCredentialsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL == nil || req.URL.Scheme != "https" {
+		return nil, errors.New("refusing to send credentials without TLS")
+	}
+	return t.next.RoundTrip(req)
 }

@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "preview-alert-rule"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: alerts
+    suite: obs
+    requires: alert-management
+    toolType: alert-management
+  description: |
+    Tests if the agent uses preview_alert_rule to dry-run a user-defined
+    create against the monitoring-plugin management API. Requires
+    observability/alert-management and a reachable management API.
+spec:
+  verify:
+    - llmJudge:
+        contains: "preview"
+  prompt:
+    inline: |
+      Dry-run creating a user-defined alert named ObsMCPEvalPreviewCanary
+      with expr absent(obs_mcp_eval_preview_canary) and severity warning
+      in PrometheusRule obs-mcp-eval-alerts in namespace obs-mcp-eval.
+      Use preview_alert_rule only. Do not create, update, or delete anything.
+      Report whether writable is true or false.

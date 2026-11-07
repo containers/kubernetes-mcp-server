@@ -40,7 +40,7 @@ type Config struct {
 	UseRoute bool `toml:"use_route,omitempty"`
 
 	// Resolver performs cluster-based endpoint discovery (e.g., OpenShift Routes).
-	// When nil, plain HTTP service DNS is used. Not exposed in TOML; set programmatically
+	// When nil, in-cluster service DNS is used. Not exposed in TOML; set programmatically
 	// or via UseRoute.
 	Resolver discovery.GatewayResolver `toml:"-"`
 

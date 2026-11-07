@@ -77,8 +77,11 @@ var _ prometheus.Loader = (*MockedLoader)(nil)
 
 // MockedAlertmanagerLoader is a mock implementation of alertmanager.Loader for testing
 type MockedAlertmanagerLoader struct {
-	GetAlertsFunc   func(ctx context.Context, active, silenced, inhibited, unprocessed *bool, filter []string, receiver string) (models.GettableAlerts, error)
-	GetSilencesFunc func(ctx context.Context, filter []string) (models.GettableSilences, error)
+	GetAlertsFunc     func(ctx context.Context, active, silenced, inhibited, unprocessed *bool, filter []string, receiver string) (models.GettableAlerts, error)
+	GetSilencesFunc   func(ctx context.Context, filter []string) (models.GettableSilences, error)
+	GetSilenceFunc    func(ctx context.Context, id string) (*models.GettableSilence, error)
+	PostSilenceFunc   func(ctx context.Context, silence *models.PostableSilence) (string, error)
+	DeleteSilenceFunc func(ctx context.Context, id string) error
 }
 
 func (m *MockedAlertmanagerLoader) GetAlerts(ctx context.Context, active, silenced, inhibited, unprocessed *bool, filter []string, receiver string) (models.GettableAlerts, error) {
@@ -93,6 +96,27 @@ func (m *MockedAlertmanagerLoader) GetSilences(ctx context.Context, filter []str
 		return m.GetSilencesFunc(ctx, filter)
 	}
 	return models.GettableSilences{}, nil
+}
+
+func (m *MockedAlertmanagerLoader) GetSilence(ctx context.Context, id string) (*models.GettableSilence, error) {
+	if m.GetSilenceFunc != nil {
+		return m.GetSilenceFunc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockedAlertmanagerLoader) PostSilence(ctx context.Context, silence *models.PostableSilence) (string, error) {
+	if m.PostSilenceFunc != nil {
+		return m.PostSilenceFunc(ctx, silence)
+	}
+	return "", nil
+}
+
+func (m *MockedAlertmanagerLoader) DeleteSilence(ctx context.Context, id string) error {
+	if m.DeleteSilenceFunc != nil {
+		return m.DeleteSilenceFunc(ctx, id)
+	}
+	return nil
 }
 
 // Ensure MockedAlertmanagerLoader implements alertmanager.Loader at compile time
