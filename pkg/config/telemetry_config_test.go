@@ -208,3 +208,19 @@ traces_sampler_arg = 0.5
 		s.Equal(0.1, *cfg.Telemetry.TracesSamplerArg.Get())
 	})
 }
+
+func (s *TelemetryConfigSuite) TestHTTPEndpointURL() {
+	for _, tc := range []struct{ endpoint, want string }{
+		{"http://collector:4318", "http://collector:4318/v1/traces"},
+		{"http://collector:4318/", "http://collector:4318/v1/traces"},
+		{"https://collector:4318", "https://collector:4318/v1/traces"},
+		{"http://collector:4318/v1/traces", "http://collector:4318/v1/traces"},
+		{"http://gateway/otlp/traces", "http://gateway/otlp/traces"},
+	} {
+		s.Run(tc.endpoint, func() {
+			cfg := New()
+			cfg.Telemetry.Endpoint.SetForTest(tc.endpoint)
+			s.Equal(tc.want, cfg.Telemetry.HTTPEndpointURL("traces"))
+		})
+	}
+}

@@ -475,3 +475,20 @@ func (e *TestError) Error() string {
 func TestOtelStatsCollector(t *testing.T) {
 	suite.Run(t, new(OtelStatsCollectorSuite))
 }
+
+func (s *OtelStatsCollectorSuite) TestCreateMetricsExporterHTTPSignalPath() {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	exporter, err := createMetricsExporter(s.T().Context(), configtest.Telemetry(server.URL, "http/protobuf"))
+	s.Require().NoError(err)
+	s.Require().NotNil(exporter)
+	defer func() { _ = exporter.Shutdown(s.T().Context()) }()
+
+	s.Require().NoError(exporter.Export(s.T().Context(), &metricdata.ResourceMetrics{}))
+	s.Equal("/v1/metrics", path)
+}
