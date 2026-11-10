@@ -1,0 +1,7 @@
+kind: Agent
+metadata:
+  name: gemma-4-31b-agent
+builtin:
+  type: llm-agent
+  model: openai:gemma-4-31b
+  useResponsesApi: false
