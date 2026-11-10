@@ -77,11 +77,22 @@ func discoverInjectAndProbe(ctx context.Context, serverCfg *config.Config, kiali
 	token := bearerTokenFromInspector(ctx, inspector)
 	url, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
 	if !ok {
-		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(), kialiCfg, serverCfg, token)
+		requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
+		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(requireTLS), kialiCfg, serverCfg, token)
 	}
 	if !ok {
 		setDiscoveredURL("")
+		if serverCfg != nil && serverCfg.RequireTLS.Get() {
+			klogutil.FromContext(ctx).V(1).Info("Kiali in-cluster discovery failed with require_tls enabled; set [toolset_configs.kiali].url to an HTTPS endpoint")
+		}
 		return false
+	}
+	if serverCfg != nil && serverCfg.RequireTLS.Get() {
+		if err := config.ValidateURLRequiresTLS(url, "Kiali URL"); err != nil {
+			klogutil.FromContext(ctx).V(1).Info("discovered Kiali URL rejected by require_tls", "error", err)
+			setDiscoveredURL("")
+			return false
+		}
 	}
 	storeDiscoveredURL(ctx, url)
 	return true
@@ -121,16 +132,19 @@ func bearerTokenFromInspector(ctx context.Context, inspector api.ClusterInspecto
 	return token
 }
 
-func wellKnownInternalURLs() []string {
+func wellKnownInternalURLs(requireTLS bool) []string {
+	schemes := serviceURLSchemes(requireTLS)
 	hosts := []string{
 		"kiali.istio-system.svc",
 		"kiali.kiali.svc",
 		"kiali.openshift-operators.svc",
 	}
-	out := make([]string, 0, len(hosts)*2)
+	out := make([]string, 0, len(hosts)*len(schemes)*2)
 	for _, host := range hosts {
-		base := "http://" + host + ":20001"
-		out = append(out, base, base+"/kiali")
+		for _, scheme := range schemes {
+			base := scheme + "://" + host + ":20001"
+			out = append(out, base, base+"/kiali")
+		}
 	}
 	return out
 }
