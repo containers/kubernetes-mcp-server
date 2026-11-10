@@ -70,9 +70,6 @@ func internalServiceURLs(cr *KialiCR, requireTLS bool) []string {
 	}
 
 	schemes := serviceURLSchemes(requireTLS)
-	if len(schemes) == 0 {
-		return nil
-	}
 
 	webRoot := cr.Spec.Server.WebRoot
 	out := make([]string, 0, len(schemes)*2)

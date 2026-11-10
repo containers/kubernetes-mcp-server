@@ -73,8 +73,9 @@ func (k *Kiali) probeStatus(ctx context.Context) bool {
 	resp, err := client.Do(req)
 	if err != nil {
 		if isTemporaryDNSProbeError(err) {
-			klogutil.FromContext(ctx).V(2).Info("kiali status probe: temporary DNS failure; assuming Kiali is available",
-				"url", statusURL, "error", err)
+			klogutil.LogWarn(klogutil.FromContext(ctx),
+				"kiali status probe: temporary DNS failure; treating URL as reachable without confirming TLS or HTTP /api/status",
+				klogutil.Field("url", statusURL), klogutil.Err(err))
 			return true
 		}
 		klogutil.FromContext(ctx).V(2).Info("kiali status probe failed", "url", statusURL, "error", err)
