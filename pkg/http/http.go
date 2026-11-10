@@ -72,8 +72,32 @@ func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
 		next.ServeHTTP(rw, r)
 
 		duration := time.Since(start)
-		metrics.GetMetrics().RecordHTTPRequest(r.Context(), r.Method, r.URL.Path, rw.statusCode, duration)
+		metrics.GetMetrics().RecordHTTPRequest(r.Context(), metricsMethod(r.Method), metricsPath(r.URL.Path), rw.statusCode, duration)
 	})
+}
+
+// metricsPath and metricsMethod map a request to bounded url.path and
+// http.request.method metric labels. Recording the raw values lets any client,
+// authenticated or not, create one series per distinct path or method (#1587):
+// once the SDK's per-metric cardinality limit is reached, real traffic is
+// folded into the otel_metric_overflow series. Known routes come from
+// knownHTTPRoute; every other path is counted as "other".
+func metricsPath(path string) string {
+	if route, ok := knownHTTPRoute(path); ok {
+		return route
+	}
+	return "other"
+}
+
+// metricsMethod keeps the standard HTTP methods and reports any other as
+// "_OTHER", as the OpenTelemetry HTTP semantic conventions do.
+func metricsMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace:
+		return method
+	}
+	return "_OTHER"
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
