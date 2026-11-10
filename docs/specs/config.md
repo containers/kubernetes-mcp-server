@@ -4,7 +4,9 @@ Status: **Implemented**
 
 This spec is the implemented configuration engine, originally sketched in
 [containers/kubernetes-mcp-server#1374](https://github.com/containers/kubernetes-mcp-server/issues/1374).
-There is no deprecation window and no compatibility shims.
+There is no deprecation window and no compatibility shims, except for the
+renamed `enable_target_compatibility_tool_filters` (see
+[`docs/configuration-changes.md`](../configuration-changes.md#target-compatibility-filters-on-by-default)).
 
 Current user-facing behavior lives in [`docs/configuration.md`](../configuration.md).
 Upgrade notes live in [`docs/configuration-changes.md`](../configuration-changes.md).
@@ -664,10 +666,10 @@ startup.
 <td></td>
 </tr>
 <tr>
-<td>experimental_enable_target_compatibility_tool_filters</td>
+<td>enable_target_compatibility_tool_filters</td>
 <td>bool</td>
-<td><code>false</code></td>
-<td><code>experimental_enable_target_compatibility_tool_filters</code></td>
+<td><code>true</code></td>
+<td><code>enable_target_compatibility_tool_filters</code></td>
 <td>—</td>
 <td>—</td>
 <td>yes</td>

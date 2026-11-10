@@ -65,6 +65,8 @@ func (s *ToolsetsSuite) SetupTest() {
 	// Set up default discovery handler for non-OpenShift cluster
 	s.Handle(test.NewDiscoveryClientHandler())
 	s.Cfg = configuration.BaseDefault()
+	// Target compatibility filtering is on by default; tests that need it set it explicitly.
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
 	s.Cfg.KubeConfig.SetForTest(s.KubeconfigFile(s.T()))
 	test.ApplyEnvtestClientLimits(s.Cfg)
 	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
@@ -209,7 +211,7 @@ func (s *ToolsetsSuite) TestKialiToolsFilteredWhenURLUnreachable() {
 		kubeConfig := s.Cfg.KubeConfig.Get()
 		cfg, err := configuration.ReadToml(s.T().Context(), fmt.Appendf(nil, `
 			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
+			enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
 			url = "http://127.0.0.1:1"
 			insecure = true

@@ -49,6 +49,7 @@ func (s *KialiRequireTLSSuite) setupConfig(requireTLS bool) {
 	readOnly := s.Cfg.ReadOnly.Get()
 	s.Cfg = test.Must(config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host))))

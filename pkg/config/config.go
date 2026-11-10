@@ -303,9 +303,8 @@ type Config struct {
 	ValidationEnabled Option[bool]
 	// EnableTargetCompatibilityToolFilters enables filtering of tools based on
 	// cluster target compatibility (e.g., hiding OpenShift-specific tools when
-	// connected to a non-OpenShift cluster). This feature is experimental, and
-	// this option is subject to change or removal in a future release.
-	// Defaults to false.
+	// connected to a non-OpenShift cluster).
+	// Defaults to true.
 	EnableTargetCompatibilityToolFilters Option[bool]
 	// Toolsets lists the MCP toolsets to enable.
 	Toolsets Option[[]string]
@@ -464,7 +463,7 @@ func newConfig() *Config {
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
 		ValidationEnabled:  opt("validation_enabled", false).reload().desc("Enable pre-execution validation of tool calls"),
-		EnableTargetCompatibilityToolFilters: opt("experimental_enable_target_compatibility_tool_filters", false).reload().
+		EnableTargetCompatibilityToolFilters: opt("enable_target_compatibility_tool_filters", true).reload().
 			desc("Filter tools based on cluster target compatibility"),
 		Toolsets:      opt("toolsets", []string{"core", "config"}).reload().desc("MCP toolsets to enable"),
 		EnabledTools:  opt("enabled_tools", []string(nil)).reload().desc("Explicit allowlist of tools to enable from enabled toolsets"),
@@ -935,6 +934,9 @@ func resolve(ctx context.Context, merged map[string]any, sources map[string]stri
 	if err := applyTOML(cfg, merged, sources); err != nil {
 		return nil, err
 	}
+	if err := applyDeprecatedKeys(ctx, cfg, merged, sources); err != nil {
+		return nil, err
+	}
 	if err := rejectUnknownKeys(merged, cfg, sources); err != nil {
 		return nil, err
 	}
@@ -1015,6 +1017,43 @@ func mapLookup(m map[string]any, dotted string) (any, bool) {
 		cur = next
 	}
 	return cur, true
+}
+
+// legacyTargetCompatibilityKey is the old name of enable_target_compatibility_tool_filters.
+const legacyTargetCompatibilityKey = "experimental_enable_target_compatibility_tool_filters"
+
+// applyDeprecatedKeys converts deprecated TOML keys to their replacements and
+// removes them from merged so rejectUnknownKeys accepts them. It runs after
+// applyTOML, so a replacement key set in the TOML has already been applied
+// and wins over the deprecated one.
+//
+// experimental_enable_target_compatibility_tool_filters: true is a no-op (the
+// new default is already true); false is an explicit opt-out, so
+// enable_target_compatibility_tool_filters becomes false.
+func applyDeprecatedKeys(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string) error {
+	raw, ok := merged[legacyTargetCompatibilityKey]
+	if !ok {
+		return nil
+	}
+	delete(merged, legacyTargetCompatibilityKey)
+	legacy, err := parseTyped[bool](raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", legacyTargetCompatibilityKey, err)
+	}
+	klogutil.LogWarn(klogutil.FromContext(ctx),
+		legacyTargetCompatibilityKey+" is deprecated and will be removed in a future release; use "+
+			cfg.EnableTargetCompatibilityToolFilters.TOMLKey+" instead",
+		klogutil.Field("config.key", legacyTargetCompatibilityKey),
+	)
+	if _, replaced := merged[cfg.EnableTargetCompatibilityToolFilters.TOMLKey]; replaced || legacy {
+		return nil
+	}
+	src := Source(sources[legacyTargetCompatibilityKey])
+	if src == "" {
+		src = Source("<file>")
+	}
+	cfg.EnableTargetCompatibilityToolFilters.setParsed(false, src)
+	return nil
 }
 
 // removedKeyReplacements maps dropped TOML keys to their [token_exchange] replacements.
