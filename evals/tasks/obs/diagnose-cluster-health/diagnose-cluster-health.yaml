@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "diagnose-cluster-health"
+  difficulty: hard
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: diagnostic
+  description: |
+    Tests the agent's ability to handle an ambiguous diagnostic prompt.
+    The agent must autonomously decide which tools and metrics to check,
+    ideally covering alerts, node status, and pod health without being
+    told exactly what to look for.
+spec:
+  verify:
+    - llmJudge:
+        contains: "Watchdog"
+    - llmJudge:
+        contains: "at least one Kubernetes metric with a name starting with kube_ used for health assessment"
+  prompt:
+    inline: |
+      Is the cluster healthy? Give me an overview of any issues.
+      Check alerts, node status, and pod health using Prometheus metrics.
+      Include the metric names and PromQL queries you used.

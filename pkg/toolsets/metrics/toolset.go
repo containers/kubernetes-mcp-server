@@ -4,7 +4,11 @@ import (
 	"context"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Toolset implements the observability toolset for advanced Prometheus monitoring.
@@ -23,18 +27,32 @@ func (t *Toolset) GetDescription() string {
 }
 
 // GetTools returns all tools provided by this toolset.
-func (t *Toolset) GetTools(_ context.Context, _ api.ToolsetContext) []api.ServerTool {
-	return []api.ServerTool{
+func (t *Toolset) GetTools(ctx context.Context, tc api.ToolsetContext) []api.ServerTool {
+	tools := []api.ServerTool{
 		initListMetrics(),
 		initExecuteInstantQuery(),
 		initExecuteRangeQuery(),
-		initShowTimeseries(),
+	}
+	found, err := tc.Inspector.Unstructured().Resource(schema.GroupVersionResource{
+		Group:    "perses.dev",
+		Version:  "v1alpha2",
+		Resource: "perses",
+	}).List(ctx, metav1.ListOptions{Limit: 1}).Any(func(list *unstructured.UnstructuredList) bool {
+		return len(list.Items) > 0
+	})
+	if err != nil && !api.IsNotFound(err) {
+		klogutil.FromContext(ctx).Error(err, "Failed to check for Perses instances")
+	}
+	if found {
+		tools = append(tools, initShowTimeseries())
+	}
+	return append(tools,
 		initGetLabelNames(),
 		initGetLabelValues(),
 		initGetSeries(),
 		initGetAlerts(),
 		initGetSilences(),
-	}
+	)
 }
 
 // GetPrompts returns prompts provided by this toolset.

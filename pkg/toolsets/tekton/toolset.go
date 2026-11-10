@@ -21,10 +21,10 @@ func (t *Toolset) GetDescription() string {
 	return "Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting."
 }
 
-func (t *Toolset) GetTools(_ context.Context, _ api.ToolsetContext) []api.ServerTool {
+func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
 		pipelineTools(),
-		pipelineRunTools(),
+		pipelineRunTools(ctx, toolsetContext.Inspector),
 		taskTools(),
 		taskRunTools(),
 	)

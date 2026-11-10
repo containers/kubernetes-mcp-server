@@ -3,10 +3,10 @@ package auth
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -21,7 +21,7 @@ func readToken(ctx context.Context, restConfig *rest.Config, authMode AuthMode) 
 		// The caller is responsible for putting the token from the request header into the context.
 		token := readTokenFromContext(ctx)
 		if token == "" {
-			slog.Warn("no bearer token found in request context authorization header")
+			klogutil.LogWarn(klogutil.FromContext(ctx), "no bearer token found in request context authorization header")
 		}
 		return token, nil
 

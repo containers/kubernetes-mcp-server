@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "alert-investigation"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: alerts
+    suite: obs
+    requires: obs
+    toolType: multi-step
+  description: |
+    Tests if the agent can perform multi-step alert triage: first retrieving
+    alerts from Alertmanager, then investigating related metrics for a
+    firing alert using queries.
+spec:
+  verify:
+    - llmJudge:
+        contains: "AlertmanagerReceiversNotConfigured"
+    - llmJudge:
+        contains: "alertmanager"
+  prompt:
+    inline: |
+      Check if there are any firing alerts. If there are, investigate
+      the related metrics for the most critical alert and summarize
+      what's happening.

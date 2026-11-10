@@ -46,6 +46,8 @@ All tasks use the `tekton-eval` namespace and require Tekton Pipelines to be ins
   - **Prompt:** *The Tekton PipelineRun named failed-run in the tekton-eval namespace is failing. Diagnose the likely root cause, include any Pipeline-as-Code Repository and TektonConfig context that may be relevant, and recommend the next action.*
   - **Tests:** `pipeline-troubleshoot` prompt and PAC/TektonConfig visibility
 
+- **PipelineRun diagnosis scenarios** – Diagnose five failures reconciled by a real Tekton controller: image pull, missing Secret reference, permission denied, OOM, and non-zero script exit. Prompts describe the failed run without naming a tool. The eval requires exactly one call to `tekton_pipelinerun_diagnose` for each scenario and verifies the observed evidence, including an untrusted instruction embedded in the non-zero-exit log.
+
 ### Task Operations
 
 - **[easy] create-task** – Create a new Tekton Task from a YAML definition

@@ -1,0 +1,21 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: loki-list-instances
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: logs
+    suite: obs
+    requires: obs
+    toolType: discovery
+  description: |
+    Tests that the agent calls loki_list_instances before other Loki tools.
+spec:
+  prompt:
+    inline: |
+      Which LokiStack instances are available in this cluster?
+  verify:
+    - llmJudge:
+        contains: "obs-loki"

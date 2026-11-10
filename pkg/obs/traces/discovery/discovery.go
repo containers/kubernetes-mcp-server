@@ -3,12 +3,13 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/url"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 )
 
 type TempoInstance struct {
@@ -77,7 +78,7 @@ func listTempoStacks(ctx context.Context, k8sClient dynamic.Interface, resolver 
 
 		baseURL, err := resolveBaseURL(ctx, k8sClient, resolver, tempo.Namespace, serviceName, multitenancy)
 		if err != nil {
-			slog.Warn("Failed to resolve base URL for TempoStack, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
+			klogutil.LogWarn(klogutil.FromContext(ctx), "Failed to resolve base URL for TempoStack, skipping", klogutil.Field("namespace", tempo.Namespace), klogutil.Field("name", tempo.Name), klogutil.Err(err))
 			continue
 		}
 
@@ -126,7 +127,7 @@ func listTempoMonolithics(ctx context.Context, k8sClient dynamic.Interface, reso
 
 		baseURL, err := resolveBaseURL(ctx, k8sClient, resolver, tempo.Namespace, serviceName, multitenancy)
 		if err != nil {
-			slog.Warn("Failed to resolve base URL for TempoMonolithic, skipping", "namespace", tempo.Namespace, "name", tempo.Name, "error", err)
+			klogutil.LogWarn(klogutil.FromContext(ctx), "Failed to resolve base URL for TempoMonolithic, skipping", klogutil.Field("namespace", tempo.Namespace), klogutil.Field("name", tempo.Name), klogutil.Err(err))
 			continue
 		}
 
@@ -161,7 +162,7 @@ func resolveBaseURL(ctx context.Context, k8sClient dynamic.Interface, resolver E
 		if err == nil {
 			return endpoint, nil
 		}
-		slog.Debug("Route not found, falling back to service DNS", "namespace", namespace, "service", serviceName, "error", err)
+		klogutil.FromContext(ctx).V(4).Info("Route not found, falling back to service DNS", "namespace", namespace, "service", serviceName, "error", err)
 	}
 	if multitenancy {
 		return fmt.Sprintf("https://%s.%s.svc:8080", serviceName, namespace), nil

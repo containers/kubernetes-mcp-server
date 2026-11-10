@@ -29,9 +29,9 @@ func (t *Toolset) GetDescription() string {
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
 		initEvents(),
-		initNamespaces(ctx, toolsetContext.Inspector),
-		initNodes(ctx, toolsetContext.Inspector),
-		initPods(ctx, toolsetContext.Inspector),
+		initNamespaces(toolsetContext.Inspector),
+		initNodes(toolsetContext.Inspector),
+		initPods(toolsetContext.Inspector),
 		initResources(ctx, toolsetContext.Inspector, toolsetContext.TargetCompatibilityFiltersEnabled),
 	)
 }

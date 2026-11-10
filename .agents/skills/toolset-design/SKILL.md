@@ -232,6 +232,73 @@ This populates both text content and structured content for MCP clients.
 
 Avoid manual `json.Marshal` + `api.NewToolCallResult` -- that's the older pattern.
 
+### Memory bounds
+
+New tools and prompts run under three reloadable caps: `max_backend_response_bytes`,
+`max_result_bytes`, and `max_in_flight`. The contract is
+[`docs/specs/memory-bounds.md`](../../../docs/specs/memory-bounds.md).
+The MCP adapters enforce `max_result_bytes` and `max_in_flight` around the handler.
+That check rejects a finished result that is still too big. It does not bound bytes
+the handler has already accumulated, so collectors account for the budget while they run.
+
+**Already capped, when you use the existing client**
+
+`max_backend_response_bytes` applies to one response. `0` disables it. A missing
+config fails closed (`ErrBackendLimitUnavailable`).
+
+- Kubernetes reads through the manager client. The round tripper in
+  `newKubernetesFromLive` stops the body at the cap. Upgrade (`101`) responses are
+  left alone. `pods_exec` applies the same cap to stdout and stderr together.
+- Kiali `ExecuteRequest`, and Loki and Tempo loaders built with
+  `kubernetes.LiveBackendLimit(params.Config)` (`getLokiClient`, `getTempoClient`).
+  A JSON body over the cap returns `*kubernetes.BackendResponseTooLargeError` and no bytes.
+- NetObserv `executeGetAbsolute`. JSON calls return that error. Flow export keeps the
+  prefix and appends a truncation notice.
+- Prometheus and Alertmanager, through `buildAPIConfig`, which wraps the transport
+  with `kubernetes.NewBackendResponseRoundTripper`.
+
+A single JSON call on one of those clients is done. Return the typed error.
+Do not `json.Decode` an uncapped body, and do not add a second hardcoded byte cap.
+
+**What new collector code has to do**
+
+Own the HTTP read yourself only when none of those clients fit. Fail closed with
+`kubernetes.ReadCapped`, or keep a prefix with `kubernetes.ReadLimited` and
+`AcceptTruncated`. When a library owns the read, wrap its transport:
+
+```go
+rt = kubernetes.NewBackendResponseRoundTripper(rt, kubernetes.LiveBackendLimit(params.Config))
+```
+
+`params.Config` is the per-call snapshot. Read the limit from it on each call.
+
+A handler that keeps more than one read, or grows a report from several reads,
+writes retained text through `api.BuilderWithBudget` and does not start another
+fetch once the budget is spent. `NewBuilderWithBudget(0)` is uncapped. Use it only
+as a test probe, never to assemble a result.
+
+- Tools take `api.NewBuilderWithBudget(api.ResultLimit(params.Context))`.
+- Prompts that also send assistant text take `api.NewPromptBudget(params.Context, assistant)`,
+  which reserves that text against the same cap. A prompt with no assistant message
+  uses the tool form. See `pkg/toolsets/kiali/prompts/list_resources.go`.
+- Several sections run `Sections`. An item loop builds a `[]api.Step` from data
+  already in hand and passes that slice to `Sections`. The List or Get that produced
+  the items stays in front of the slice, so it is not issued again after the budget is spent.
+- `TrySection` when the header must be omitted if it does not fit, or if the gather fails,
+  so a later section can still run.
+- Nested formatting takes `Scratch(reserve)`, capped at the bytes the parent can still accept
+  after the header and suffix the parent will add.
+
+Stopping the next fetch leaves the prefix and `ResultTruncationNotice`. Keep that prefix.
+`len(Content)` and the JSON size of `StructuredContent` are both counted, including when
+they carry the same rows twice, so a structured copy of a large list shares this budget.
+
+Examples: `pkg/toolsets/core/health_check.go` (`NewPromptBudget`, `Sections`, `TrySection`),
+`pkg/toolsets/kubevirt/hco_status.go` and `pkg/toolsets/kubevirt/vm_troubleshoot.go`
+(stop the next list), `pkg/toolsets/kubevirt/vm/troubleshoot/tool.go` (stop the next pod
+or DataVolume), `pkg/toolsets/tekton/pipeline_troubleshoot.go`, `pipelinerun.go`, and
+`taskrun.go`, and `pkg/toolsets/kiali/prompts/`.
+
 ---
 
 ## Phase 3: Validate the design with evals
@@ -272,6 +339,7 @@ See `CLAUDE.md` for full details on each step. The key files to touch:
 6. **Update docs**: `make update-readme-tools`
 7. **Eval configs**: `evals/core-eval-testing/<agent>/eval-<suite>.yaml` (one per toolset per agent)
 8. **Eval tasks**: `evals/tasks/<domain>/*/task.yaml`
+9. **Memory bounds**: multi-fetch handlers and any new backend read follow [Memory bounds](#memory-bounds)
 
 ---
 
@@ -289,3 +357,4 @@ When reviewing a toolset PR, verify:
 - [ ] **Container targeting**: If exec-ing into multi-container pods, is the correct container selected?
 - [ ] **Snapshot tests added**: Is the toolset in `TestGranularToolsetsTools` with a snapshot file?
 - [ ] **All eval configs updated**: `evals/core-eval-testing/<agent>/eval-<suite>.yaml` (one per toolset per agent)
+- [ ] **Memory bounds**: A multi-fetch collector uses `BuilderWithBudget` or `NewPromptBudget`, `Sections` or `TrySection`, and stops the next fetch when the budget is spent. A new HTTP read uses `ReadCapped`, `ReadLimited`, or `NewBackendResponseRoundTripper` with `LiveBackendLimit(params.Config)`. See [Memory bounds](#memory-bounds).

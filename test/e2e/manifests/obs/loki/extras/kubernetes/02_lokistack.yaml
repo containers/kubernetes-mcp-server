@@ -1,0 +1,18 @@
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: obs-loki
+  namespace: obs-loki
+spec:
+  managementState: Managed
+  size: 1x.demo
+  # storageClassName injected by overlay (auto-detected from cluster)
+  storage:
+    schemas:
+      - effectiveDate: "2020-10-11"
+        version: v13
+    secret:
+      name: loki-storage
+      type: s3
+  tenants:
+    mode: passthrough

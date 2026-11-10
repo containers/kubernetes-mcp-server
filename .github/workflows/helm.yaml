@@ -9,10 +9,10 @@ on:
       - 'build/helm.mk'
       - '.github/workflows/helm.yaml'
   pull_request:
-    paths:
-      - 'charts/**'
-      - 'build/helm.mk'
-      - '.github/workflows/helm.yaml'
+  merge_group:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,13 +21,16 @@ concurrency:
 jobs:
   validate:
     name: Validate Helm Chart
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: '3.19.2'
 
@@ -39,10 +42,13 @@ jobs:
 
   check-helm-docs:
     name: Check Helm Docs are up-to-date
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Generate Helm docs
         run: make helm-docs

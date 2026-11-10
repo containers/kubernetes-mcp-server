@@ -1,0 +1,22 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-alerts"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: alerts
+    suite: obs
+    requires: obs
+    toolType: alertmanager
+  description: |
+    Tests if the agent can discover and use the get_alerts tool to retrieve
+    currently firing alerts from Alertmanager.
+spec:
+  verify:
+    - llmJudge:
+        contains: "Watchdog"
+  prompt:
+    inline: |
+      Check the cluster for any firing alerts and report what you find.

@@ -10,7 +10,7 @@ import (
 )
 
 // TestTOMLUseRouteInstallsResolver is the embedder contract: openshift-mcp-server
-// (and peers) parse use_route via RegisterToolsetConfig, not via obs-mcp main.go.
+// (and peers) parse use_route via RegisterToolsetConfig, not via a standalone main.go.
 // use_route=true must leave a non-nil OpenShift Resolver on the parsed config.
 func TestTOMLUseRouteInstallsResolver(t *testing.T) {
 	t.Run("use_route true installs LogsGatewayResolver", func(t *testing.T) {

@@ -52,6 +52,8 @@ type AccessControlRoundTripperConfig struct {
 	ValidationEnabled    bool
 	ConfirmationRules    []config.ConfirmationRule
 	ConfirmationFallback string
+	// SchemaCache is the parsed OpenAPI model shared by clients of one manager.
+	SchemaCache *openAPISchemaCache
 	// ConfigProvider, when set, is read on every request so SIGHUP can
 	// update denied_resources, validation, and confirmation without
 	// rebuilding Kubernetes clients. Snapshot fields are the fallback
@@ -87,8 +89,9 @@ func NewAccessControlRoundTripper(ctx context.Context, cfg AccessControlRoundTri
 		apiPathPrefix:      apiPathPrefix,
 		configProvider:     cfg.ConfigProvider,
 		validatorProviders: ValidatorProviders{
-			Discovery:  cfg.DiscoveryProvider,
-			AuthClient: cfg.AuthClientProvider,
+			Discovery:   cfg.DiscoveryProvider,
+			AuthClient:  cfg.AuthClientProvider,
+			SchemaCache: cfg.SchemaCache,
 		},
 		snapshotValidators: validatorsFromAccessControlConfig(cfg),
 	}
@@ -102,8 +105,9 @@ func validatorsFromAccessControlConfig(cfg AccessControlRoundTripperConfig) []ap
 	// confirmation on an operation that would fail anyway.
 	if cfg.ValidationEnabled {
 		validators = append(validators, CreateValidators(ValidatorProviders{
-			Discovery:  cfg.DiscoveryProvider,
-			AuthClient: cfg.AuthClientProvider,
+			Discovery:   cfg.DiscoveryProvider,
+			AuthClient:  cfg.AuthClientProvider,
+			SchemaCache: cfg.SchemaCache,
 		})...)
 	}
 	if len(cfg.ConfirmationRules) > 0 {
@@ -124,6 +128,7 @@ func validatorsFromConfig(cfg *config.Config, providers ValidatorProviders) []ap
 		ConfirmationFallback: cfg.ConfirmationFallback.Get(),
 		DiscoveryProvider:    providers.Discovery,
 		AuthClientProvider:   providers.AuthClient,
+		SchemaCache:          providers.SchemaCache,
 	})
 }
 
@@ -273,25 +278,7 @@ func (rt *AccessControlRoundTripper) isAllowed(
 	cfg *config.Config,
 ) bool {
 	denied := rt.currentDeniedResources(cfg)
-	if len(denied) == 0 {
-		return true
-	}
-
-	for _, val := range denied {
-		// If kind is empty, that means Group/Version pair is denied entirely
-		if val.Kind == "" {
-			if gvk.Group == val.Group && gvk.Version == val.Version {
-				return false
-			}
-		}
-		if gvk.Group == val.Group &&
-			gvk.Version == val.Version &&
-			gvk.Kind == val.Kind {
-			return false
-		}
-	}
-
-	return true
+	return !config.IsDeniedResource(gvk.GroupVersion().String(), gvk.Kind, denied)
 }
 
 // resourceExistsInDiscovery checks whether the given GVR (and optional

@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
 type NamespaceAppSuite struct{ suite.Suite }
@@ -27,7 +29,7 @@ func (s *NamespaceAppSuite) TestNamespaceAppStructured() {
 	}}}}
 
 	s.Run("flattens a raw list into UI rows", func() {
-		payload := namespaceAppStructured(list, nil)
+		payload := tableAppStructured(list, nil)
 		items, ok := payload["items"].([]map[string]any)
 		s.Require().True(ok)
 		s.Require().Len(items, 1)
@@ -43,8 +45,18 @@ func (s *NamespaceAppSuite) TestNamespaceAppStructured() {
 
 	s.Run("preserves already-flat table rows", func() {
 		rows := []map[string]any{{"Name": "team-a", "Status": "Active"}}
-		payload := namespaceAppStructured(&unstructured.Unstructured{}, rows)
+		payload := tableAppStructured(&unstructured.Unstructured{}, rows)
 		s.Equal(rows, payload["items"])
+	})
+
+	s.Run("normalizes YAML rows before considering the structured slice", func() {
+		printed, err := output.Yaml.PrintObjStructured(list)
+		s.Require().NoError(err)
+		payload := tableAppStructured(list, printed.Structured)
+		rows := payload["items"].([]map[string]any)
+		s.Equal("team-a", rows[0]["Name"])
+		s.NotContains(rows[0], "metadata")
+		s.NotContains(rows[0], "status")
 	})
 }
 

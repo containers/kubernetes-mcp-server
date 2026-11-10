@@ -21,6 +21,9 @@ type stubInspector struct {
 
 func (m *stubInspector) Discovery() api.AggregateDiscovery       { return m }
 func (m *stubInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (m *stubInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, m, func(context.Context, string) (string, error) { return "", nil })
+}
 func (m *stubInspector) GetTargets(context.Context) ([]string, error) {
 	return []string{""}, nil
 }

@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - https://github.com/grafana/loki/operator/config/overlays/community?ref=operator/v0.10.2
+patches:
+  # The upstream community overlay references a cert secret name in the
+  # Deployment that doesn't match the secret created by the Certificate CR.
+  # Patch the Deployment to use the correct secret name.
+  - target:
+      kind: Deployment
+      name: loki-operator-controller-manager
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: loki-operator-controller-manager
+      spec:
+        template:
+          spec:
+            volumes:
+              - name: webhook-cert
+                secret:
+                  defaultMode: 420
+                  secretName: loki-operator-webhook-server-cert
+# The upstream images transformer fails to override the image set by the base
+# manager/kustomization.yaml (quay.io/openshift-logging/loki-operator:0.1.0).
+# Override it here to use the correct community image.
+images:
+  - name: quay.io/openshift-logging/loki-operator
+    newName: docker.io/grafana/loki-operator
+    newTag: "0.10.2"

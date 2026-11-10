@@ -1,0 +1,53 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel
+  namespace: tracing
+spec:
+  observability:
+    metrics:
+      enableMetrics: true
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+
+    connectors:
+      spanmetrics:
+        dimensions:
+        - name: k8s.namespace.name
+        - name: k8s.deployment.name
+        - name: k8s.statefulset.name
+        - name: k8s.daemonset.name
+        - name: k8s.container.name
+        - name: k8s.cronjob.name
+        - name: k8s.node.name
+        - name: k8s.cluster.name
+
+    processors:
+      k8sattributes: {}
+
+    exporters:
+      otlp_http/tempo1:
+        endpoint: http://tempo-tempo1-distributor.tracing:4318
+      prometheus:
+        endpoint: 0.0.0.0:8889
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger]
+          processors: [k8sattributes]
+          exporters: [otlp_http/tempo1, spanmetrics]
+        metrics:
+          receivers: [spanmetrics]
+          processors: []
+          exporters: [prometheus]

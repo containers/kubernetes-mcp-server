@@ -9,10 +9,10 @@ on:
       - 'LICENSE'
       - '*.md'
   pull_request:
-    paths-ignore:
-      - '.gitignore'
-      - 'LICENSE'
-      - '*.md'
+  merge_group:
+
+permissions:
+  contents: read
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
@@ -29,8 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Run make format
@@ -48,8 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Update README tools
@@ -62,23 +66,35 @@ jobs:
             exit 1
           fi
 
+  check-codeowners:
+    name: Check CODEOWNERS is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Validate ownership and check CODEOWNERS
+        run: make check-codeowners
+
   build:
-    needs: [check-format, check-readme]
+    needs: [check-format, check-readme, check-codeowners]
     name: Build on ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest #x64
-          - ubuntu-24.04-arm #arm64
-          - windows-latest #x64
-          - macos-15-intel #x64
-          - macos-latest #arm64
+        # TODO: s/macos-15/macos-latest/ once https://github.com/orgs/community/discussions/211885 is resolved
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","ubuntu-24.04-arm","windows-latest","macos-15-intel","macos-15"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Build
@@ -87,7 +103,8 @@ jobs:
         run: make test
 
   cross-compile:
-    needs: [check-format, check-readme]
+    needs: [check-format, check-readme, check-codeowners]
+    if: github.event_name != 'pull_request'
     name: Cross-compile for linux/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -98,9 +115,35 @@ jobs:
           - ppc64le
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Build
         run: make build-multiarch TARGETOS=linux TARGETARCH=${{ matrix.goarch }}
+
+  queue-build-validation:
+    name: Queue build validation
+    needs: [check-format, check-readme, check-codeowners, build, cross-compile]
+    if: always() && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    env:
+      FORMAT_RESULT: ${{ needs.check-format.result }}
+      README_RESULT: ${{ needs.check-readme.result }}
+      CODEOWNERS_RESULT: ${{ needs.check-codeowners.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      CROSS_COMPILE_RESULT: ${{ needs.cross-compile.result }}
+    steps:
+      - name: Verify build checks
+        run: |
+          test "$FORMAT_RESULT" = success
+          test "$README_RESULT" = success
+          test "$CODEOWNERS_RESULT" = success
+          test "$BUILD_RESULT" = success
+          if [ "$GITHUB_EVENT_NAME" = merge_group ]; then
+            test "$CROSS_COMPILE_RESULT" = success
+          else
+            test "$CROSS_COMPILE_RESULT" = skipped
+          fi

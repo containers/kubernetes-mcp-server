@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"testing"
@@ -116,6 +117,18 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 
 		expectedTotal := regexp.MustCompile(`(?m)^\s+600m\s+900Mi\s+92Mi\s*$`)
 		s.Regexpf(expectedTotal, textContent, "expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
+		s.Run("structured metrics aggregate all containers per pod", func() {
+			encoded, err := json.Marshal(result.StructuredContent)
+			s.Require().NoError(err)
+			var payload struct {
+				Items []map[string]any `json:"items"`
+			}
+			s.Require().NoError(json.Unmarshal(encoded, &payload))
+			s.ElementsMatch([]map[string]any{
+				{"Name": "pod-1", "Namespace": "default", "CPU": "300m", "Memory": "500Mi"},
+				{"Name": "pod-2", "Namespace": "ns-1", "CPU": "300m", "Memory": "400Mi"},
+			}, payload.Items)
+		})
 	})
 
 	s.Run("pods_top(allNamespaces=false) returns pod metrics from configured namespace", func() {

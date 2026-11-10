@@ -71,7 +71,7 @@ e.g. '{ resource.service.name="payment-service" }' to only show tag values from 
 		},
 		Handler: searchTagValuesHandler,
 		RBAC:    rbacTempoDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasTempoStackCRD(p),
 		},
 	}

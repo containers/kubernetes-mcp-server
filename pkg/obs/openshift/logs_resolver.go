@@ -3,12 +3,12 @@ package openshift
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	logsdiscovery "github.com/containers/kubernetes-mcp-server/pkg/obs/logs/discovery"
 )
 
@@ -45,7 +45,7 @@ func (r *LogsGatewayResolver) ResolveGatewayURL(ctx context.Context, client dyna
 	if host, err := r.FindRouteByTargetService(ctx, client, namespace, gatewaySvcName); err == nil {
 		return fmt.Sprintf("https://%s/api/logs/v1", host), nil
 	} else {
-		slog.Debug("No route found by target service, falling back to service DNS", "namespace", namespace, "service", gatewaySvcName, "error", err)
+		klogutil.FromContext(ctx).V(4).Info("No route found by target service, falling back to service DNS", "namespace", namespace, "service", gatewaySvcName, "error", err)
 	}
 
 	if strings.HasPrefix(tenantsMode, OpenShiftTenantModePrefix) {

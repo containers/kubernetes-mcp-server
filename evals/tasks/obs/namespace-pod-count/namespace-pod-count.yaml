@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "namespace-pod-count"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: multi-step
+  description: |
+    Tests multi-step reasoning: the agent must discover a suitable metric
+    via list_metrics, explore label values to find namespaces, then query
+    to determine which namespaces have the most pods. Requires chaining
+    discovery, label exploration, and a query.
+spec:
+  prompt:
+    inline: |
+      Which namespaces have the most running pods? Show me the top 5.
+      Use Prometheus metrics and include the metric name and PromQL query you used.
+  verify:
+    - llmJudge:
+        contains: "list of 5 namespaces"
+    - llmJudge:
+        contains: "a metric with name containing kube_pod"

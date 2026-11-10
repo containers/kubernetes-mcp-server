@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/prometheus/common/model"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/auth"
@@ -215,7 +216,7 @@ func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
 	tenant := api.WrapParams(params).OptionalString("tenant", "")
 
 	tls := strings.HasPrefix(url, "https://")
-	rt, err := auth.BuildRoundTripper(params.Context, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
+	rt, err := auth.BuildRoundTripper(params.Context, params.Config, params.RESTConfig(), cfg.GetAuthMode(), tls, cfg.Insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round tripper: %w", err)
 	}
@@ -226,7 +227,7 @@ func getLokiClient(params api.ToolHandlerParams) (loki.Loader, error) {
 		Timeout:   loki.RequestTimeout,
 		Transport: rt,
 	}
-	return loki.NewHTTPLoader(httpClient, url, tenant), nil
+	return loki.NewHTTPLoader(httpClient, url, tenant, kubernetes.LiveBackendLimit(params.Config)), nil
 }
 
 func resolveLokiURL(params api.ToolHandlerParams) (string, error) {

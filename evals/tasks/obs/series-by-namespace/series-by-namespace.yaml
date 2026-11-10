@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "series-by-namespace"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: labels
+    suite: obs
+    requires: obs
+    toolType: exploration
+  description: |
+    Tests if the agent can use the get_series tool with a label selector
+    to find time series scoped to a specific namespace. The agent should
+    first verify the metric exists, then use get_series with a namespace
+    matcher to report the cardinality within that scope.
+spec:
+  verify:
+    - llmJudge:
+        contains: "pod"
+    - llmJudge:
+        contains: "container"
+  prompt:
+    inline: |
+      How many time series exist for container_cpu_usage_seconds_total
+      in the openshift-monitoring namespace? List the label dimensions
+      (such as pod, container) present in the series.

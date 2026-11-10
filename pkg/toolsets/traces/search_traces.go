@@ -123,7 +123,7 @@ Both start and end should be provided to search the full time range; if omitted,
 		},
 		Handler: searchTracesHandler,
 		RBAC:    rbacTempoDiscovery(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasTempoStackCRD(p),
 		},
 	}

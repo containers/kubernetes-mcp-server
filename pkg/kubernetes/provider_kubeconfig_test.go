@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -402,6 +403,87 @@ func (s *ProviderKubeconfigTestSuite) TestWatchTargetsWithConcurrentReaders() {
 
 		close(stop)
 		readerWg.Wait()
+	})
+}
+
+func (s *ProviderKubeconfigTestSuite) TestCloseDuringKubeconfigReload() {
+	s.Run("close does not race an in-flight kubeconfig reload", func() {
+		s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "1")
+		s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "3600000")
+		s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "3600000")
+
+		mockServer := test.NewMockServer()
+		s.T().Cleanup(mockServer.Close)
+		// Slow discovery so Close overlaps reset instead of landing between reloads.
+		mockServer.Handle(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			time.Sleep(15 * time.Millisecond)
+		}))
+		mockServer.Handle(test.NewDiscoveryClientHandler())
+
+		kubeconfig := mockServer.Kubeconfig()
+		for i := range 3 {
+			name := fmt.Sprintf("context-%d", i)
+			kubeconfig.Contexts[name] = clientcmdapi.NewContext()
+			kubeconfig.Contexts[name].Cluster = "fake"
+			kubeconfig.Contexts[name].AuthInfo = "fake"
+		}
+		kubeconfigPath := test.KubeconfigFile(s.T(), kubeconfig)
+
+		cfg, err := config.ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		cfg.KubeConfig.SetForTest(kubeconfigPath)
+		provider, err := NewProvider(s.T().Context(), cfg)
+		s.Require().NoError(err)
+
+		var inflight atomic.Int32
+		reloaded := make(chan struct{}, 1)
+		provider.WatchTargets(s.T().Context(), NewMcpReloader(func(fn func() error) error {
+			inflight.Add(1)
+			defer inflight.Add(-1)
+			return fn()
+		}, func() error {
+			select {
+			case reloaded <- struct{}{}:
+			default:
+			}
+			return nil
+		}))
+
+		stop := make(chan struct{})
+		var writer sync.WaitGroup
+		writer.Add(1)
+		go func() {
+			defer writer.Done()
+			i := 0
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					kubeconfig.CurrentContext = fmt.Sprintf("context-%d", i%3)
+					_ = clientcmd.WriteToFile(*kubeconfig, kubeconfigPath)
+					i++
+					time.Sleep(time.Millisecond)
+				}
+			}
+		}()
+
+		select {
+		case <-reloaded:
+		case <-time.After(5 * time.Second):
+			close(stop)
+			writer.Wait()
+			s.Fail("kubeconfig reload did not run")
+			return
+		}
+
+		s.NotPanics(provider.Close, "Close raced with kubeconfig reload")
+		close(stop)
+		writer.Wait()
+		s.Eventually(func() bool {
+			return inflight.Load() == 0
+		}, 10*time.Second, 10*time.Millisecond, "reload did not finish after Close")
+		s.NotPanics(provider.Close, "second Close should be safe")
 	})
 }
 

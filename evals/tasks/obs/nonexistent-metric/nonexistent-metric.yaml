@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "nonexistent-metric"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: error-handling
+  description: |
+    Tests agent recovery when querying a metric that does not exist.
+    The agent should discover that the metric is missing via list_metrics
+    and inform the user rather than fabricating results.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the metric does not exist or was not found"
+  prompt:
+    inline: |
+      What is the current value of the metric fake_nonexistent_metric_total?

@@ -4,30 +4,47 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	urlpkg "net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 type TempoClient struct {
 	httpClient *http.Client
 	baseURL    string
+	limit      func() (int64, error)
 }
 
 const RequestTimeout = 30 * time.Second
-const maxResponseSize int64 = 10 * 1024 * 1024 // 10 MB
 
-func NewTempoClient(httpClient *http.Client, url string) *TempoClient {
+func NewTempoClient(httpClient *http.Client, url string, limit func() (int64, error)) *TempoClient {
+	if limit == nil {
+		limit = kubernetes.LiveBackendLimit(nil)
+	}
 	return &TempoClient{
 		httpClient: httpClient,
 		baseURL:    url,
+		limit:      limit,
 	}
 }
 
+func (c *TempoClient) backendLimit() (int64, error) {
+	if c == nil || c.limit == nil {
+		return kubernetes.BackendLimit(nil)
+	}
+	return c.limit()
+}
+
 func (c *TempoClient) doRequest(req *http.Request) (body string, err error) {
+	limit, err := c.backendLimit()
+	if err != nil {
+		return "", err
+	}
+
 	// Use LLM-friendly format
 	req.Header.Set("Accept", "application/vnd.grafana.llm")
 
@@ -39,12 +56,9 @@ func (c *TempoClient) doRequest(req *http.Request) (body string, err error) {
 		err = errors.Join(err, resp.Body.Close())
 	}()
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
+	bodyBytes, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
 		return "", err
-	}
-	if int64(len(bodyBytes)) > maxResponseSize {
-		return "", fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

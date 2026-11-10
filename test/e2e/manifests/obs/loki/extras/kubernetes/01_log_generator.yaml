@@ -1,0 +1,85 @@
+# Generates synthetic log entries and pushes them to the LokiStack gateway
+# every few seconds. Uses plain HTTP with X-Scope-OrgID header for static
+# tenancy (no OPA, no projected tokens, no service-ca).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obs-log-generator
+  namespace: obs-loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: obs-log-generator
+  template:
+    metadata:
+      labels:
+        app: obs-log-generator
+    spec:
+      containers:
+        - name: logger
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          command: ["/bin/sh", "-c"]
+          env:
+            - name: TENANT_ID
+              value: network
+            - name: LOKI_PUSH_URL
+              value: "http://obs-loki-gateway-http.obs-loki.svc:8080/loki/api/v1/push"
+            - name: PUSH_INTERVAL
+              value: "5"
+            - name: BATCH_SIZE
+              value: "5"
+          args:
+            - |
+              echo "Starting log generator: tenant=${TENANT_ID} interval=${PUSH_INTERVAL}s batch=${BATCH_SIZE}"
+              seq_num=0
+              while true; do
+                # Build a batch of log entries
+                values=""
+                for j in $(seq 1 "${BATCH_SIZE}"); do
+                  ts_s=$(date +%s)
+                  ts_ns="${ts_s}000000000"
+                  msg="obs-loki-hack tenant=${TENANT_ID} seq=${seq_num}"
+                  if [ -n "${values}" ]; then
+                    values="${values},"
+                  fi
+                  values="${values}[\"${ts_ns}\",\"${msg}\"]"
+                  seq_num=$((seq_num + 1))
+                  sleep 1
+                done
+
+                payload="{\"streams\":[{\"stream\":{\"app\":\"obs-log-generator\",\"level\":\"info\",\"SrcK8S_Namespace\":\"obs-loki\",\"DstK8S_Namespace\":\"obs-loki\"},\"values\":[${values}]}]}"
+
+                http_code=$(curl -s --connect-timeout 10 --max-time 30 -o /tmp/push_resp -w '%{http_code}' \
+                  -H "X-Scope-OrgID: ${TENANT_ID}" \
+                  -H "Content-Type: application/json" \
+                  -d "${payload}" \
+                  "${LOKI_PUSH_URL}" 2>/tmp/push_err)
+
+                if [ "${http_code}" = "204" ]; then
+                  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] pushed ${BATCH_SIZE} entries (seq ${seq_num})"
+                else
+                  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] push failed: HTTP ${http_code}"
+                  cat /tmp/push_resp 2>/dev/null; echo
+                  cat /tmp/push_err 2>/dev/null; echo
+                fi
+
+                sleep "${PUSH_INTERVAL}"
+              done
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

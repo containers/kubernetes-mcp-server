@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "filtered-alerts"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: alerts
+    suite: obs
+    requires: obs
+    toolType: alertmanager
+  description: |
+    Tests if the agent uses the get_alerts tool with filter parameters
+    to retrieve only active alerts matching a specific severity. The agent
+    should pass appropriate filter arguments rather than fetching all alerts
+    and filtering client-side.
+spec:
+  verify:
+    - llmJudge:
+        contains: "AlertmanagerReceiversNotConfigured"
+  prompt:
+    inline: |
+      Show me only the active alerts with severity=warning.

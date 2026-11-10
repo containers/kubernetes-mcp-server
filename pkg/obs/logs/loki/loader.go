@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 const (
@@ -18,8 +19,7 @@ const (
 	labelValuesEndpoint = "/loki/api/v1/label/%s/values"
 	queryRangeEndpoint  = "/loki/api/v1/query_range"
 
-	RequestTimeout  = 60 * time.Second
-	maxErrBodyBytes = 64 * 1024
+	RequestTimeout = 60 * time.Second
 )
 
 // Loader defines the interface for querying Loki.
@@ -61,16 +61,28 @@ type RealLoader struct {
 	baseURL string
 	tenant  string
 	client  *http.Client
+	limit   func() (int64, error)
 }
 
 var _ Loader = (*RealLoader)(nil)
 
-func NewHTTPLoader(httpClient *http.Client, baseURL, tenant string) *RealLoader {
+func NewHTTPLoader(httpClient *http.Client, baseURL, tenant string, limit func() (int64, error)) *RealLoader {
+	if limit == nil {
+		limit = kubernetes.LiveBackendLimit(nil)
+	}
 	return &RealLoader{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		tenant:  strings.TrimSpace(tenant),
 		client:  httpClient,
+		limit:   limit,
 	}
+}
+
+func (l *RealLoader) backendLimit() (int64, error) {
+	if l == nil || l.limit == nil {
+		return kubernetes.BackendLimit(nil)
+	}
+	return l.limit()
 }
 
 func (l *RealLoader) LabelNames(ctx context.Context, start, end time.Time) ([]string, error) {
@@ -121,11 +133,8 @@ func (l *RealLoader) QueryRange(ctx context.Context, input QueryRangeInput) (Que
 	var response struct {
 		Status string `json:"status"`
 		Data   struct {
-			ResultType string `json:"resultType"`
-			Result     []struct {
-				Stream map[string]string `json:"stream"`
-				Values [][]string        `json:"values"`
-			} `json:"result"`
+			ResultType string          `json:"resultType"`
+			Result     json.RawMessage `json:"result"`
 		} `json:"data"`
 		Error string `json:"error"`
 	}
@@ -135,9 +144,23 @@ func (l *RealLoader) QueryRange(ctx context.Context, input QueryRangeInput) (Que
 	if response.Status != "success" {
 		return QueryRangeResult{}, fmt.Errorf("loki query_range request failed: %s", response.Error)
 	}
+	// Metric queries (e.g. count_over_time) return matrix samples with numeric
+	// timestamps, not log lines, so they cannot be decoded as streams.
+	if response.Data.ResultType != "streams" {
+		return QueryRangeResult{}, fmt.Errorf("loki query_range returned resultType %q: only log queries are supported, not metric queries", response.Data.ResultType)
+	}
+	var results []struct {
+		Stream map[string]string `json:"stream"`
+		Values [][]string        `json:"values"`
+	}
+	if len(response.Data.Result) > 0 {
+		if err := json.Unmarshal(response.Data.Result, &results); err != nil {
+			return QueryRangeResult{}, fmt.Errorf("failed to decode loki response: %w", err)
+		}
+	}
 
-	streams := make([]Stream, 0, len(response.Data.Result))
-	for _, result := range response.Data.Result {
+	streams := make([]Stream, 0, len(results))
+	for _, result := range results {
 		entries := make([]Entry, 0, len(result.Values))
 		for _, raw := range result.Values {
 			if len(raw) < 2 {
@@ -188,6 +211,11 @@ func (l *RealLoader) getJSON(ctx context.Context, endpoint string, params url.Va
 		u += "?" + params.Encode()
 	}
 
+	limit, err := l.backendLimit()
+	if err != nil {
+		return err
+	}
+
 	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 	if err != nil {
@@ -203,22 +231,26 @@ func (l *RealLoader) getJSON(ctx context.Context, endpoint string, params url.Va
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	slog.Debug("Backend call completed",
+	klogutil.FromContext(ctx).V(4).Info("Backend call completed",
 		"backend", "loki",
 		"endpoint", endpoint,
 		"status_code", resp.StatusCode,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyBytes))
-		if err != nil {
-			return fmt.Errorf("loki request failed with status %d: failed to read response body: %w", resp.StatusCode, err)
+	body, err := kubernetes.ReadCapped(resp.Body, limit)
+	if err != nil {
+		if kubernetes.IsResponseTooLarge(err) {
+			return err
 		}
-		return fmt.Errorf("loki request failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("failed to read loki response: %w", err)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("loki request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	if err := json.Unmarshal(body, output); err != nil {
 		return fmt.Errorf("failed to decode loki response: %w", err)
 	}
 	return nil

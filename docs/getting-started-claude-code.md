@@ -27,9 +27,11 @@ claude mcp add-json kubernetes-mcp-server \
 **What this does:**
 - Adds the Kubernetes MCP Server to your Claude Code configuration
 - Uses `npx` to automatically download and run the latest version
-- Enables read-only mode via TOML (`read_only = true`)
+- Hides tools that are not annotated read-only (`read_only = true`)
 - Uses the kubeconfig file you created in the Getting Started guide (`KUBECONFIG`)
 - `-s user` makes it available in all your projects
+
+`read_only` is a best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. In this setup that identity is the ServiceAccount from the [Getting Started guide](getting-started-kubernetes.md). See [Cluster authorization](configuration.md#cluster-authorization).
 
 ## Manual Configuration (Alternative)
 

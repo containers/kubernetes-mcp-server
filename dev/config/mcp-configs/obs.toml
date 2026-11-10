@@ -1,0 +1,20 @@
+# Local eval / mcpchecker config. Requires `make expose-obs` (port-forwards).
+# E2E tests deploy in-cluster and use service DNS instead (see test/e2e/obs_helpers_test.go).
+
+[toolset_configs."observability/metrics"]
+auth_mode = "kubeconfig"
+insecure = true
+prometheus_url = "http://127.0.0.1:9090"
+alertmanager_url = "http://127.0.0.1:9093"
+
+[toolset_configs."observability/traces"]
+auth_mode = "kubeconfig"
+insecure = true
+# Static URL for local port-forward (tempo1). list_instances still discovers CRs via the API.
+tempo_url = "http://127.0.0.1:3200"
+
+[toolset_configs."observability/logs"]
+auth_mode = "kubeconfig"
+insecure = true
+# Local port 3100 avoids clashing with the MCP server on :8080.
+loki_url = "http://127.0.0.1:3100"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -46,6 +47,9 @@ kubernetes-mcp-server --config /path/to/config.toml
 
 # start using only a drop-in directory
 kubernetes-mcp-server --config-dir /path/to/conf.d
+
+# start a Streamable HTTP server reading the TOML config from stdin
+echo 'port = "8080"' | kubernetes-mcp-server --config -
 `))
 )
 
@@ -53,6 +57,10 @@ const (
 	flagVersion   = "version"
 	flagConfig    = "config"
 	flagConfigDir = "config-dir"
+
+	// stdinConfigPath is the --config value that reads the main TOML config
+	// from stdin.
+	stdinConfigPath = "-"
 )
 
 type MCPServerOptions struct {
@@ -60,6 +68,10 @@ type MCPServerOptions struct {
 	ConfigPath string
 	ConfigDir  string
 	Config     *config.Config
+
+	// stdinConfig is the main config read from stdin for --config -. Stdin
+	// can only be read once, so SIGHUP reloads reuse these bytes.
+	stdinConfig []byte
 
 	logSink *logging.Sink
 	// exit is os.Exit in production. Tests replace it so a SIGHUP Validate
@@ -112,7 +124,7 @@ func NewMCPServer(streams genericiooptions.IOStreams) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&o.Version, flagVersion, o.Version, "Print version information and quit")
-	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file.")
+	cmd.Flags().StringVar(&o.ConfigPath, flagConfig, o.ConfigPath, "Path of the config file, or - to read it from stdin (HTTP mode only).")
 	cmd.Flags().StringVar(&o.ConfigDir, flagConfigDir, o.ConfigDir, "Directory of lexical .toml files. Usable alone or with --config. Omitted means no drop-ins. Relative paths are resolved against the working directory.")
 
 	return cmd
@@ -125,9 +137,21 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 	}
 
 	var err error
+	if m.ConfigPath == stdinConfigPath {
+		in := m.In
+		if in == nil {
+			in = os.Stdin
+		}
+		if m.stdinConfig, err = io.ReadAll(in); err != nil {
+			return fmt.Errorf("failed to read config from stdin: %w", err)
+		}
+	}
 	if m.ConfigPath != "" || m.ConfigDir != "" {
-		m.Config, err = config.Read(ctx, m.ConfigPath, m.ConfigDir)
+		m.Config, err = m.readConfig(ctx)
 		if err != nil {
+			if m.ConfigPath == stdinConfigPath {
+				return fmt.Errorf("failed to read config from stdin: %w", err)
+			}
 			if m.ConfigPath != "" {
 				return fmt.Errorf("failed to read config %s: %w", m.ConfigPath, err)
 			}
@@ -168,8 +192,24 @@ func (m *MCPServerOptions) Complete(ctx context.Context, _ *cobra.Command) error
 	return nil
 }
 
+// readConfig loads the files selected by --config and --config-dir. For
+// --config - the main config comes from the stdin bytes read by Complete, so
+// a SIGHUP reload applies them again and re-reads only the drop-ins and env.
+func (m *MCPServerOptions) readConfig(ctx context.Context, opts ...config.ReadConfigOpt) (*config.Config, error) {
+	if m.ConfigPath == stdinConfigPath {
+		return config.ReadStdin(ctx, m.stdinConfig, m.ConfigDir, opts...)
+	}
+	return config.Read(ctx, m.ConfigPath, m.ConfigDir, opts...)
+}
+
 func (m *MCPServerOptions) Validate(ctx context.Context) error {
-	return m.validateConfig(ctx, m.Config)
+	var stdinErr error
+	// Without a port the server speaks MCP over stdio, and stdin was already
+	// used up by the config.
+	if m.ConfigPath == stdinConfigPath && m.Config.Port.Get() == "" {
+		stdinErr = errors.New("reading the config from stdin (--config -) is not supported in stdio mode (port is empty); set port for HTTP or pass a config file path")
+	}
+	return errors.Join(stdinErr, m.validateConfig(ctx, m.Config))
 }
 
 func (m *MCPServerOptions) validateConfig(ctx context.Context, cfg *config.Config) error {
@@ -287,7 +327,7 @@ func (m *MCPServerOptions) setupSIGHUPHandler(
 			logger.V(1).Info("Received SIGHUP signal, reloading configuration...")
 
 			// Reload config from files
-			newConfig, err := config.Read(ctx, m.ConfigPath, m.ConfigDir,
+			newConfig, err := m.readConfig(ctx,
 				config.WithPrevious(cfgState.Load()),
 			)
 			if err != nil {

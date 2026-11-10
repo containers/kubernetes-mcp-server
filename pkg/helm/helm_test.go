@@ -216,6 +216,13 @@ func (s *HelmSuite) TestValidateChartReference() {
 	})
 }
 
+func (s *HelmSuite) TestHelmPageNote() {
+	s.Empty(helmPageNote(0, 0, 3))
+	s.Empty(helmPageNote(5, 0, 3))
+	s.Equal("# More releases are available. Call again with the same limit and offset=5.\n", helmPageNote(5, 0, 5))
+	s.Equal("# More releases are available. Call again with the same limit and offset=15.\n", helmPageNote(5, 10, 5))
+}
+
 func TestHelm(t *testing.T) {
 	suite.Run(t, new(HelmSuite))
 }

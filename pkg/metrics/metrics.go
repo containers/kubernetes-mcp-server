@@ -27,6 +27,8 @@ type Metrics struct {
 	stats      *OtelStatsCollector
 }
 
+var _ Collector = (*Metrics)(nil)
+
 // New creates a new Metrics instance with configured collectors.
 // If OTEL_EXPORTER_OTLP_ENDPOINT is set, metrics will also be exported to OTLP.
 func New(ctx context.Context, cfg Config) (*Metrics, error) {
@@ -65,6 +67,14 @@ func (m *Metrics) RecordToolCall(ctx context.Context, name string, duration time
 func (m *Metrics) RecordHTTPRequest(ctx context.Context, method, path string, statusCode int, duration time.Duration) {
 	for _, c := range m.collectors {
 		c.RecordHTTPRequest(ctx, method, path, statusCode, duration)
+	}
+}
+
+// RecordInFlightRequest implements the Collector interface.
+// It fans out the call to all registered collectors.
+func (m *Metrics) RecordInFlightRequest(ctx context.Context, method string, delta int64) {
+	for _, c := range m.collectors {
+		c.RecordInFlightRequest(ctx, method, delta)
 	}
 }
 

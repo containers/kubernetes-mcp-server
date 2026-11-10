@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"sync"
 
@@ -27,15 +26,14 @@ const kcpTargetParameterName = "workspace"
 // It discovers workspaces via the kcp tenancy API and creates
 // managers for each workspace on-demand.
 type kcpClusterProvider struct {
-	mu                  sync.RWMutex
-	cfg                 *config.Config
-	baseServerURL       string
-	restConfig          *rest.Config
-	clientCmdConfig     clientcmd.ClientConfig
-	defaultWorkspace    string
-	managers            map[string]*kubernetes.Manager
-	workspaceWatcher    *WorkspaceWatcher
-	clusterStateWatcher *watcher.ClusterState
+	mu               sync.RWMutex
+	cfg              *config.Config
+	baseServerURL    string
+	restConfig       *rest.Config
+	clientCmdConfig  clientcmd.ClientConfig
+	defaultWorkspace string
+	managers         map[string]*kubernetes.Manager
+	kubernetes.WatcherGroup
 }
 
 var _ kubernetes.Provider = &kcpClusterProvider{}
@@ -48,6 +46,7 @@ func init() {
 // Each workspace is treated as a separate cluster target.
 func newKcpClusterProvider(ctx context.Context, cfg *config.Config) (kubernetes.Provider, error) {
 	ret := &kcpClusterProvider{cfg: cfg}
+	ret.SetReset(ret.reset)
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
@@ -61,6 +60,10 @@ func (p *kcpClusterProvider) reset(ctx context.Context) error {
 }
 
 func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
+	if err := p.ErrClosed(); err != nil {
+		return err
+	}
+
 	pathOptions := clientcmd.NewDefaultPathOptions()
 	if p.cfg.KubeConfig.Get() != "" {
 		pathOptions.LoadingRules.ExplicitPath = p.cfg.KubeConfig.Get()
@@ -149,11 +152,18 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 	p.defaultWorkspace = defaultWorkspace
 	p.restConfig = restConfig
 	p.managers = newManagers
-	p.closeWatchers()
-	p.workspaceWatcher = NewWorkspaceWatcher(ctx, k8s.DynamicClient(), defaultWorkspace, p.cfg.WorkspacePollInterval.Get(), p.cfg.WorkspaceDebounceWindow.Get())
-	p.clusterStateWatcher = watcher.NewClusterState(ctx, k8s.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get())
-	closeManagers(oldManagers)
-
+	err = p.Replace(
+		NewWorkspaceWatcher(ctx, k8s.DynamicClient(), defaultWorkspace, p.cfg.WorkspacePollInterval.Get(), p.cfg.WorkspaceDebounceWindow.Get()),
+		watcher.NewClusterState(ctx, k8s.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
+	)
+	for _, old := range oldManagers {
+		if old != nil {
+			old.Close()
+		}
+	}
+	if err != nil {
+		return err
+	}
 	baseManagerCommitted = true
 	return nil
 }
@@ -347,27 +357,12 @@ func (p *kcpClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
 	}
 }
 
-func (p *kcpClusterProvider) WatchTargets(ctx context.Context, reload kubernetes.McpReloader) {
-	reloadWithReset := func() error {
-		return reload.Run(func() error {
-			if err := p.reset(ctx); err != nil {
-				return err
-			}
-			p.WatchTargets(ctx, reload)
-			return reload.ApplyToolsets()
-		})
-	}
-	p.workspaceWatcher.Watch(ctx, reloadWithReset)
-	p.clusterStateWatcher.Watch(ctx, reload.ClusterStateCallback())
-}
-
-// closeWatchers stops the workspace and cluster-state watchers if present.
-func (p *kcpClusterProvider) closeWatchers() {
-	for _, w := range []watcher.Watcher{p.workspaceWatcher, p.clusterStateWatcher} {
-		if w != nil && !reflect.ValueOf(w).IsNil() {
-			w.Close()
-		}
-	}
+// Close stops the watchers (through the embedded WatcherGroup) and releases
+// every manager's HTTP transport and background CA refresh loop, so shutdown
+// (and tests that only call Close) leave nothing running behind.
+func (p *kcpClusterProvider) Close() {
+	p.WatcherGroup.Close()
+	closeManagers(p.managers)
 }
 
 // closeManagers stops every non-nil manager in the map, releasing their
@@ -378,11 +373,6 @@ func closeManagers(managers map[string]*kubernetes.Manager) {
 			m.Close()
 		}
 	}
-}
-
-func (p *kcpClusterProvider) Close() {
-	p.closeWatchers()
-	closeManagers(p.managers)
 }
 
 // RefreshCAs re-fetches every live workspace manager's cluster CA now, so

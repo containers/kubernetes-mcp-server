@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,6 +46,7 @@ func newTestParams(t *testing.T, cfg *Config, dynamicClient *dynamicfake.FakeDyn
 	}
 	return api.ToolHandlerParams{
 		Context:          ctx,
+		Config:           config.BaseDefault(),
 		KubernetesClient: &mockKubernetesClient{restConfig: &rest.Config{}, dynamicClient: dynamicClient},
 		Request:          &mockToolCallRequest{arguments: args},
 	}

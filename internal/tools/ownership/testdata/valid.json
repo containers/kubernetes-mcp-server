@@ -1,0 +1,12 @@
+{
+  "default_approvers": ["@Cali0707"],
+  "default_reviewers": ["@manusa"],
+  "areas": [
+    {
+      "toolset": "observability/logs",
+      "paths": ["/pkg/obs/logs/"],
+      "approvers": ["@manusa"],
+      "reviewers": ["@mjudeikis"]
+    }
+  ]
+}

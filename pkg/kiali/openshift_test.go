@@ -24,6 +24,9 @@ type mockInspector struct {
 
 func (m *mockInspector) Discovery() api.AggregateDiscovery       { return m }
 func (m *mockInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (m *mockInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, m, func(context.Context, string) (string, error) { return "", nil })
+}
 func (m *mockInspector) GetTargets(context.Context) ([]string, error) {
 	return []string{""}, nil
 }

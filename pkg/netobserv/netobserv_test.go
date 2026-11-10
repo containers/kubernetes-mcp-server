@@ -22,6 +22,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
@@ -47,6 +48,11 @@ func (s *NetObservSuite) mustNewClient() *NetObserv {
 	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil)
 	s.Require().NoError(err)
 	return client
+}
+
+func (s *NetObservSuite) TestBackendLimitRequiresConfig() {
+	_, err := (&NetObserv{}).backendLimit()
+	s.ErrorIs(err, kubernetes.ErrBackendLimitUnavailable)
 }
 
 func (s *NetObservSuite) TestNewNetObserv_NilConfig() {
@@ -75,6 +81,38 @@ func (s *NetObservSuite) TestNewNetObserv_SetsFields() {
 	s.True(client.insecure)
 	s.Equal("1.3", client.tlsMinVersion)
 	s.Equal([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}, client.tlsCipherSuites)
+}
+
+func (s *NetObservSuite) TestNewNetObserv_UsesDetectedEndpointFields() {
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
+		[toolset_configs.netobserv]
+		loki_mode = "LokiStack"
+	`)))
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil, EffectiveConfig{
+		Found:     true,
+		Namespace: "observability",
+		Service:   "netobserv-console",
+		Port:      9443,
+	})
+	s.Require().NoError(err)
+	s.Equal("https://netobserv-console.observability.svc.cluster.local:9443", client.pluginURL)
+}
+
+func (s *NetObservSuite) TestNewNetObserv_ExplicitEndpointFieldsWinOverDetection() {
+	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(`
+		[toolset_configs.netobserv]
+		namespace = "manual"
+		service = "manual-service"
+		port = 8080
+	`)))
+	client, err := NewNetObserv(context.Background(), s.Config, s.MockServer.Config(), nil, EffectiveConfig{
+		Found:     true,
+		Namespace: "detected",
+		Service:   "detected-service",
+		Port:      9443,
+	})
+	s.Require().NoError(err)
+	s.Equal("https://manual-service.manual.svc.cluster.local:8080", client.pluginURL)
 }
 
 func (s *NetObservSuite) TestExecuteGet() {
@@ -127,13 +165,15 @@ func (s *NetObservSuite) TestExecuteGet() {
 	})
 
 	s.Run("returns error when JSON response exceeds maximum allowed size", func() {
+		s.Config.MaxBackendResponseBytes.SetForTest(8)
 		s.MockServer.ResetHandlers()
 		s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(strings.Repeat("x", maxJSONResponseBodySize+1)))
+			_, _ = w.Write([]byte(strings.Repeat("x", 9)))
 		}))
 		_, err := client.ExecuteGet(s.T().Context(), "/api/loki/flow/records", nil)
-		s.Require().Error(err)
-		s.ErrorContains(err, fmt.Sprintf("exceeded maximum allowed size of %d bytes", maxJSONResponseBodySize))
+		var tooLarge *kubernetes.BackendResponseTooLargeError
+		s.Require().ErrorAs(err, &tooLarge)
+		s.Equal(int64(8), tooLarge.Limit)
 	})
 }
 
@@ -151,28 +191,27 @@ func (s *NetObservSuite) TestExecuteGetAccept_csv() {
 
 	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", map[string]any{
 		"format": "csv",
-	}, "text/csv,*/*", 2<<20)
+	}, "text/csv,*/*")
 	s.Require().NoError(err)
 	s.Equal("col1,col2\na,b", response.Body)
-	s.False(response.Truncated)
 	s.Equal("text/csv,*/*", seenAccept)
 }
 
-func (s *NetObservSuite) TestExecuteGetAccept_truncatesLargeExports() {
+func (s *NetObservSuite) TestExecuteGetAccept_overCap() {
 	s.MockServer.ResetHandlers()
 	s.MockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", 32)))
 	}))
 	s.Config = test.Must(config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+		max_backend_response_bytes = 16
 		[toolset_configs.netobserv]
 		url = "%s"
 	`, s.MockServer.Config().Host))))
 	client := s.mustNewClient()
 
-	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*", 16)
+	response, err := client.ExecuteGetAccept(s.T().Context(), "/api/loki/export", nil, "text/csv,*/*")
 	s.Require().NoError(err)
-	s.True(response.Truncated)
-	s.Len(response.Body, 16)
+	s.Equal(strings.Repeat("x", 16)+kubernetes.BackendTruncationNotice, response.Body)
 }
 
 func (s *NetObservSuite) TestNewNetObserv_usesSafeDefaultURLWithoutDiscovery() {

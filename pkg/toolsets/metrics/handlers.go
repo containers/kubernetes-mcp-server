@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"fmt"
-	"log/slog"
 	"maps"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/metrics/prometheus"
 )
@@ -169,8 +169,9 @@ func listMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to list metrics: %w", err)), nil
 	}
 
-	slog.Info("listMetricsHandler called")
-	slog.Debug("listMetricsHandler params", "name_regex", nameRegex)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("listMetricsHandler called")
+	logger.V(4).Info("listMetricsHandler params", "name_regex", nameRegex)
 
 	promClient, err := getPromClient(params)
 	if err != nil {
@@ -179,12 +180,12 @@ func listMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 
 	metrics, err := promClient.ListMetrics(params.Context, nameRegex)
 	if err != nil {
-		slog.Error("failed to list metrics", "error", err)
+		logger.Error(err, "failed to list metrics")
 		return api.NewToolCallResult("", fmt.Errorf("failed to list metrics: %w", err)), nil
 	}
 
-	slog.Info("listMetricsHandler executed successfully", "resultLength", len(metrics))
-	slog.Debug("listMetricsHandler results", "results", metrics)
+	logger.Info("listMetricsHandler executed successfully", "resultLength", len(metrics))
+	logger.V(4).Info("listMetricsHandler results", "results", metrics)
 
 	output := ListMetricsOutput{Metrics: metrics}
 	return api.NewToolCallResultStructured(output, nil), nil
@@ -202,8 +203,9 @@ func executeRangeQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResult
 		return api.NewToolCallResult("", fmt.Errorf("failed to execute range query: %w", err)), nil
 	}
 
-	slog.Info("executeRangeQueryHandler called")
-	slog.Debug("executeRangeQueryHandler params", "query", query, "step", step, "start", start, "end", end, "duration", duration)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("executeRangeQueryHandler called")
+	logger.V(4).Info("executeRangeQueryHandler params", "query", query, "step", step, "start", start, "end", end, "duration", duration)
 
 	// Validate required parameters
 	if query == "" {
@@ -273,7 +275,7 @@ func executeRangeQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResult
 
 	resMatrix, ok := result["result"].(model.Matrix)
 	if ok {
-		slog.Info("executeRangeQueryHandler executed successfully", "resultLength", resMatrix.Len())
+		logger.Info("executeRangeQueryHandler executed successfully", "resultLength", resMatrix.Len())
 
 		if fullResponse {
 			// Return full data
@@ -300,9 +302,9 @@ func executeRangeQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResult
 			}
 		}
 
-		slog.Debug("executeRangeQueryHandler output", "output", output)
+		logger.V(4).Info("executeRangeQueryHandler output", "output", output)
 	} else {
-		slog.Info("executeRangeQueryHandler executed successfully (unknown format)", "result", result)
+		logger.Info("executeRangeQueryHandler executed successfully (unknown format)", "result", result)
 	}
 
 	if warnings, ok := result["warnings"].([]string); ok {
@@ -314,7 +316,7 @@ func executeRangeQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResult
 
 // showTimeseriesHandler handles the show_timeseries tool, returning full range query data for chart rendering.
 func showTimeseriesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	slog.Info("showTimeseriesHandler called")
+	klogutil.FromContext(params.Context).Info("showTimeseriesHandler called")
 
 	// Executing the query handler just to validate the query is correct.
 	result, err := executeRangeQueryHandler(params)
@@ -334,8 +336,9 @@ func executeInstantQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResu
 		return api.NewToolCallResult("", fmt.Errorf("failed to execute instant query: %w", err)), nil
 	}
 
-	slog.Info("executeInstantQueryHandler called")
-	slog.Debug("executeInstantQueryHandler params", "query", query, "time", timeStr)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("executeInstantQueryHandler called")
+	logger.V(4).Info("executeInstantQueryHandler params", "query", query, "time", timeStr)
 
 	// Validate required parameters
 	if query == "" {
@@ -371,8 +374,8 @@ func executeInstantQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResu
 
 	resVector, ok := result["result"].(model.Vector)
 	if ok {
-		slog.Info("executeInstantQueryHandler executed successfully", "resultLength", len(resVector))
-		slog.Debug("executeInstantQueryHandler results", "results", resVector)
+		logger.Info("executeInstantQueryHandler executed successfully", "resultLength", len(resVector))
+		logger.V(4).Info("executeInstantQueryHandler results", "results", resVector)
 
 		output.Result = make([]InstantResult, len(resVector))
 		for i, sample := range resVector {
@@ -386,7 +389,7 @@ func executeInstantQueryHandler(params api.ToolHandlerParams) (*api.ToolCallResu
 			}
 		}
 	} else {
-		slog.Info("executeInstantQueryHandler executed successfully (unknown format)", "result", result)
+		logger.Info("executeInstantQueryHandler executed successfully (unknown format)", "result", result)
 	}
 
 	if warnings, ok := result["warnings"].([]string); ok {
@@ -406,8 +409,9 @@ func getLabelNamesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, er
 		return api.NewToolCallResult("", fmt.Errorf("failed to get label names: %w", err)), nil
 	}
 
-	slog.Info("getLabelNamesHandler called")
-	slog.Debug("getLabelNamesHandler params", "metric", metric, "start", start, "end", end)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("getLabelNamesHandler called")
+	logger.V(4).Info("getLabelNamesHandler params", "metric", metric, "start", start, "end", end)
 
 	startTime, endTime, err := parseDefaultTimeRange(start, end)
 	if err != nil {
@@ -425,8 +429,8 @@ func getLabelNamesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, er
 		return api.NewToolCallResult("", fmt.Errorf("failed to get label names: %w", err)), nil
 	}
 
-	slog.Info("getLabelNamesHandler executed successfully", "labelCount", len(labels))
-	slog.Debug("getLabelNamesHandler results", "results", labels)
+	logger.Info("getLabelNamesHandler executed successfully", "labelCount", len(labels))
+	logger.V(4).Info("getLabelNamesHandler results", "results", labels)
 
 	output := LabelNamesOutput{Labels: labels}
 	return api.NewToolCallResultStructured(output, nil), nil
@@ -443,8 +447,9 @@ func getLabelValuesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 		return api.NewToolCallResult("", fmt.Errorf("failed to get label values: %w", err)), nil
 	}
 
-	slog.Info("getLabelValuesHandler called")
-	slog.Debug("getLabelValuesHandler params", "label", label, "metric", metric, "start", start, "end", end)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("getLabelValuesHandler called")
+	logger.V(4).Info("getLabelValuesHandler params", "label", label, "metric", metric, "start", start, "end", end)
 
 	// Validate required parameters
 	if label == "" {
@@ -467,8 +472,8 @@ func getLabelValuesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, e
 		return api.NewToolCallResult("", fmt.Errorf("failed to get label values: %w", err)), nil
 	}
 
-	slog.Info("getLabelValuesHandler executed successfully", "valueCount", len(values))
-	slog.Debug("getLabelValuesHandler results", "results", values)
+	logger.Info("getLabelValuesHandler executed successfully", "valueCount", len(values))
+	logger.V(4).Info("getLabelValuesHandler results", "results", values)
 
 	output := LabelValuesOutput{Values: values}
 	return api.NewToolCallResultStructured(output, nil), nil
@@ -484,8 +489,9 @@ func getSeriesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 		return api.NewToolCallResult("", fmt.Errorf("failed to get series: %w", err)), nil
 	}
 
-	slog.Info("getSeriesHandler called")
-	slog.Debug("getSeriesHandler params", "matches", matches, "start", start, "end", end)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("getSeriesHandler called")
+	logger.V(4).Info("getSeriesHandler params", "matches", matches, "start", start, "end", end)
 
 	// Validate required parameters
 	if matches == "" {
@@ -514,8 +520,8 @@ func getSeriesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 		return api.NewToolCallResult("", fmt.Errorf("failed to get series: %w", err)), nil
 	}
 
-	slog.Info("getSeriesHandler executed successfully", "cardinality", len(series))
-	slog.Debug("getSeriesHandler results", "results", series)
+	logger.Info("getSeriesHandler executed successfully", "cardinality", len(series))
+	logger.V(4).Info("getSeriesHandler results", "results", series)
 
 	output := SeriesOutput{
 		Series:      series,
@@ -539,8 +545,9 @@ func getAlertsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 	inhibited := GetBoolPtr(args, "inhibited")
 	unprocessed := GetBoolPtr(args, "unprocessed")
 
-	slog.Info("getAlertsHandler called")
-	slog.Debug("getAlertsHandler params", "active", active, "silenced", silenced, "inhibited", inhibited, "unprocessed", unprocessed, "filter", filter, "receiver", receiver)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("getAlertsHandler called")
+	logger.V(4).Info("getAlertsHandler params", "active", active, "silenced", silenced, "inhibited", inhibited, "unprocessed", unprocessed, "filter", filter, "receiver", receiver)
 
 	amClient, err := getAlertmanagerClient(params)
 	if err != nil {
@@ -559,8 +566,8 @@ func getAlertsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error)
 		output.Alerts[i] = convertAlert(alert)
 	}
 
-	slog.Info("getAlertsHandler executed successfully", "alertCount", len(alerts))
-	slog.Debug("getAlertsHandler results", "results", output.Alerts)
+	logger.Info("getAlertsHandler executed successfully", "alertCount", len(alerts))
+	logger.V(4).Info("getAlertsHandler results", "results", output.Alerts)
 
 	return api.NewToolCallResultStructured(output, nil), nil
 }
@@ -573,8 +580,9 @@ func getSilencesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to get silences: %w", err)), nil
 	}
 
-	slog.Info("getSilencesHandler called")
-	slog.Debug("getSilencesHandler params", "filter", filter)
+	logger := klogutil.FromContext(params.Context)
+	logger.Info("getSilencesHandler called")
+	logger.V(4).Info("getSilencesHandler params", "filter", filter)
 
 	amClient, err := getAlertmanagerClient(params)
 	if err != nil {
@@ -593,8 +601,8 @@ func getSilencesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		output.Silences[i] = convertSilence(silence)
 	}
 
-	slog.Info("getSilencesHandler executed successfully", "silenceCount", len(silences))
-	slog.Debug("getSilencesHandler results", "results", output.Silences)
+	logger.Info("getSilencesHandler executed successfully", "silenceCount", len(silences))
+	logger.V(4).Info("getSilencesHandler results", "results", output.Silences)
 
 	return api.NewToolCallResultStructured(output, nil), nil
 }

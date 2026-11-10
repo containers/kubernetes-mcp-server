@@ -78,6 +78,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
+			s.Same(testManager.schemaCache, derived.schemaCache)
 			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			s.Run("RestConfig is correctly copied and sensitive fields are omitted", func() {
@@ -141,9 +142,11 @@ users:
 				derivedCfg := derived.RESTConfig()
 				s.Require().NotNil(derivedCfg.WrapTransport, "expected WrapTransport to be set")
 				transport := derivedCfg.WrapTransport(http.DefaultTransport)
-				// Outer layer: UserAgentRoundTripper
-				uaRT, ok := transport.(*UserAgentRoundTripper)
-				s.Require().True(ok, "expected outermost wrapper to be *UserAgentRoundTripper")
+				// Outer layer: backend response cap, then UserAgentRoundTripper.
+				limitRT, ok := transport.(*backendResponseRoundTripper)
+				s.Require().True(ok, "expected outermost wrapper to be *backendResponseRoundTripper")
+				uaRT, ok := limitRT.delegate.(*UserAgentRoundTripper)
+				s.Require().True(ok, "expected UserAgentRoundTripper under the response cap")
 				// Inner layer: AccessControlRoundTripper
 				acRT, ok := uaRT.delegate.(*AccessControlRoundTripper)
 				s.Require().True(ok, "expected inner wrapper to be *AccessControlRoundTripper")
@@ -304,6 +307,7 @@ users:
 			s.Require().NoErrorf(err, "failed to create derived kubernetes: %v", err)
 
 			s.NotEqual(derived, testManager.kubernetes, "expected new derived client, got original client")
+			s.Same(testManager.schemaCache, derived.schemaCache)
 			s.Equal(derived.Config(), testCfg, "config not properly wired to derived client")
 
 			derivedCfg := derived.RESTConfig()
@@ -311,6 +315,71 @@ users:
 
 			s.Equalf("aiTana-julIA", derivedCfg.BearerToken, "expected BearerToken %s, got %s", "aiTana-julIA", derivedCfg.BearerToken)
 		})
+	})
+}
+
+func (s *DerivedTestSuite) TestKubeConfigContext() {
+	writeConfig := func(content string) *config.Config {
+		kubeconfigPath := filepath.Join(s.T().TempDir(), "config")
+		s.Require().NoError(os.WriteFile(kubeconfigPath, []byte(content), 0644))
+		return test.Must(config.ReadToml(s.T().Context(), []byte(`
+			kubeconfig = "`+strings.ReplaceAll(kubeconfigPath, `\`, `\\`)+`"
+		`)))
+	}
+	ctx := context.WithValue(s.T().Context(), HeaderKey("Authorization"), "Bearer aiTana-julIA")
+
+	s.Run("with a non-current context keeps that context's namespace", func() {
+		testCfg := writeConfig(`
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://cluster-a.example.com
+  name: cluster-a
+- cluster:
+    server: https://cluster-b.example.com
+  name: cluster-b
+contexts:
+- context:
+    cluster: cluster-a
+    namespace: ns-a
+  name: context-a
+- context:
+    cluster: cluster-b
+    namespace: ns-b
+  name: context-b
+current-context: context-a
+`)
+		testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "context-b")
+		s.Require().NoError(err)
+
+		derived, err := testManager.Derived(ctx)
+		s.Require().NoError(err)
+
+		s.Equal("ns-b", derived.NamespaceOrDefault(""))
+	})
+
+	s.Run("with an auto-selected only context keeps that context's namespace", func() {
+		testCfg := writeConfig(`
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://cluster-a.example.com
+  name: cluster-a
+contexts:
+- context:
+    cluster: cluster-a
+    namespace: ns-a
+  name: context-a
+`)
+		testManager, err := NewKubeconfigManager(s.T().Context(), testCfg, "")
+		s.Require().NoError(err)
+
+		derived, err := testManager.Derived(ctx)
+		s.Require().NoError(err)
+
+		s.Equal("ns-a", derived.NamespaceOrDefault(""))
 	})
 }
 

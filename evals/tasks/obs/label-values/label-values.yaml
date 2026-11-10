@@ -1,0 +1,22 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "label-values"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: labels
+    suite: obs
+    requires: obs
+    toolType: exploration
+  description: |
+    Tests the full discovery workflow: list_metrics to verify the metric, then
+    get_label_values to retrieve unique namespace values for kube_pod_info.
+spec:
+  verify:
+    - llmJudge:
+        contains: "a list of namespace values from the cluster"
+  prompt:
+    inline: |
+      What are the unique namespace values for the kube_pod_info metric?

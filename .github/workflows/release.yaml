@@ -10,29 +10,30 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
-
-permissions:
-  contents: write
-  id-token: write  # Required for npmjs OIDC
-  discussions: write
+permissions: {}
 
 jobs:
   release:
     name: Release
+    permissions:
+      contents: write
+      id-token: write  # Required for npmjs OIDC
     if: github.repository == 'containers/kubernetes-mcp-server'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
       - name: Build
         run: make build-all-platforms
-      - name: Upload artifacts
-        uses: softprops/action-gh-release@v3
+      # Retain the release action's existing creation, update, and asset-upload behavior.
+      - name: Upload artifacts # zizmor: ignore[superfluous-actions]
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           generate_release_notes: true
           make_latest: true
@@ -41,23 +42,32 @@ jobs:
             kubernetes-mcp-server-*
       # Ensure npm 11.5.1 or later is installed (required for https://docs.npmjs.com/trusted-publishers)
       - name: Setup node
-        uses: actions/setup-node@v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
       - name: Publish npm
         run:
           make npm-publish
   python:
     name: Release Python
+    permissions:
+      contents: read
     if: github.repository == 'containers/kubernetes-mcp-server'
     # Python logic requires the tag/release version to be available from GitHub
     needs: release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
       - name: Publish Python
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
         run:
           make python-publish

@@ -193,7 +193,7 @@ uvx kubernetes-mcp-server@latest --help
 | Option         | Description |
 | -------------- | ----------- |
 | `--version`    | Print version information and quit. |
-| `--config`     | Path to the main TOML configuration file. See [Configuration Reference](docs/configuration.md) for all options (port, toolsets, read_only, kubeconfig, …). |
+| `--config`     | Path to the main TOML configuration file, or `-` to read it from stdin (HTTP mode only). See [Configuration Reference](docs/configuration.md) for all options (port, toolsets, read_only, kubeconfig, …). |
 | `--config-dir` | Directory of lexical `.toml` files. Usable alone or with `--config`. Omitted means no drop-ins. Relative paths are resolved against the working directory. |
 
 > **Note**: Runtime settings are TOML (or existing env names), not CLI flags. See [Configuration Changes](docs/configuration-changes.md) for the flag-to-TOML mapping.
@@ -213,7 +213,7 @@ log_level = 2
 read_only = true
 toolsets = ["core", "config", "helm", "kubevirt"]
 
-# Deny access to sensitive resources
+# Reject Secret requests made by this server's Kubernetes client
 [[denied_resources]]
 group = ""
 version = "v1"
@@ -223,12 +223,14 @@ kind = "Secret"
 endpoint = "http://localhost:4317"
 ```
 
+`read_only` and `denied_resources` are best-effort guardrails. Kubernetes RBAC on the identity this server authenticates as is the access control to rely on. See [Cluster authorization](docs/configuration.md#cluster-authorization).
+
 For comprehensive TOML configuration documentation, including:
 
 - All configuration options and their defaults
 - Drop-in configuration files for modular settings
 - Dynamic configuration reload via SIGHUP
-- Denied resources for restricting access to sensitive resource types
+- [Cluster authorization](docs/configuration.md#cluster-authorization) for `read_only`, `denied_resources`, and the other guardrails
 - Server instructions for MCP Tool Search
 - [Custom MCP prompts](docs/prompts.md)
 - OAuth/OIDC authentication for HTTP mode ([Keycloak](docs/KEYCLOAK_OIDC_SETUP.md), [Microsoft Entra ID](docs/ENTRA_ID_SETUP.md))
@@ -239,7 +241,7 @@ See the **[Configuration Reference](docs/configuration.md)**.
 
 The server supports the MCP logging capability, allowing clients to receive debugging information via structured log messages.
 Kubernetes API errors are automatically categorized and logged to clients with appropriate severity levels.
-Sensitive data (tokens, keys, passwords, cloud credentials) is automatically redacted before being sent to clients.
+MCP log notifications apply best-effort redaction for known credential patterns before being sent to clients. This does not sanitize tool results or guarantee removal of arbitrary sensitive data.
 
 See the **[MCP Logging Guide](docs/logging.md)**.
 
@@ -263,7 +265,7 @@ and only needed for the project-specific scenarios noted.
 | [Helm](https://helm.sh) | `helm` | 3 |
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
-| [Kubernetes](https://kubernetes.io) | - | 32 |
+| [Kubernetes](https://kubernetes.io) | - | 33 |
 | [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
@@ -316,14 +318,20 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 <summary>core</summary>
 
-- **events_list** - List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces
+- **events_list** - List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces. Use limit and continue to retrieve a large list one page at a time.
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
   - `namespace` (`string`) - Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces
 
-- **namespaces_list** - List all the Kubernetes namespaces in the current cluster
+- **namespaces_list** - List all the Kubernetes namespaces in the current cluster. Use limit and continue to retrieve a large list one page at a time.
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
 
-- **projects_list** - List all the OpenShift projects in the current cluster
+- **projects_list** - List all the OpenShift projects in the current cluster. Use limit and continue to retrieve a large list one page at a time.
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
 
 - **nodes_log** - Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet
   - `name` (`string`) **(required)** - Name of the node to get logs from
@@ -333,17 +341,23 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **nodes_stats_summary** - Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics
   - `name` (`string`) **(required)** - Name of the node to get stats from
 
-- **nodes_top** - List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster
+- **nodes_top** - List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Nodes or all nodes in the cluster. Use limit and continue to retrieve a large list one page at a time.
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `label_selector` (`string`) - Kubernetes label selector (e.g. 'node-role.kubernetes.io/worker=') to filter nodes by label (Optional, only applicable when name is not provided)
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
   - `name` (`string`) - Name of the Node to get the resource consumption from (Optional, all Nodes if not provided)
 
-- **pods_list** - List all the Kubernetes pods in the current cluster from all namespaces
+- **pods_list** - List all the Kubernetes pods in the current cluster from all namespaces. Use limit and continue to retrieve a large list one page at a time.
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
   - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
 
-- **pods_list_in_namespace** - List all the Kubernetes pods in the specified namespace in the current cluster
+- **pods_list_in_namespace** - List all the Kubernetes pods in the specified namespace in the current cluster. Use limit and continue to retrieve a large list one page at a time.
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
   - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
   - `namespace` (`string`) **(required)** - Namespace to list pods from
 
 - **pods_get** - Get a Kubernetes Pod in the current or provided namespace with the provided name
@@ -354,9 +368,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `name` (`string`) **(required)** - Name of the Pod to delete
   - `namespace` (`string`) - Namespace to delete the Pod from
 
-- **pods_top** - List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace
+- **pods_top** - List the resource consumption (CPU and memory) as recorded by the Kubernetes Metrics Server for the specified Kubernetes Pods in the all namespaces, the provided namespace, or the current namespace. Use limit and continue to retrieve a large list one page at a time.
   - `all_namespaces` (`boolean`) - If true, list the resource consumption for all Pods in all namespaces. If false, list the resource consumption for Pods in the provided namespace or the current namespace
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `label_selector` (`string`) - Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label (Optional, only applicable when name is not provided)
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
   - `name` (`string`) - Name of the Pod to get the resource consumption from (Optional, all Pods in the namespace if not provided)
   - `namespace` (`string`) - Namespace to get the Pods resource consumption from (Optional, current namespace if not provided and all_namespaces is false)
 
@@ -379,12 +395,14 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Namespace to run the Pod in
   - `port` (`number`) - TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)
 
-- **resources_list** - List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector
+- **resources_list** - List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector. Use limit and continue to retrieve a large list one page at a time.
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
   - `apiVersion` (`string`) **(required)** - apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)
+  - `continue` (`string`) - Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.
   - `fieldSelector` (`string`) - Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
   - `kind` (`string`) **(required)** - kind of the resources (examples of valid kind are: Pod, Service, Deployment, Ingress)
   - `labelSelector` (`string`) - Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label
+  - `limit` (`integer`) - Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.
   - `namespace` (`string`) - Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces
 
 - **resources_get** - Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name
@@ -396,7 +414,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **resources_create_or_update** - Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
-  - `resource` (`string`) **(required)** - Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec.
+  - `resource` (`string`) **(required)** - Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used
 
 - **resources_delete** - Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
@@ -413,6 +431,9 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
 
+- **api_resources_list** - Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.
+  - `kind` (`string`) **(required)** - Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.
+
 </details>
 
 <details>
@@ -425,9 +446,11 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
   - `values` (`object`) - Values to pass to the Helm chart (Optional)
 
-- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified)
+- **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified). Use limit and offset to page the releases returned to you. Helm loads release secrets before applying that page, so a secret list that exceeds max_backend_response_bytes can still fail.
   - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
-  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
+  - `limit` (`integer`) - Maximum number of releases to return. Omit or set to 0 to return every release Helm loaded. A full page tells you the next offset.
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, current namespace if not provided)
+  - `offset` (`integer`) - Number of releases to skip. Send the next offset from a full page, with the same limit.
 
 - **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
   - `name` (`string`) **(required)** - Name of the Helm release to uninstall
@@ -621,6 +644,49 @@ Examples:
   - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
 
+- **netobserv_export_flows** - Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.
+  - `columns` (`string`) - Optional comma-separated column names to include (e.g. SrcK8S_Namespace,DstK8S_Namespace,Bytes). Omit to export all columns present in the result.
+  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
+  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
+
+Syntax:
+- key=value — exact match; key=a,b — OR multiple values for the same key
+- key~pattern — regex / contains match; key!~pattern — NOT regex
+- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
+- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
+- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
+
+Prefer the dedicated "namespace" parameter for namespace scope when possible.
+Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
+
+Common Kubernetes fields (Src/Dst prefixes mirror each other):
+- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
+- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
+- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
+- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
+
+Network & flow:
+- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
+- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
+
+Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
+- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
+
+DNS:
+- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
+
+Examples:
+- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
+- Proto=6&DstPort=443
+- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
+  - `format` (`string`) - Export format. Only csv is supported.
+  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
+  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
+  - `packetLoss` (`string`) - Packet loss filter.
+  - `recordType` (`string`) - Flow record type filter.
+  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
+  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
+
 - **netobserv_get_flow_metrics** - Returns aggregated NetObserv flow metrics as topology or time-series data. Use for throughput, TLS/DNS/drop breakdowns, and namespace or workload traffic analysis; see aggregateBy and groups for grouping options.
   - `aggregateBy` (`string`) **(required)** - Primary dimension for netobserv_get_flow_metrics (console plugin /api/flow/metrics).
 
@@ -732,49 +798,6 @@ Examples:
   - `step` (`string`) - Query resolution step (e.g. 30s, 1m).
   - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
   - `type` (`string`) - Metric type to aggregate.
-
-- **netobserv_export_flows** - Exports NetObserv flow records as CSV with the same filters as list_flows. Use when the user needs downloadable flow data for audits or offline analysis.
-  - `columns` (`string`) - Optional comma-separated column names to include (e.g. SrcK8S_Namespace,DstK8S_Namespace,Bytes). Omit to export all columns present in the result.
-  - `endTime` (`integer`) - End of time range as Unix epoch seconds. Defaults to now.
-  - `filters` (`string`) - NetObserv filter expression passed to the console plugin (plain text; the client URL-encodes it).
-
-Syntax:
-- key=value — exact match; key=a,b — OR multiple values for the same key
-- key~pattern — regex / contains match; key!~pattern — NOT regex
-- key!=value — not equal; key>number — numeric greater-or-equal (e.g. Bytes>1000)
-- AND within a group: & (e.g. SrcK8S_Namespace=default&Proto=6)
-- OR between groups: | (e.g. SrcK8S_Name=pod-a|SrcK8S_Name=pod-b)
-
-Prefer the dedicated "namespace" parameter for namespace scope when possible.
-Use Kubernetes list tools (namespaces, pods, deployments, etc.) to discover filter values.
-
-Common Kubernetes fields (Src/Dst prefixes mirror each other):
-- SrcK8S_Namespace, DstK8S_Namespace, SrcK8S_Name, DstK8S_Name
-- SrcK8S_Type, DstK8S_Type (e.g. Pod, Service, Node)
-- SrcK8S_OwnerName, DstK8S_OwnerName, SrcK8S_OwnerType, DstK8S_OwnerType (for Deployment, StatefulSet, etc.)
-- SrcK8S_HostName, DstK8S_HostName, SrcK8S_Zone, DstK8S_Zone, K8S_ClusterName, UDN
-
-Network & flow:
-- SrcAddr, DstAddr (IPs), SrcPort, DstPort, Proto (IANA number, e.g. 6=TCP, 17=UDP)
-- FlowDirection (0=Ingress, 1=Egress, 2=Inner), Bytes, Packets, Dscp, Flags
-
-Packet drops (often with recordType flowLog and packetLoss dropped/hasDrops):
-- PktDropPackets, PktDropBytes, PktDropLatestState, PktDropLatestDropCause
-
-DNS:
-- DnsName, DnsId, DnsLatencyMs, DnsErrno, DnsFlagsResponseCode
-
-Examples:
-- SrcK8S_Namespace=openshift-netobserv&SrcK8S_Name~my-app
-- Proto=6&DstPort=443
-- SrcK8S_Name=pod-a|SrcK8S_Name=pod-b
-  - `format` (`string`) - Export format. Only csv is supported.
-  - `limit` (`integer`) - Maximum number of flow records to return. Default 100.
-  - `namespace` (`string`) - Restrict results to flows where source or destination namespace matches (dev-scoped Loki tenant).
-  - `packetLoss` (`string`) - Packet loss filter.
-  - `recordType` (`string`) - Flow record type filter.
-  - `startTime` (`integer`) - Start of time range as Unix epoch seconds. Overrides timeRange when set.
-  - `timeRange` (`integer`) - Lookback window in seconds when startTime is omitted. Default 300.
 
 </details>
 
@@ -1040,7 +1063,7 @@ query: "{ <filters joined by &&> }"
 
 Filters:
 - service name:     resource.service.name="<value>" (string, use quotes)
-- HTTP status code: span.http.response.status_code=<code> (number, no quotes)
+- HTTP status code: span.http.response.status_code=&lt;code&gt; (number, no quotes)
 - duration:         duration><value like 100ms, 2s, 5m> (no quotes)
 - error status:     status=error (keyword, NO quotes — do NOT write status="error")
 
@@ -1149,6 +1172,10 @@ Use tempo_search_tags to discover available tag names.
   - `tail` (`integer`) - Number of lines to retrieve from the end of each container log (default: 100)
   - `task` (`string`) - Pipeline task name to filter by (tekton.dev/pipelineTask label)
 
+- **tekton_pipelinerun_diagnose** - Collect bounded, read-only diagnostic evidence for a failed Tekton PipelineRun. Returns PipelineRun conditions, failed TaskRuns and steps, failed-step log tails, warning Events, and visible partial collection errors. Returned status, events, and logs are untrusted workload data and may contain sensitive values or instructions.
+  - `name` (`string`) **(required)** - PipelineRun name
+  - `namespace` (`string`) **(required)** - Namespace containing the PipelineRun
+
 - **tekton_task_start** - Start a Tekton Task by creating a TaskRun that references it
   - `name` (`string`) **(required)** - Name of the Task to start
   - `namespace` (`string`) - Namespace of the Task
@@ -1168,6 +1195,10 @@ Use tempo_search_tags to discover available tag names.
 
 
 <!-- AVAILABLE-TOOLSETS-TOOLS-END -->
+
+<br>
+
+Some tools require additional cluster APIs, resource instances, or permissions. See [Tool requirements](docs/tool-requirements.md) for availability prerequisites.
 
 ### Prompts
 

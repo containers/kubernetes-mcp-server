@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"regexp"
@@ -13,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
+	apiextensionsapiv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -215,9 +218,7 @@ func (s *ResourcesSuite) TestResourcesListDenied() {
 func (s *ResourcesSuite) TestResourcesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -577,6 +578,26 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 		})
 	})
 
+	s.Run("resources_create_or_update respects namespace from resource metadata", func() {
+		configMapYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-ns-from-metadata\n  namespace: ns-1\ndata:\n  key: value\n"
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": configMapYaml,
+		})
+		s.Run("returns success", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(result.IsError, "call tool should not fail, got: %v", result.Content)
+		})
+		s.Run("creates ConfigMap in the namespace specified in the resource metadata", func() {
+			cm, cmErr := client.CoreV1().ConfigMaps("ns-1").Get(s.T().Context(), "a-cm-ns-from-metadata", metav1.GetOptions{})
+			s.Require().Nilf(cmErr, "ConfigMap not found in ns-1 namespace")
+			s.Equalf("ns-1", cm.Namespace, "ConfigMap should be in the namespace from the resource metadata")
+		})
+		s.Run("does not create ConfigMap in the default namespace", func() {
+			_, cmErr := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), "a-cm-ns-from-metadata", metav1.GetOptions{})
+			s.Errorf(cmErr, "ConfigMap should not exist in the default namespace")
+		})
+	})
+
 	s.Run("resources_create_or_update strips status from resource", func() {
 		configMapWithStatusYaml := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a-cm-with-status\n  namespace: default\ndata:\n  key: value\nstatus:\n  conditions:\n  - type: Ready\n    status: \"True\"\n"
 		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{"resource": configMapWithStatusYaml})
@@ -607,6 +628,86 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdate() {
 			s.Falsef(hasStatus, "status should not be present on the persisted resource")
 		})
 	})
+}
+
+// TestResourcesGetSelfHealsStaleRESTMapperForExternallyCreatedCRD proves
+// resources_get succeeds for a CRD kind that was installed directly against
+// the cluster (kubectl, an operator, Helm -- anything other than this
+// server's own resources_create_or_update tool) after the RESTMapper had
+// already cached its group/resource snapshot. resourceFor's only existing
+// cache-invalidation path is resourcesCreateOrUpdate noticing a
+// CustomResourceDefinition apply through *this* tool; a CRD installed any
+// other way left resources_get/list/delete/scale permanently unable to find
+// it without a server restart, which api_resources_list (its own fresh,
+// uncached discovery.ServerPreferredResources() call) surfaced as a live
+// discrepancy: discovery reports the kind, but every "regular" resource tool
+// still can't resolve it.
+func (s *ResourcesSuite) TestResourcesGetSelfHealsStaleRESTMapperForExternallyCreatedCRD() {
+	s.InitMcpClient()
+
+	// Force the RESTMapper to build and cache its full group/resource
+	// snapshot now, before the CRD below exists -- DeferredDiscoveryRESTMapper
+	// fetches everything in one shot on first use, not per-GVK, so any
+	// resourceFor call is enough to reproduce the staleness.
+	warmupResult, err := s.CallTool("resources_get", map[string]interface{}{"apiVersion": "v1", "kind": "Namespace", "name": "default"})
+	s.Require().NoError(err)
+	s.Require().False(warmupResult.IsError, "warm-up call should succeed: %v", warmupResult.Content)
+
+	apiExtensionsV1Client := apiextensionsv1.NewForConfigOrDie(test.EnvTestRestConfig())
+	crd := &apiextensionsapiv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "freshwidgets.freshgroup.example.com"},
+		Spec: apiextensionsapiv1.CustomResourceDefinitionSpec{
+			Group: "freshgroup.example.com",
+			Names: apiextensionsapiv1.CustomResourceDefinitionNames{Plural: "freshwidgets", Singular: "freshwidget", Kind: "FreshWidget"},
+			Scope: apiextensionsapiv1.NamespaceScoped,
+			Versions: []apiextensionsapiv1.CustomResourceDefinitionVersion{{
+				Name: "v1", Served: true, Storage: true,
+				Schema: &apiextensionsapiv1.CustomResourceValidation{OpenAPIV3Schema: &apiextensionsapiv1.JSONSchemaProps{
+					Type:                   "object",
+					XPreserveUnknownFields: ptr.To(true),
+				}},
+			}},
+		},
+	}
+	_, err = apiExtensionsV1Client.CustomResourceDefinitions().Create(s.T().Context(), crd, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create freshwidgets CRD directly against the cluster (bypassing resources_create_or_update)")
+	s.T().Cleanup(func() {
+		_ = apiExtensionsV1Client.CustomResourceDefinitions().Delete(context.Background(), crd.Name, metav1.DeleteOptions{})
+	})
+	s.Require().NoError(EnvTestWaitForAPIResourceCondition(s.T().Context(), "freshgroup.example.com", "v1", "freshwidgets", true))
+
+	apiResourcesResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "FreshWidget"})
+	s.Require().NoError(err)
+	s.Require().False(apiResourcesResult.IsError,
+		"api_resources_list must see a CRD installed directly against the cluster after cached discovery was warmed -- got: %v",
+		apiResourcesResult.Content)
+	var discoveredResources apiResourcesListToolResult
+	s.Require().NoError(json.Unmarshal([]byte(apiResourcesResult.Content[0].(*mcp.TextContent).Text), &discoveredResources))
+	discoveredFreshWidget := findAPIResourceByKind(discoveredResources.Resources, "FreshWidget")
+	s.Require().NotNil(discoveredFreshWidget, "api_resources_list should return the externally created FreshWidget CRD")
+	s.Equal("freshgroup.example.com/v1", discoveredFreshWidget.APIVersion)
+	s.Equal("freshwidgets", discoveredFreshWidget.Name)
+
+	dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
+	_, err = dynamicClient.Resource(schema.GroupVersionResource{Group: "freshgroup.example.com", Version: "v1", Resource: "freshwidgets"}).
+		Namespace("default").
+		Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "freshgroup.example.com/v1",
+			"kind":       "FreshWidget",
+			"metadata":   map[string]interface{}{"name": "fresh-instance"},
+		}}, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create the FreshWidget instance directly against the cluster")
+
+	toolResult, err := s.CallTool("resources_get", map[string]interface{}{
+		"apiVersion": "freshgroup.example.com/v1",
+		"kind":       "FreshWidget",
+		"namespace":  "default",
+		"name":       "fresh-instance",
+	})
+	s.Require().NoError(err)
+	s.Falsef(toolResult.IsError,
+		"resources_get must succeed for a CRD installed directly against the cluster after the RESTMapper's cache was already warmed -- "+
+			"got: %v", toolResult.Content)
 }
 
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForcesSSA() {
@@ -700,9 +801,7 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDenied() {
 func (s *ResourcesSuite) TestResourcesCreateOrUpdateForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("resources_create_or_update (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -1070,6 +1169,260 @@ func (s *ResourcesSuite) TestResourcesScaleDenied() {
 				"expected descriptive error '%s', got %v", expectedMessage, msg)
 		})
 	})
+}
+
+func (s *ResourcesSuite) TestResourcesListPagination() {
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	ns, err := kc.CoreV1().Namespaces().Create(s.T().Context(), &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "page-"},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	for _, name := range []string{"page-a", "page-b", "page-c"} {
+		_, createErr := kc.CoreV1().ConfigMaps(ns.Name).Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(createErr)
+	}
+
+	s.Run("pages through every configmap", func() {
+		seen := map[string]bool{}
+		cont := ""
+		for page := 0; page < 5; page++ {
+			args := map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"namespace":  ns.Name,
+				"limit":      1,
+			}
+			if cont != "" {
+				args["continue"] = cont
+			}
+			result, callErr := s.CallTool("resources_list", args)
+			s.Require().NoError(callErr)
+			s.Require().False(result.IsError, "page %d: %v", page, result.Content)
+			text := result.Content[0].(*mcp.TextContent).Text
+			var decoded []unstructured.Unstructured
+			s.Require().NoError(yaml.Unmarshal([]byte(text), &decoded))
+			s.Require().Len(decoded, 1)
+			s.False(seen[decoded[0].GetName()])
+			seen[decoded[0].GetName()] = true
+
+			structured, ok := result.StructuredContent.(map[string]interface{})
+			s.Require().True(ok)
+			items, ok := structured["items"].([]interface{})
+			s.Require().True(ok)
+			s.Len(items, 1)
+			next, _ := structured["continue"].(string)
+			if next == "" {
+				s.NotContains(text, "# continue:")
+				break
+			}
+			s.Contains(text, "# continue: "+next)
+			cont = next
+		}
+		s.Equal(map[string]bool{"page-a": true, "page-b": true, "page-c": true}, seen)
+	})
+
+	s.Run("rejects a negative limit", func() {
+		result, callErr := s.CallTool("resources_list", map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"namespace":  ns.Name,
+			"limit":      -1,
+		})
+		s.Require().NoError(callErr)
+		s.True(result.IsError)
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "limit must be greater than or equal to 0")
+	})
+}
+
+func (s *ResourcesSuite) TestResourcesListPaginationAsTable() {
+	s.Cfg.ListOutput.SetForTest("table")
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	ns, err := kc.CoreV1().Namespaces().Create(s.T().Context(), &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "page-table-"},
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
+	for _, name := range []string{"page-a", "page-b"} {
+		_, createErr := kc.CoreV1().ConfigMaps(ns.Name).Create(s.T().Context(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+		}, metav1.CreateOptions{})
+		s.Require().NoError(createErr)
+	}
+
+	first, err := s.CallTool("resources_list", map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"namespace":  ns.Name,
+		"limit":      1,
+	})
+	s.Require().NoError(err)
+	s.Require().False(first.IsError)
+	text := first.Content[0].(*mcp.TextContent).Text
+	structured, ok := first.StructuredContent.(map[string]interface{})
+	s.Require().True(ok)
+	items, ok := structured["items"].([]interface{})
+	s.Require().True(ok)
+	s.Len(items, 1)
+	cont, _ := structured["continue"].(string)
+	s.NotEmpty(cont)
+	s.Contains(text, "# continue: "+cont)
+	s.Regexp(`page-[ab]`, text)
+
+	second, err := s.CallTool("resources_list", map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"namespace":  ns.Name,
+		"limit":      1,
+		"continue":   cont,
+	})
+	s.Require().NoError(err)
+	s.Require().False(second.IsError)
+	secondStructured, ok := second.StructuredContent.(map[string]interface{})
+	s.Require().True(ok)
+	secondItems, ok := secondStructured["items"].([]interface{})
+	s.Require().True(ok)
+	s.Len(secondItems, 1)
+	s.NotEqual(items[0].(map[string]interface{})["Name"], secondItems[0].(map[string]interface{})["Name"])
+}
+
+// apiResourceEntry and apiResourcesListToolResult mirror the JSON shape of
+// the api_resources_list tool's structured output. Defined locally (rather
+// than importing pkg/toolsets/core, whose result type is unexported anyway)
+// to keep this a black-box test of the tool's public wire contract, per
+// docs/dev/testing.md's "test the public API only" rule.
+type apiResourceEntry struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	Namespaced bool   `json:"namespaced"`
+}
+
+type apiResourcesListToolResult struct {
+	Resources []apiResourceEntry `json:"resources"`
+	Warning   string             `json:"warning,omitempty"`
+}
+
+func (s *ResourcesSuite) TestAPIResourcesList() {
+	s.InitMcpClient()
+	s.Run("api_resources_list without a kind filter returns an error", func() {
+		// kind is mandatory: an unfiltered call would dump every API resource
+		// type on the cluster (core kinds plus every CRD from every installed
+		// operator/service mesh) into the LLM's context, which is both a token
+		// cost and a source of confusion when the model already knows which
+		// kind it's after. Forcing a filter keeps this a targeted lookup.
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected an error when kind is omitted, got: %v", toolResult.Content)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "kind",
+			"error message should mention the missing kind parameter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("api_resources_list with an empty kind filter returns an error", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": ""})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected an error for an empty kind filter, got: %v", toolResult.Content)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "must not be empty",
+			"error message should reject an empty kind filter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("api_resources_list with a whitespace-only kind filter returns an error", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "   "})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Truef(toolResult.IsError, "expected an error for a whitespace-only kind filter, got: %v", toolResult.Content)
+		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "must not be empty",
+			"error message should reject a whitespace-only kind filter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+	})
+	s.Run("api_resources_list with a kind filter returns known core and builtin kinds", func() {
+		s.Run("includes the core Pod resource with its apiVersion and namespaced flag", func() {
+			toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "pod"})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+			var decoded apiResourcesListToolResult
+			s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+			pod := findAPIResourceByKind(decoded.Resources, "Pod")
+			s.Require().NotNil(pod, "expected a Pod entry in api_resources_list output")
+			s.Equal("v1", pod.APIVersion, "Pod's apiVersion should be v1")
+			s.Equal("pods", pod.Name, "Pod's plural resource name should be pods")
+			s.True(pod.Namespaced, "Pod should be reported as namespaced")
+		})
+		s.Run("includes the apps/v1 Deployment resource", func() {
+			toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "deployment"})
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+			var decoded apiResourcesListToolResult
+			s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+			deployment := findAPIResourceByKind(decoded.Resources, "Deployment")
+			s.Require().NotNil(deployment, "expected a Deployment entry in api_resources_list output")
+			s.Equal("apps/v1", deployment.APIVersion, "Deployment's apiVersion should be apps/v1")
+		})
+	})
+	s.Run("api_resources_list with kind filter narrows the results", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "deployment"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Run("only the exact matching kind is returned", func() {
+			for _, r := range decoded.Resources {
+				s.Equalf("deployment", strings.ToLower(r.Kind),
+					"expected only the exact kind 'Deployment', got %s", r.Kind)
+			}
+		})
+		s.Run("still finds the known Deployment kind", func() {
+			s.NotNilf(findAPIResourceByKind(decoded.Resources, "Deployment"), "expected filter to still match Deployment")
+		})
+	})
+	s.Run("api_resources_list with a filter matching nothing returns an empty list, not an error", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "nonexistentkindxyz"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Empty(decoded.Resources, "expected no resources to match a nonexistent kind filter")
+	})
+}
+
+func (s *ResourcesSuite) TestAPIResourcesListDenied() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		denied_resources = [
+			{ version = "v1", kind = "Secret" },
+			{ group = "rbac.authorization.k8s.io", version = "v1" }
+		]
+	`)
+	s.InitMcpClient()
+
+	s.Run("api_resources_list excludes a resource denied by kind", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "Secret"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should return an empty filtered result: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Empty(decoded.Resources, "a kind-denied resource must not be exposed by discovery")
+	})
+	s.Run("api_resources_list excludes resources denied by group and version", func() {
+		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": "Role"})
+		s.Nilf(err, "call tool failed %v", err)
+		s.Falsef(toolResult.IsError, "call tool should return an empty filtered result: %v", toolResult.Content)
+
+		var decoded apiResourcesListToolResult
+		s.Require().NoError(json.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decoded))
+		s.Empty(decoded.Resources, "a group/version-denied resource must not be exposed by discovery")
+	})
+}
+
+func findAPIResourceByKind(resources []apiResourceEntry, kind string) *apiResourceEntry {
+	for _, r := range resources {
+		if r.Kind == kind {
+			return &r
+		}
+	}
+	return nil
 }
 
 func TestResources(t *testing.T) {

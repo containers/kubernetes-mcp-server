@@ -12,6 +12,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 - [KubeVirt tasks](kubevirt/) – virtual machine management workflows that exercise the KubeVirt MCP toolset (VM creation, lifecycle management, resource updates).
 - [Tekton tasks](tekton/) – CI/CD workflows that exercise the Tekton toolset (pipelines, tasks, pipeline runs).
 - [NetObserv tasks](netobserv/) – network flow and metrics workflows that exercise the NetObserv MCP toolset (flows, metrics, export).
+- [Obs tasks](obs/) – observability workflows that exercise the metrics, traces, logs, and otelcol toolsets.
 
 ## Anatomy of a Task
 

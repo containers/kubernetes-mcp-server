@@ -5,8 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/stretchr/testify/require"
 )
+
+func uncapped() (int64, error) { return 0, nil }
 
 func TestSearch_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +28,7 @@ func TestSearch_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	result, err := client.Search(t.Context(), SearchOptions{
 		Query: "{duration > 1s}",
 		Limit: 50,
@@ -44,7 +47,7 @@ func TestSearch_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.Search(t.Context(), SearchOptions{})
 	require.ErrorContains(t, err, "status 500")
 }
@@ -63,7 +66,7 @@ func TestQueryV2_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	result, err := client.QueryV2(t.Context(), "abc123", QueryV2Options{Start: 1000, End: 2000})
 	require.NoError(t, err)
 	require.Equal(t, `{"trace":{}}`, result)
@@ -80,7 +83,7 @@ func TestQueryV2_NoTimeRange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.QueryV2(t.Context(), "xyz", QueryV2Options{})
 	require.NoError(t, err)
 }
@@ -92,7 +95,7 @@ func TestQueryV2_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.QueryV2(t.Context(), "missing", QueryV2Options{})
 	require.ErrorContains(t, err, "status 404")
 }
@@ -115,7 +118,7 @@ func TestSearchTagsV2_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	result, err := client.SearchTagsV2(t.Context(), SearchTagsV2Options{
 		Scope:          "resource",
 		Query:          `{ resource.service.name="svc" }`,
@@ -135,7 +138,7 @@ func TestSearchTagsV2_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.SearchTagsV2(t.Context(), SearchTagsV2Options{})
 	require.ErrorContains(t, err, "status 500")
 }
@@ -157,7 +160,7 @@ func TestSearchTagValuesV2_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	result, err := client.SearchTagValuesV2(t.Context(), "resource.service.name", SearchTagValuesV2Options{
 		Query:          `{ status=error }`,
 		Start:          500,
@@ -178,7 +181,7 @@ func TestSearchTagValuesV2_TagURLEncoded(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.SearchTagValuesV2(t.Context(), "span/http.response/status", SearchTagValuesV2Options{})
 	require.NoError(t, err)
 }
@@ -190,7 +193,7 @@ func TestSearchTagValuesV2_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.SearchTagValuesV2(t.Context(), "resource.service.name", SearchTagValuesV2Options{})
 	require.ErrorContains(t, err, "status 500")
 }
@@ -203,7 +206,30 @@ func TestDoRequest_HTMLResponseIsAuthError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTempoClient(server.Client(), server.URL)
+	client := NewTempoClient(server.Client(), server.URL, uncapped)
 	_, err := client.Search(t.Context(), SearchOptions{})
 	require.ErrorContains(t, err, "invalid authentication token")
+}
+
+func TestSearch_BackendCap(t *testing.T) {
+	const body = `{"traces":[]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	over := NewTempoClient(server.Client(), server.URL, func() (int64, error) {
+		return int64(len(body) - 1), nil
+	})
+	_, err := over.Search(t.Context(), SearchOptions{})
+	var tooLarge *kubernetes.BackendResponseTooLargeError
+	require.ErrorAs(t, err, &tooLarge)
+
+	exact := NewTempoClient(server.Client(), server.URL, func() (int64, error) {
+		return int64(len(body)), nil
+	})
+	result, err := exact.Search(t.Context(), SearchOptions{})
+	require.NoError(t, err)
+	require.Equal(t, body, result)
 }

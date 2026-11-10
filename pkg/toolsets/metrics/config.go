@@ -28,8 +28,8 @@ type Config struct {
 	// This field is optional. Example: "https://alertmanager-main-openshift-monitoring.apps.example.com"
 	AlertmanagerURL string `toml:"alertmanager_url,omitempty"`
 
-	// Insecure controls whether to skip TLS certificate verification.
-	// Default: false (verify certificates)
+	// Insecure is retained for configuration compatibility but rejected when a client is created.
+	// Configure a trusted CA instead of disabling certificate verification.
 	Insecure bool `toml:"insecure,omitempty"`
 
 	// Guardrails controls which query safety checks are enabled.

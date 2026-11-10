@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-tempo1
+  namespace: tracing
+stringData:
+  endpoint: http://minio:9000
+  bucket: bucket1
+  access_key_id: tempo
+  access_key_secret: supersecret
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-tempo2
+  namespace: tracing
+stringData:
+  endpoint: http://minio:9000
+  bucket: bucket2
+  access_key_id: tempo
+  access_key_secret: supersecret
+type: Opaque
+---
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoStack
+metadata:
+  name: tempo1
+  namespace: tracing
+spec:
+  storage:
+    secret:
+      name: minio-tempo1
+      type: s3
+  storageSize: 1Gi
+  observability:
+    tracing:
+      # collect operational traces from Tempo itself
+      otlp_http_endpoint: http://otel-collector.tracing:4318
+      sampling_fraction: "1"
+  template:
+    queryFrontend:
+      jaegerQuery:
+        enabled: true
+---
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoStack
+metadata:
+  name: tempo2
+  namespace: tracing
+spec:
+  storage:
+    secret:
+      name: minio-tempo2
+      type: s3
+  storageSize: 1Gi

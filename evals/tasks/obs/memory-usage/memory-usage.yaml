@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "memory-usage"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can find the appropriate memory usage metric and query it
+    to determine which pods are consuming the most memory resources.
+spec:
+  verify:
+    - llmJudge:
+        contains: "container_memory"
+    - llmJudge:
+        contains: "pod"
+  prompt:
+    inline: |
+      Which pods are using the most memory? Show me the top 5.
+      Use Prometheus metrics and include the metric name and PromQL query you used.

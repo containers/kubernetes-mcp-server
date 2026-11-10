@@ -4,13 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
 )
 
@@ -31,10 +37,10 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 	return []api.ServerTool{
 		{Tool: api.Tool{
 			Name:        "resources_list",
-			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector\n" + commonApiVersion,
+			Description: "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector." + ListPageSentence + "\n" + commonApiVersion,
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
-				Properties: map[string]*jsonschema.Schema{
+				Properties: PageProperties(map[string]*jsonschema.Schema{
 					"apiVersion": {
 						Type:        "string",
 						Description: "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
@@ -57,7 +63,7 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 						Description: "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
 						Pattern:     REGEX_FIELDSELECTOR,
 					},
-				},
+				}),
 				Required: []string{"apiVersion", "kind"},
 			},
 			Annotations: api.ToolAnnotations{
@@ -73,7 +79,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 				KindArgument:       "kind",
 			}},
 			Namespace: &api.RBACNamespace{Argument: "namespace"},
-		}), Handler: resourcesList},
+		}), Handler: resourcesList,
+			App: mcpapps.Table("ui://kubernetes-mcp-server/resources-list", "Resources list", mcpapps.WithDescription("Interactive table of Kubernetes resources"))},
 		{Tool: api.Tool{
 			Name:        "resources_get",
 			Description: "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n" + commonApiVersion,
@@ -113,7 +120,8 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 			}},
 			Namespace:    &api.RBACNamespace{Argument: "namespace"},
 			ResourceName: &api.RBACResourceName{Argument: "name"},
-		}), Handler: resourcesGet},
+		}), Handler: resourcesGet,
+			App: mcpapps.Resource("ui://kubernetes-mcp-server/resources-get", "Resource details", mcpapps.WithDescription("Interactive Kubernetes resource details"))},
 		{Tool: api.Tool{
 			Name:        "resources_create_or_update",
 			Description: "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n" + commonApiVersion,
@@ -122,7 +130,7 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 				Properties: map[string]*jsonschema.Schema{
 					"resource": {
 						Type:        "string",
-						Description: "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec.",
+						Description: "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used",
 					},
 				},
 				Required: []string{"resource"},
@@ -226,7 +234,91 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 			Namespace:    &api.RBACNamespace{Argument: "namespace"},
 			ResourceName: &api.RBACResourceName{Argument: "name"},
 		}), Handler: resourcesScale},
+		{Tool: api.Tool{
+			Name:        "api_resources_list",
+			Description: "Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"kind": {
+						Type:        "string",
+						MinLength:   ptr.To(1),
+						Description: "Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.",
+					},
+				},
+				Required: []string{"kind"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "API Resources: List by Kind",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, RBAC: api.RBACUnbounded(
+			"requires Kubernetes API discovery non-resource URL access across all API groups; current RBAC metadata cannot express non-resource URLs",
+		), Handler: apiResourcesList},
 	}
+}
+
+// apiResourcesListResult wraps APIResourceInfo in an object (rather than
+// returning a bare slice) per the MCP spec's requirement that
+// structuredContent be a JSON object, and carries a warning when discovery
+// returned partial results instead of silently dropping them.
+type apiResourcesListResult struct {
+	Resources []kubernetes.APIResourceInfo `json:"resources"`
+	Warning   string                       `json:"warning,omitempty"`
+}
+
+func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	kindFilter := strings.TrimSpace(p.RequiredString("kind"))
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
+	}
+	if kindFilter == "" {
+		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: kind parameter must not be empty")), nil
+	}
+	if params.Config == nil {
+		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: config cannot be nil")), nil
+	}
+
+	resources, err := kubernetes.NewCore(params).APIResourcesList(params.Context, kindFilter)
+	if err != nil && len(resources) == 0 {
+		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
+	}
+	resources = filterDeniedAPIResources(params.Context, resources, params.Config.DeniedResources.Get())
+
+	result := apiResourcesListResult{Resources: resources}
+	if err != nil {
+		// Partial discovery failure (e.g. one API group unavailable): still
+		// return what was found instead of discarding it -- see
+		// kubernetes.Core.APIResourcesList's doc comment.
+		result.Warning = fmt.Sprintf("some API groups could not be queried and are omitted from this list: %v", err)
+	}
+	return api.NewToolCallResultStructured(result, nil), nil
+}
+
+func filterDeniedAPIResources(ctx context.Context, resources []kubernetes.APIResourceInfo, denied []config.GroupVersionKind) []kubernetes.APIResourceInfo {
+	if len(denied) == 0 {
+		return resources
+	}
+
+	filtered := make([]kubernetes.APIResourceInfo, 0, len(resources))
+	for _, resource := range resources {
+		if config.IsDeniedResource(resource.APIVersion, resource.Kind, denied) {
+			klogutil.LogInfo(
+				klogutil.FromContext(ctx).V(4),
+				"Omitting denied API resource from discovery",
+				klogutil.Field("apiVersion", resource.APIVersion),
+				klogutil.Field("kind", resource.Kind),
+				klogutil.Field("resource", resource.Name),
+			)
+			continue
+		}
+		filtered = append(filtered, resource)
+	}
+	return filtered
 }
 
 func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
@@ -254,6 +346,9 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		}
 		resourceListOptions.FieldSelector = f
 	}
+	if err := ApplyListPage(api.WrapParams(params), &resourceListOptions.ListOptions); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
+	}
 	gvk, err := parseGroupVersionKind(params.GetArguments())
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list resources, %s", err)), nil
@@ -266,13 +361,21 @@ func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 
 	ret, err := kubernetes.NewCore(params).ResourcesList(params, gvk, ns, resourceListOptions)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to list resources: %w", ListErr(err))), nil
 	}
 	printed, err := params.ListOutput.PrintObjStructured(ret)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to format resources: %w", err)), nil
 	}
-	return api.NewToolCallResultFull(printed.Text, printed.Structured, nil), nil
+	// Empty Table responses have no structured output from the printer. Supply
+	// an explicit empty list for Apps without altering nonempty or non-Apps results.
+	if params.Config.AppsEnabled.Get() && printed.Structured == nil && ret.GetObjectKind().GroupVersionKind() == metav1.SchemeGroupVersion.WithKind("Table") {
+		if rows, _, err := unstructured.NestedSlice(ret.UnstructuredContent(), "rows"); err == nil && len(rows) == 0 {
+			printed.Structured = map[string]any{"items": []map[string]any{}}
+		}
+	}
+	text, structured := WithListPage(printed.Text, printed.Structured, ret)
+	return api.NewToolCallResultFull(text, structured, nil), nil
 }
 
 func resourcesGet(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

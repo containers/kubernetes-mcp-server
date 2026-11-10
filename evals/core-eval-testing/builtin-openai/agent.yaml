@@ -3,4 +3,5 @@ metadata:
   name: "openai-agent"
 builtin:
   type: "llm-agent"
-  model: "openai:gpt-5"
+  model: "openai:gpt-6-luna"
+  useResponsesApi: true

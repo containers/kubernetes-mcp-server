@@ -19,6 +19,8 @@ const (
 	SourceDefault Source = "<Default>"
 	SourceEnv     Source = "<Env>"
 	SourceTest    Source = "<Test>"
+	// SourceStdin is the main config read from stdin (ReadStdin).
+	SourceStdin Source = "<Stdin>"
 )
 
 const redactedValue = "<redacted>"

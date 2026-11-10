@@ -34,9 +34,9 @@ var (
 	}
 )
 
-func hasOpenTelemetryCollectorCRD(p api.ClusterInspector) func() bool {
-	return func() bool {
-		return api.AnyTargetHasGVK(context.TODO(), p, openTelemetryCollectorGVK)
+func hasOpenTelemetryCollectorCRD(p api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return api.AnyTargetHasGVK(ctx, p, openTelemetryCollectorGVK)
 	}
 }
 
@@ -65,7 +65,7 @@ func initListComponents(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: ListComponentsHandler,
 		RBAC:    rbacNoKubernetes(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasOpenTelemetryCollectorCRD(p),
 		},
 	}
@@ -105,7 +105,7 @@ func initGetComponentSchema(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: GetComponentSchemaHandler,
 		RBAC:    rbacNoKubernetes(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasOpenTelemetryCollectorCRD(p),
 		},
 	}
@@ -153,7 +153,7 @@ func initValidateConfig(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: ValidateConfigHandler,
 		RBAC:    rbacNoKubernetes(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasOpenTelemetryCollectorCRD(p),
 		},
 	}
@@ -178,7 +178,7 @@ func initGetVersions(p api.ClusterInspector) api.ServerTool {
 		},
 		Handler: GetVersionsHandler,
 		RBAC:    rbacNoKubernetes(),
-		TargetCompatibilityFilters: []func() bool{
+		TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
 			hasOpenTelemetryCollectorCRD(p),
 		},
 	}

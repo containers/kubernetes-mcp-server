@@ -6,7 +6,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/netobserv/internal/defaults"
 )
 
-func InitListFlows() []api.ServerTool {
+func InitListFlows(p api.ClusterInspector, cfg ...netobservclient.EffectiveConfig) []api.ServerTool {
 	name := defaults.ToolsetName() + "_list_flows"
 	return []api.ServerTool{{
 		Tool: api.Tool{
@@ -15,13 +15,15 @@ func InitListFlows() []api.ServerTool {
 			InputSchema: toolInputSchema(flowQueryProperties(), nil),
 			Annotations: readOnlyAnnotations("List NetObserv Flow Records"),
 		},
-		RBAC:    api.RBACUnbounded("Kubernetes authorization is delegated to the NetObserv plugin, and its effective permissions cannot be derived from this capability's arguments"),
-		Handler: listFlowsHandler,
+		RBAC: flowsRBAC(p, cfg...),
+		Handler: func(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+			return listFlowsHandler(params, cfg...)
+		},
 	}}
 }
 
-func listFlowsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient())
+func listFlowsHandler(params api.ToolHandlerParams, detected ...netobservclient.EffectiveConfig) (*api.ToolCallResult, error) {
+	client, err := netobservclient.NewNetObserv(params.Context, params.Config, params.RESTConfig(), params.DiscoveryClient(), detected...)
 	if err != nil {
 		return jsonAPIResult("", err)
 	}

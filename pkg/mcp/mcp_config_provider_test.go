@@ -88,6 +88,10 @@ func (s *McpConfigProviderSuite) TestToolHandlerReceivesReloadedConfig() {
 		tools: []api.ServerTool{
 			{
 				Tool: api.Tool{
+					Annotations: api.ToolAnnotations{
+						ReadOnlyHint:    new(true),
+						DestructiveHint: new(false),
+					},
 					Name:        "get_list_output",
 					Description: "Returns the configured list output format",
 				},

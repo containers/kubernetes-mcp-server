@@ -21,9 +21,7 @@ func (s *NamespacesAppSuite) TestNamespacesList() {
 		html := content.Text
 		s.Contains(html, "<!doctype html>")
 		s.Contains(html, "ui/notifications/tool-result")
-		s.Contains(html, "sortColumn='Name'")
-		s.Contains(html, "params.isError")
-		s.Contains(html, "e.source!==parent")
+		s.Contains(html, `data-app-kind="table"`)
 		s.NotContains(html, "http://")
 		s.NotContains(html, "https://")
 		s.NotContains(html, "src=\"//")

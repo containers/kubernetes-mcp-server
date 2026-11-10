@@ -1,0 +1,6 @@
+{
+  "default_approvers": ["@Cali0707"],
+  "areas": [
+    {"toolset": "logs", "approvers": ["@manusa"]}
+  ]
+}
