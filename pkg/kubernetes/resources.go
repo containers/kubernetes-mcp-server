@@ -322,12 +322,7 @@ func (c *Core) isNamespaced(gvk *schema.GroupVersionKind) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	for _, apiResource := range apiResourceList.APIResources {
-		if apiResource.Kind == gvk.Kind {
-			return apiResource.Namespaced, nil
-		}
-	}
-	// The RESTMapper resolves kinds case-insensitively ("deployment"), so match the scope the same way;
+	// The RESTMapper also resolves lowercase kinds ("deployment"), so match case-insensitively;
 	// otherwise a namespaced resource would be treated as cluster-scoped and lose its namespace.
 	for _, apiResource := range apiResourceList.APIResources {
 		if strings.EqualFold(apiResource.Kind, gvk.Kind) {
