@@ -6,6 +6,10 @@ Eval configurations for running task suites across different LLM providers and a
 
 Each subdirectory follows the pattern `<agent-type>-<provider>/`:
 
+Model evaluation slots use `builtin-<model-family>-latest/` and, where configured,
+`builtin-<model-family>-previous/`, with explicit model IDs in `agent.yaml`.
+They share suite configs via symlinks (see [Model evaluation slots](../README.md#model-evaluation-slots)).
+
 - `builtin-*` — uses the built-in `llm-agent` with the provider's API directly
 - `acp-*` — uses the Agent Communication Protocol (ACP) with an external agent process
 
@@ -19,7 +23,7 @@ Each contains:
 - `eval-tekton.yaml` — eval config for the `tekton` task suite (+ core/config)
 - `eval-netobserv.yaml` — eval config for the `netobserv` task suite (+ core/config)
 - `eval-all.yaml` — eval config that runs all task suites
-- `eval-core-readonly.yaml` (`builtin-openai` only so far) — eval config for the
+- `eval-core-readonly.yaml` (shared by the model evaluation slots) — eval config for the
   `core-readonly` suite. Proves a model can still complete real diagnostic
   workflows using only the tools exposed when the server is started with
   `read_only = true`. It selects on the `readonly: "true"` label instead of

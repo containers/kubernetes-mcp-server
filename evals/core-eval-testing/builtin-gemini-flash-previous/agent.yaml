@@ -1,0 +1,6 @@
+kind: Agent
+metadata:
+  name: gemini-flash-previous-agent
+builtin:
+  type: llm-agent
+  model: google:gemini-3.5-flash
