@@ -80,14 +80,11 @@ func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
 // http.request.method metric labels. Recording the raw values lets any client,
 // authenticated or not, create one series per distinct path or method (#1587):
 // once the SDK's per-metric cardinality limit is reached, real traffic is
-// folded into the otel_metric_overflow series.
+// folded into the otel_metric_overflow series. Known routes come from
+// knownHTTPRoute; every other path is counted as "other".
 func metricsPath(path string) string {
-	switch path {
-	case mcpEndpoint, healthEndpoint, statsEndpoint, metricsEndpoint:
-		return path
-	}
-	if strings.HasPrefix(path, "/.well-known/") {
-		return "/.well-known/*"
+	if route, ok := knownHTTPRoute(path); ok {
+		return route
 	}
 	return "other"
 }

@@ -593,6 +593,20 @@ func TestMetricsPathLabel(t *testing.T) {
 			}
 		}
 	})
+	t.Run("getHTTPRoute shares the known routes and keeps the raw path otherwise", func(t *testing.T) {
+		cases := map[string]string{
+			"/mcp":     "/mcp",
+			"/metrics": "/metrics",
+			"/.well-known/oauth-protected-resource/mcp": "/.well-known/*",
+			"/mcp/":   "/mcp/",
+			"/scan/1": "/scan/1",
+		}
+		for in, want := range cases {
+			if got := getHTTPRoute(in); got != want {
+				t.Errorf("getHTTPRoute(%q) = %q, want %q", in, got, want)
+			}
+		}
+	})
 	t.Run("metricsMethod keeps standard methods and folds everything else", func(t *testing.T) {
 		for _, m := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE"} {
 			if got := metricsMethod(m); got != m {
