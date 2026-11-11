@@ -2,14 +2,18 @@ package kubevirt
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	ktesting "k8s.io/client-go/testing"
 )
 
 // createTestVM creates a test VirtualMachine with the given name, namespace, and runStrategy.
@@ -759,11 +763,11 @@ func TestLifecycleWithDeprecatedRunning(t *testing.T) {
 			var err error
 			switch tt.action {
 			case "start":
-				vm, changed, err = StartVM(ctx, client, ns, name)
+				vm, changed, _, err = StartVM(ctx, client, ns, name, RunPolicyHighAvailability)
 			case "stop":
 				vm, changed, err = StopVM(ctx, client, ns, name)
 			case "restart":
-				vm, err = RestartVM(ctx, client, ns, name)
+				vm, err = RestartVM(ctx, client, ns, name, RunPolicyHighAvailability)
 				changed = true
 			}
 			if err != nil {
@@ -787,5 +791,39 @@ func TestLifecycleWithDeprecatedRunning(t *testing.T) {
 				t.Errorf("Strategy = %q, want %q", strategy, tt.wantStrategy)
 			}
 		})
+	}
+}
+
+// TestRestartVMRetriesOnConflict verifies RestartVM survives a resource-version
+// conflict caused by a concurrent controller update between Get and Update.
+func TestRestartVMRetriesOnConflict(t *testing.T) {
+	scheme := runtime.NewScheme()
+	client := fake.NewSimpleDynamicClient(scheme, createTestVM("test-vm", "default", RunStrategyAlways))
+
+	conflicts := 0
+	client.PrependReactor("update", "virtualmachines", func(action ktesting.Action) (bool, runtime.Object, error) {
+		conflicts++
+		if conflicts <= 1 {
+			// Simulate the virt-controller having modified the VM after our Get.
+			return true, nil, apierrors.NewConflict(
+				schema.GroupResource{Group: "kubevirt.io", Resource: "virtualmachines"},
+				"test-vm", errors.New("the object has been modified"))
+		}
+		return false, nil, nil
+	})
+
+	vm, err := RestartVM(context.Background(), client, "default", "test-vm", RunPolicyRestartOnFailure)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	strategy, found, err := GetVMRunStrategy(vm)
+	if err != nil || !found {
+		t.Fatalf("Failed to read runStrategy: found=%v err=%v", found, err)
+	}
+	if strategy != RunStrategyRerunOnFailure {
+		t.Errorf("runStrategy = %q, want %q", strategy, RunStrategyRerunOnFailure)
+	}
+	if conflicts != 3 {
+		t.Errorf("expected 1 rejected update + 2 successful updates, got %d update calls", conflicts)
 	}
 }

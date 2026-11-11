@@ -126,7 +126,7 @@ func lifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		case strategyChanged:
 			message = fmt.Sprintf("# VirtualMachine run strategy updated to run policy '%s'\n", runPolicy)
 		default:
-			message = fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already running with the desired run strategy\n", name, namespace)
+			message = fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already configured with the requested run policy; no change made\n", name, namespace)
 		}
 
 	case ActionStop:

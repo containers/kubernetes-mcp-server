@@ -465,6 +465,49 @@ func (s *KubevirtSuite) TestCreate() {
 	})
 }
 
+func (s *KubevirtSuite) TestVMLifecycleStartWithMatchingOncePolicy() {
+	dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
+	vms := dynamicClient.Resource(kubevirtgvr.VirtualMachineGVR).Namespace("default")
+	vmis := dynamicClient.Resource(schema.GroupVersionResource{
+		Group: "kubevirt.io", Version: "v1", Resource: "virtualmachineinstances",
+	}).Namespace("default")
+
+	for _, phase := range []string{"Running", "Succeeded", "Failed"} {
+		s.Run(phase, func() {
+			name := "test-vm-once-" + strings.ToLower(phase)
+			vm, err := vms.Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "kubevirt.io/v1",
+				"kind":       "VirtualMachine",
+				"metadata":   map[string]interface{}{"name": name, "namespace": "default"},
+				"spec":       map[string]interface{}{"runStrategy": "Once"},
+			}}, metav1.CreateOptions{})
+			s.Require().NoError(err)
+			vmi, err := vmis.Create(s.T().Context(), &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "kubevirt.io/v1",
+				"kind":       "VirtualMachineInstance",
+				"metadata":   map[string]interface{}{"name": name, "namespace": "default"},
+				"status":     map[string]interface{}{"phase": phase},
+			}}, metav1.CreateOptions{})
+			s.Require().NoError(err)
+
+			result, err := s.CallTool("vm_lifecycle", map[string]interface{}{
+				"name": name, "namespace": "default", "action": "start", "run_policy": "Once",
+			})
+			s.Require().NoError(err)
+			s.Require().False(result.IsError)
+			text := result.Content[0].(*mcp.TextContent).Text
+			s.True(strings.HasPrefix(text, fmt.Sprintf("# VirtualMachine '%s' in namespace 'default' is already configured with the requested run policy; no change made\n", name)))
+			s.NotContains(text, "already running")
+			unchangedVM, err := vms.Get(s.T().Context(), name, metav1.GetOptions{})
+			s.Require().NoError(err)
+			s.Equal(vm.Object, unchangedVM.Object, "matching policy must leave the VM unchanged")
+			unchangedVMI, err := vmis.Get(s.T().Context(), name, metav1.GetOptions{})
+			s.Require().NoError(err)
+			s.Equal(vmi.Object, unchangedVMI.Object, "matching policy must leave the VMI unchanged")
+		})
+	}
+}
+
 func (s *KubevirtSuite) TestVMLifecycle() {
 	// Create a test VM in Halted state for start tests
 	dynamicClient := dynamic.NewForConfigOrDie(test.EnvTestRestConfig())
@@ -542,7 +585,7 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 		})
 	})
 
-	s.Run("vm_lifecycle action=start on already running VM (idempotent)", func() {
+	s.Run("vm_lifecycle action=start with matching run policy (idempotent)", func() {
 		toolResult, err := s.CallTool("vm_lifecycle", map[string]interface{}{
 			"name":      "test-vm-lifecycle",
 			"namespace": "default",
@@ -554,11 +597,11 @@ func (s *KubevirtSuite) TestVMLifecycle() {
 		})
 		var decodedResult []unstructured.Unstructured
 		err = yaml.Unmarshal([]byte(toolResult.Content[0].(*mcp.TextContent).Text), &decodedResult)
-		s.Run("returns yaml content showing VM was already running", func() {
+		s.Run("returns yaml content showing run policy was already configured", func() {
 			s.Nilf(err, "invalid tool result content %v", err)
-			expectedPrefix := fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already running", "test-vm-lifecycle", "default")
+			expectedPrefix := fmt.Sprintf("# VirtualMachine '%s' in namespace '%s' is already configured with the requested run policy; no change made", "test-vm-lifecycle", "default")
 			s.Truef(strings.HasPrefix(toolResult.Content[0].(*mcp.TextContent).Text, expectedPrefix),
-				"Expected already running message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
+				"Expected unchanged policy message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 			s.Require().Lenf(decodedResult, 1, "invalid resource count, expected 1, got %v", len(decodedResult))
 			s.Equal("Always",
 				decodedResult[0].Object["spec"].(map[string]interface{})["runStrategy"].(string),
