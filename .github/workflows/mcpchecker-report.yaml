@@ -73,7 +73,7 @@ jobs:
             if (!fs.lstatSync(root).isDirectory()) throw new Error('Invalid context directory');
             const directories = multicluster ? [root] : fs.readdirSync(root).map(name => path.join(root, name));
             if (!directories.length) throw new Error('No evaluation contexts');
-            const suites = new Set(['core', 'helm', 'kubevirt', 'kiali', 'tekton',
+            const suites = new Set(['core', 'core-readonly', 'helm', 'kubevirt', 'kiali', 'tekton',
               'netobserv', 'argocd', 'obs', 'all', 'config-multicluster']);
             function readReportFile(file, limit) {
               const stat = fs.lstatSync(file);

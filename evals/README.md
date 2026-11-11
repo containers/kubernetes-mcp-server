@@ -234,6 +234,11 @@ make run-evals SUITE=core-readonly
 
 `READ_ONLY=true|false` can still be passed explicitly to override the default.
 
+The weekly mcpchecker CI workflow runs `core-readonly` with `core,config`
+toolsets and `READ_ONLY=true`. It can also be selected through the workflow's
+manual suite input or a maintainer's `/run-mcpchecker core-readonly` review.
+Other suites retain their normal read-write server mode.
+
 ## Versions
 
 `make mcpchecker` installs `mcpchecker@latest`. CI runs the same binary version:
