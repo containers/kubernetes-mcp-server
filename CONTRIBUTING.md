@@ -36,9 +36,11 @@ For release cadence, versioning, and published artifacts, see [Releases](docs/re
    ```
 4. Make your changes and verify them:
    ```bash
-   make build
-   make test
+   make pre-commit
    ```
+   This updates toolset snapshots, generated documentation, and CODEOWNERS, then
+   formats, lints, builds, and tests the project. Review and stage any generated
+   changes before committing.
 5. Commit your changes (see [Commit Messages](#commit-messages)).
 6. Push to your fork and [open a Pull Request](#pull-request-guidelines).
 

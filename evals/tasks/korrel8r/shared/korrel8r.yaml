@@ -1,0 +1,79 @@
+# Local-only eval backend. --unsafe-shared-session disables per-user isolation;
+# expose it only through a localhost port-forward, never an external Service.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: korrel8r-eval
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: korrel8r
+  namespace: korrel8r-eval
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: korrel8r-eval-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: korrel8r
+    namespace: korrel8r-eval
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: korrel8r-config
+  namespace: korrel8r-eval
+data:
+  korrel8r.yaml: |
+    stores:
+      - domain: k8s
+      - domain: log
+        direct: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: korrel8r
+  namespace: korrel8r-eval
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: korrel8r-eval
+  template:
+    metadata:
+      labels:
+        app: korrel8r-eval
+    spec:
+      serviceAccountName: korrel8r
+      volumes:
+        - name: config
+          configMap:
+            name: korrel8r-config
+      containers:
+        - name: korrel8r
+          image: quay.io/korrel8r/korrel8r:0.13.3
+          # Override the image ENTRYPOINT (which already includes "web").
+          command: ["/usr/bin/korrel8r"]
+          args: ["web", "--unsafe-shared-session"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/korrel8r/korrel8r.yaml
+              subPath: korrel8r.yaml
+              readOnly: true
+          ports:
+            - containerPort: 8080
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault

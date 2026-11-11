@@ -1,0 +1,1371 @@
+[
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Find a specific class of data related to a resource or signal, such as application logs for a Deployment. Use for targeted investigations: {\"start\":{\"queries\":[\"k8s:Deployment.v1.apps:{\\\"namespace\\\":\\\"default\\\",\\\"name\\\":\\\"my-deployment\\\"}\"]},\"goals\":[\"log:application\"]}. The selector is JSON text inside the query string. For unfamiliar classes or selectors, use 'korrel8r_list_domains', 'korrel8r_list_domain_classes', and 'korrel8r_help' with a domain. Application logs work via the Kubernetes API without a separate log store; Events are k8s resources (k8s:Event.v1), not a separate domain. Verify graph queries with 'korrel8r_get_objects'.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "goals": {
+          "description": "Goal classes in DOMAIN:CLASS format, e.g. log:application, alert:alert.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "start": {
+          "additionalProperties": false,
+          "description": "Starting point for the search.",
+          "properties": {
+            "class": {
+              "description": "Class of starting objects in DOMAIN:CLASS format. Required when using objects. If queries are included, they must all be of this class.",
+              "type": "string"
+            },
+            "constraint": {
+              "additionalProperties": false,
+              "description": "Constrains the objects that will be included in search results.",
+              "properties": {
+                "end": {
+                  "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "limit": {
+                  "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "queryLimit": {
+                  "description": "Limit total number of queries per class during traversal. Default: 10.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "start": {
+                  "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "totalLimit": {
+                  "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "totalQueryLimit": {
+                  "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                }
+              },
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "objects": {
+              "description": "Start objects serialized as JSON. Requires class to identify the object type.",
+              "items": true,
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "queries": {
+              "description": "Queries for starting objects in DOMAIN:CLASS:SELECTOR format.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "goals",
+        "start"
+      ],
+      "type": "object"
+    },
+    "name": "korrel8r_create_goals_graph",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "description": "List of graph edges.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "description": "Class name of the goal node, in DOMAIN:CLASS format.",
+                "type": "string"
+              },
+              "rules": {
+                "description": "Set of rules followed along this edge.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "description": "Name is an optional descriptive name.",
+                      "type": "string"
+                    },
+                    "queries": {
+                      "description": "Queries generated while following this rule.",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "count": {
+                            "description": "Number of results, omitted if the query was not executed.",
+                            "type": [
+                              "null",
+                              "integer"
+                            ]
+                          },
+                          "query": {
+                            "description": "Query for correlation data in DOMAIN:CLASS:SELECTOR format.",
+                            "type": "string"
+                          },
+                          "statuses": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "count": {
+                                  "type": [
+                                    "null",
+                                    "integer"
+                                  ]
+                                },
+                                "status": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            "type": [
+                              "null",
+                              "array"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "query"
+                        ],
+                        "type": "object"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "start": {
+                "description": "Class name of the start node, in DOMAIN:CLASS format.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "goal",
+              "start"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "nodes": {
+          "description": "List of graph nodes.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "class": {
+                "description": "Full class name in DOMAIN:CLASS format.",
+                "type": "string"
+              },
+              "count": {
+                "description": "Number of results for this class, after de-duplication.",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "queries": {
+                "description": "Queries yielding results for this class.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "description": "Number of results, omitted if the query was not executed.",
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
+                    },
+                    "query": {
+                      "description": "Query for correlation data in DOMAIN:CLASS:SELECTOR format.",
+                      "type": "string"
+                    },
+                    "statuses": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "count": {
+                            "type": [
+                              "null",
+                              "integer"
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "query"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "result": {
+                "description": "Serialized result contents, may be large.",
+                "items": true,
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "class"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "truncation": {
+          "additionalProperties": false,
+          "properties": {
+            "condition": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "condition",
+            "limit"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Explore what is related to a failing workload or other resource or signal. Use first for open-ended investigations across Kubernetes resources and observability signals instead of guessing related object names. Example: {\"start\":{\"queries\":[\"k8s:Deployment.v1.apps:{\\\"namespace\\\":\\\"default\\\",\\\"name\\\":\\\"my-deployment\\\"}\"]},\"depth\":2}. The selector is JSON text inside the query string; depth 1 finds direct neighbors, 2 follows one more hop. Verify relevant graph queries with 'korrel8r_get_objects'; correlation is not proof of cause.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "description": "Maximum number of correlation steps to follow from the start. Depth 1 returns direct correlations only.",
+          "type": "integer"
+        },
+        "start": {
+          "additionalProperties": false,
+          "description": "Starting point for the search.",
+          "properties": {
+            "class": {
+              "description": "Class of starting objects in DOMAIN:CLASS format. Required when using objects. If queries are included, they must all be of this class.",
+              "type": "string"
+            },
+            "constraint": {
+              "additionalProperties": false,
+              "description": "Constrains the objects that will be included in search results.",
+              "properties": {
+                "end": {
+                  "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "limit": {
+                  "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "queryLimit": {
+                  "description": "Limit total number of queries per class during traversal. Default: 10.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "start": {
+                  "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "totalLimit": {
+                  "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                },
+                "totalQueryLimit": {
+                  "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+                  "type": [
+                    "null",
+                    "integer"
+                  ]
+                }
+              },
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "objects": {
+              "description": "Start objects serialized as JSON. Requires class to identify the object type.",
+              "items": true,
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "queries": {
+              "description": "Queries for starting objects in DOMAIN:CLASS:SELECTOR format.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "depth",
+        "start"
+      ],
+      "type": "object"
+    },
+    "name": "korrel8r_create_neighbors_graph",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "description": "List of graph edges.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "description": "Class name of the goal node, in DOMAIN:CLASS format.",
+                "type": "string"
+              },
+              "rules": {
+                "description": "Set of rules followed along this edge.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "description": "Name is an optional descriptive name.",
+                      "type": "string"
+                    },
+                    "queries": {
+                      "description": "Queries generated while following this rule.",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "count": {
+                            "description": "Number of results, omitted if the query was not executed.",
+                            "type": [
+                              "null",
+                              "integer"
+                            ]
+                          },
+                          "query": {
+                            "description": "Query for correlation data in DOMAIN:CLASS:SELECTOR format.",
+                            "type": "string"
+                          },
+                          "statuses": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "count": {
+                                  "type": [
+                                    "null",
+                                    "integer"
+                                  ]
+                                },
+                                "status": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            "type": [
+                              "null",
+                              "array"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "query"
+                        ],
+                        "type": "object"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "start": {
+                "description": "Class name of the start node, in DOMAIN:CLASS format.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "goal",
+              "start"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "nodes": {
+          "description": "List of graph nodes.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "class": {
+                "description": "Full class name in DOMAIN:CLASS format.",
+                "type": "string"
+              },
+              "count": {
+                "description": "Number of results for this class, after de-duplication.",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "queries": {
+                "description": "Queries yielding results for this class.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "description": "Number of results, omitted if the query was not executed.",
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
+                    },
+                    "query": {
+                      "description": "Query for correlation data in DOMAIN:CLASS:SELECTOR format.",
+                      "type": "string"
+                    },
+                    "statuses": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "count": {
+                            "type": [
+                              "null",
+                              "integer"
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "query"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "result": {
+                "description": "Serialized result contents, may be large.",
+                "items": true,
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "class"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "truncation": {
+          "additionalProperties": false,
+          "properties": {
+            "condition": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "condition",
+            "limit"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the user's OpenShift console view/search when asked \"what am I looking at?\". Only works when the user is logged in to the OpenShift console and has enabled AI navigation for their session. Report if the console is unavailable.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "korrel8r_get_console",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "search": {
+          "additionalProperties": false,
+          "description": "The troubleshooting panel displays the results of this correlation search.",
+          "properties": {
+            "goals": {
+              "additionalProperties": false,
+              "description": "Parameters for a goal-directed correlation search.",
+              "properties": {
+                "goals": {
+                  "description": "Goal classes in DOMAIN:CLASS format, e.g. log:application, alert:alert.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "description": "Starting point for the search.",
+                  "properties": {
+                    "class": {
+                      "description": "Class of starting objects in DOMAIN:CLASS format. Required when using objects. If queries are included, they must all be of this class.",
+                      "type": "string"
+                    },
+                    "constraint": {
+                      "additionalProperties": false,
+                      "description": "Constrains the objects that will be included in search results.",
+                      "properties": {
+                        "end": {
+                          "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "limit": {
+                          "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "queryLimit": {
+                          "description": "Limit total number of queries per class during traversal. Default: 10.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "start": {
+                          "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "totalLimit": {
+                          "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "totalQueryLimit": {
+                          "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        }
+                      },
+                      "type": [
+                        "null",
+                        "object"
+                      ]
+                    },
+                    "objects": {
+                      "description": "Start objects serialized as JSON. Requires class to identify the object type.",
+                      "items": true,
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    },
+                    "queries": {
+                      "description": "Queries for starting objects in DOMAIN:CLASS:SELECTOR format.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "goals",
+                "start"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "neighbors": {
+              "additionalProperties": false,
+              "description": "Parameters for a neighborhood correlation search.",
+              "properties": {
+                "depth": {
+                  "description": "Maximum number of correlation steps to follow from the start. Depth 1 returns direct correlations only.",
+                  "type": "integer"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "description": "Starting point for the search.",
+                  "properties": {
+                    "class": {
+                      "description": "Class of starting objects in DOMAIN:CLASS format. Required when using objects. If queries are included, they must all be of this class.",
+                      "type": "string"
+                    },
+                    "constraint": {
+                      "additionalProperties": false,
+                      "description": "Constrains the objects that will be included in search results.",
+                      "properties": {
+                        "end": {
+                          "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "limit": {
+                          "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "queryLimit": {
+                          "description": "Limit total number of queries per class during traversal. Default: 10.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "start": {
+                          "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "totalLimit": {
+                          "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "totalQueryLimit": {
+                          "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        }
+                      },
+                      "type": [
+                        "null",
+                        "object"
+                      ]
+                    },
+                    "objects": {
+                      "description": "Start objects serialized as JSON. Requires class to identify the object type.",
+                      "items": true,
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    },
+                    "queries": {
+                      "description": "Queries for starting objects in DOMAIN:CLASS:SELECTOR format.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "depth",
+                "start"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "view": {
+          "description": "Query for the main console view, in DOMAIN:CLASS:SELECTOR format.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Fetch full objects to verify graph results. Pass a graph node's queries[].query (domain:class:selector), or a known query. Use 'korrel8r_help' with a domain if constructing an unfamiliar query. Bound results with constraint.limit or constraint.start/end (RFC 3339).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "constraint": {
+          "additionalProperties": false,
+          "description": "Set limit to bound results; start/end (RFC 3339) for time ranges.",
+          "properties": {
+            "end": {
+              "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "limit": {
+              "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "queryLimit": {
+              "description": "Limit total number of queries per class during traversal. Default: 10.",
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "start": {
+              "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "totalLimit": {
+              "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "totalQueryLimit": {
+              "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "query": {
+          "description": "Query string 'domain:class:selector'. Use 'korrel8r_help' for unfamiliar query syntax.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "korrel8r_get_objects",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "objects": {
+          "description": "List of objects matching the query",
+          "items": true,
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "objects"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Use this when you need query syntax or examples for a specified domain.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "description": "Name of the domain to get help for.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "domain"
+      ],
+      "type": "object"
+    },
+    "name": "korrel8r_help",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "documentation": {
+          "description": "Domain documentation including query syntax and examples",
+          "type": "string"
+        }
+      },
+      "required": [
+        "documentation"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Use this when you need a domain's classes for queries or graph goals (domain:class). Use 'korrel8r_help' for unfamiliar selectors.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "description": "Name of the domain to list",
+          "type": "string"
+        }
+      },
+      "required": [
+        "domain"
+      ],
+      "type": "object"
+    },
+    "name": "korrel8r_list_domain_classes",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "description": "List of classes in the domain",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "domain": {
+          "description": "Domain name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "domain",
+        "classes"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Use this when you need to find known domains and configured stores. Use 'korrel8r_list_domain_classes' to find classes for a domain.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "korrel8r_list_domains",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "domains": {
+          "description": "Known domains and configured stores.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "stores": {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "domains"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "none": {},
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Display a query (view) and/or graph (search) in the user's OpenShift console. Only works when the user is logged in to the OpenShift console and has enabled AI navigation for their session. Report if the console is unavailable.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "search": {
+          "additionalProperties": false,
+          "description": "The troubleshooting panel displays the results of this correlation search.",
+          "properties": {
+            "goals": {
+              "additionalProperties": false,
+              "description": "Parameters for a goal-directed correlation search.",
+              "properties": {
+                "goals": {
+                  "description": "Goal classes in DOMAIN:CLASS format, e.g. log:application, alert:alert.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "description": "Starting point for the search.",
+                  "properties": {
+                    "class": {
+                      "description": "Class of starting objects in DOMAIN:CLASS format. Required when using objects. If queries are included, they must all be of this class.",
+                      "type": "string"
+                    },
+                    "constraint": {
+                      "additionalProperties": false,
+                      "description": "Constrains the objects that will be included in search results.",
+                      "properties": {
+                        "end": {
+                          "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "limit": {
+                          "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "queryLimit": {
+                          "description": "Limit total number of queries per class during traversal. Default: 10.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "start": {
+                          "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "totalLimit": {
+                          "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "totalQueryLimit": {
+                          "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        }
+                      },
+                      "type": [
+                        "null",
+                        "object"
+                      ]
+                    },
+                    "objects": {
+                      "description": "Start objects serialized as JSON. Requires class to identify the object type.",
+                      "items": true,
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    },
+                    "queries": {
+                      "description": "Queries for starting objects in DOMAIN:CLASS:SELECTOR format.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "goals",
+                "start"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "neighbors": {
+              "additionalProperties": false,
+              "description": "Parameters for a neighborhood correlation search.",
+              "properties": {
+                "depth": {
+                  "description": "Maximum number of correlation steps to follow from the start. Depth 1 returns direct correlations only.",
+                  "type": "integer"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "description": "Starting point for the search.",
+                  "properties": {
+                    "class": {
+                      "description": "Class of starting objects in DOMAIN:CLASS format. Required when using objects. If queries are included, they must all be of this class.",
+                      "type": "string"
+                    },
+                    "constraint": {
+                      "additionalProperties": false,
+                      "description": "Constrains the objects that will be included in search results.",
+                      "properties": {
+                        "end": {
+                          "description": "Ignore objects with timestamps after this end time (RFC-3339 format). Default: now.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "limit": {
+                          "description": "Limit total number of objects per query. Omit or set to zero for no limit.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "queryLimit": {
+                          "description": "Limit total number of queries per class during traversal. Default: 10.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "start": {
+                          "description": "Ignore objects with timestamps before this start time (RFC-3339 format). Default: 1 hour before end.",
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "totalLimit": {
+                          "description": "Limit unique result objects retained across the traversal. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        },
+                        "totalQueryLimit": {
+                          "description": "Limit unique queries accepted across the traversal. This includes queries with no results, which do not appear in the result graph. The number of queries in the result may therefore be lower than this limit. Zero is unlimited.",
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        }
+                      },
+                      "type": [
+                        "null",
+                        "object"
+                      ]
+                    },
+                    "objects": {
+                      "description": "Start objects serialized as JSON. Requires class to identify the object type.",
+                      "items": true,
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    },
+                    "queries": {
+                      "description": "Queries for starting objects in DOMAIN:CLASS:SELECTOR format.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "depth",
+                "start"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "view": {
+          "description": "Query for the main console view, in DOMAIN:CLASS:SELECTOR format.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "korrel8r_show_in_console"
+  }
+]

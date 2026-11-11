@@ -1,0 +1,94 @@
+# A running container with current logs, resource dependencies, and a deliberately
+# failing readiness probe. The decoy tests attribution to the correct workload.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-settings
+  namespace: korrel8r-eval
+data:
+  dependency: unavailable
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: checkout-identity
+  namespace: korrel8r-eval
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-eval
+  namespace: korrel8r-eval
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout-eval
+  template:
+    metadata:
+      labels:
+        app: checkout-eval
+    spec:
+      serviceAccountName: checkout-identity
+      volumes:
+        - name: settings
+          configMap:
+            name: checkout-settings
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: quay.io/nginx/nginx-unprivileged:1.24
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo 'checkout-eval: dependency unavailable'
+              while true; do sleep 30; done
+          volumeMounts:
+            - name: settings
+              mountPath: /etc/checkout-settings
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "exit 1"]
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-decoy
+  namespace: korrel8r-eval
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout-decoy
+  template:
+    metadata:
+      labels:
+        app: checkout-decoy
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: quay.io/nginx/nginx-unprivileged:1.24
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo 'checkout-decoy: all systems healthy'
+              while true; do sleep 30; done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
