@@ -408,6 +408,47 @@ func (s *ResourcesSuite) TestResourcesGet() {
 	})
 }
 
+func (s *ResourcesSuite) TestResourcesKindAddedToExistingGroupAfterStartup() {
+	const group = "restmapper.example.com"
+	crds := apiextensionsv1.NewForConfigOrDie(test.EnvTestRestConfig()).CustomResourceDefinitions()
+	createCRD := func(plural, kind, singular string) {
+		_, err := crds.Create(s.T().Context(), test.CRD(group, "v1", plural, kind, singular, true), metav1.CreateOptions{})
+		s.Require().NoError(err, "failed to create custom resource definition %s", plural)
+		s.T().Cleanup(func() { _ = crds.Delete(context.Background(), plural+"."+group, metav1.DeleteOptions{}) })
+		s.Require().NoError(EnvTestWaitForAPIResourceCondition(s.T().Context(), group, "v1", plural, true))
+	}
+	createCRD("widgets", "Widget", "widget")
+	s.InitMcpClient()
+	s.Run("resources_list resolves a kind discovered at startup", func() {
+		toolResult, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": group + "/v1", "kind": "Widget"})
+		s.Require().NoError(err, "call tool failed")
+		s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+	})
+
+	createCRD("gadgets", "Gadget", "gadget")
+	gadget := &unstructured.Unstructured{}
+	gadget.SetAPIVersion(group + "/v1")
+	gadget.SetKind("Gadget")
+	gadget.SetName("a-gadget")
+	_, err := dynamic.NewForConfigOrDie(test.EnvTestRestConfig()).
+		Resource(schema.GroupVersionResource{Group: group, Version: "v1", Resource: "gadgets"}).
+		Namespace("default").
+		Create(s.T().Context(), gadget, metav1.CreateOptions{})
+	s.Require().NoError(err, "failed to create gadget")
+
+	s.Run("resources_list resolves a kind added to the API group after startup", func() {
+		toolResult, err := s.CallTool("resources_list", map[string]interface{}{"apiVersion": group + "/v1", "kind": "Gadget", "namespace": "default"})
+		s.Require().NoError(err, "call tool failed")
+		s.Require().Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "a-gadget", "expected the gadget to be listed")
+	})
+	s.Run("resources_get resolves a kind added to the API group after startup", func() {
+		toolResult, err := s.CallTool("resources_get", map[string]interface{}{"apiVersion": group + "/v1", "kind": "Gadget", "namespace": "default", "name": "a-gadget"})
+		s.Require().NoError(err, "call tool failed")
+		s.Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+	})
+}
+
 func (s *ResourcesSuite) TestResourcesGetDenied() {
 	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [
