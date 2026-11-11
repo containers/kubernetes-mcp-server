@@ -22,14 +22,30 @@ type AggregateDiscovery interface {
 		ctx context.Context,
 		groupVersion string,
 	) Results[*metav1.APIResourceList]
+	// ServerResourcesForGroup discovers resources across all served versions of an API group.
+	ServerResourcesForGroup(ctx context.Context, group string) Results[[]*metav1.APIResourceList]
 }
 
-// AnyTargetHasGVK reports whether any target exposes the given GVKs
+// AnyTargetHasGVK reports whether any target exposes the given GVK.
+// An empty Version matches any served version.
 //
 // AnyTargetHasGVK fails open on errors, so that we do not hide tools that _may_ be valid
 // This is primarily useful for deciding to disable tools that depend on GVKs when those GVKs
 // are definitely not present.
 func AnyTargetHasGVK(ctx context.Context, inspector ClusterInspector, gvk schema.GroupVersionKind) bool {
+	if gvk.Version == "" {
+		hasGVK, err := inspector.Discovery().ServerResourcesForGroup(ctx, gvk.Group).Any(func(lists []*metav1.APIResourceList) bool {
+			for _, list := range lists {
+				for _, resource := range list.APIResources {
+					if resource.Kind == gvk.Kind {
+						return true
+					}
+				}
+			}
+			return false
+		})
+		return hasGVK || (err != nil && !IsNotFound(err))
+	}
 	hasGVK, err := inspector.Discovery().ServerResourcesForGroupVersion(ctx, gvk.GroupVersion().String()).Any(func(list *metav1.APIResourceList) bool {
 		for _, resource := range list.APIResources {
 			if resource.Kind == gvk.Kind {

@@ -18,6 +18,15 @@ func (p *filteringProvider) Unstructured() api.AggregateUnstructured { return ni
 func (p *filteringProvider) BearerToken(ctx context.Context) api.Results[string] {
 	return api.NewResults(ctx, p, func(context.Context, string) (string, error) { return "", nil })
 }
+func (p *filteringProvider) ServerResourcesForGroup(ctx context.Context, group string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, p, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		list := &metav1.APIResourceList{}
+		if p.available {
+			list.APIResources = []metav1.APIResource{{Kind: "PipelineRun"}}
+		}
+		return []*metav1.APIResourceList{list}, nil
+	})
+}
 func (p *filteringProvider) ServerResourcesForGroupVersion(ctx context.Context, groupVersion string) api.Results[*metav1.APIResourceList] {
 	p.requested = append(p.requested, groupVersion)
 	return api.NewResults(ctx, p, func(context.Context, string) (*metav1.APIResourceList, error) {
