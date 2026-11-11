@@ -951,7 +951,7 @@
                   "type": "string"
                 },
                 "resource": {
-                  "description": "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec.",
+                  "description": "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used",
                   "type": "string"
                 }
               },
@@ -1153,8 +1153,8 @@
       "taskName": "Audit Multicluster Mesh Health",
       "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/mesh-status-multicluster/mesh-status-multicluster.yaml",
       "taskPassed": true,
-      "taskOutput": "## Mesh health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version **1.31.3** | **NOT_READY** — monitored namespace `bookinfo` |\n| **west** | No separate control plane is reported; it is managed by the **east** `istiod`. Control-plane connectivity from east to west is **Healthy**. | **NOT_READY** — monitored namespace `bookinfo` |\n\n## Overall\n\nThe mesh is **partially healthy**. The east control plane and its connectivity to both clusters are healthy, and Kiali’s observability components (Grafana, Jaeger, Prometheus) are healthy. However, the data plane is **NOT_READY** in the monitored `bookinfo` namespace in both clusters. The health report doesn’t include details explaining why those namespaces are not ready.",
-      "taskJudgeReason": "The reference answer's core information is simply “east.” The model response explicitly identifies the mesh cluster as east, so it contains that information. Additional details do not contradict the reference.",
+      "taskOutput": "## Multicluster Istio health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version **1.31.3** | **NOT_READY** — monitored namespace `bookinfo` |\n| **west** | No separate `istiod` is reported. The shared control plane in east has **Healthy** connectivity to west’s data plane. | **NOT_READY** — monitored namespace `bookinfo` |\n\n**Overall: Degraded.** The control plane and its reported cross-cluster connections are healthy, but the `bookinfo` data plane is **NOT_READY** in both clusters. Grafana, Jaeger, and Prometheus are all reported healthy. The status report doesn’t specify why the data planes are not ready.",
+      "taskJudgeReason": "The reference answer is “east.” The model response explicitly identifies a mesh cluster named east, so it contains the full core information required by the reference.",
       "difficulty": "medium",
       "totalRuns": 1,
       "assertionResults": {
@@ -1173,7 +1173,57 @@
         "ToolCalls": [
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:06.791075192Z",
+            "timestamp": "2026-11-09T19:55:07.104523065Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "b70ae6b",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          },
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-09T19:55:09.318441529Z",
             "success": true,
             "name": "kiali_get_mesh_status",
             "result": {
@@ -1181,14 +1231,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "{\"components\":{\"control_plane\":{\"nodes\":[{\"cluster\":\"east\",\"name\":\"istiod\",\"namespace\":\"istio-system\",\"status\":\"Healthy\",\"version\":\"1.31.3\"}],\"status\":\"Healthy\"},\"data_plane\":{\"monitored_namespaces\":[{\"cluster\":\"east\",\"health\":\"NOT_READY\",\"name\":\"bookinfo\"},{\"cluster\":\"west\",\"health\":\"NOT_READY\",\"name\":\"bookinfo\"}]},\"observability_stack\":{\"grafana\":\"Healthy\",\"jaeger\":\"Healthy\",\"prometheus\":\"Healthy\"}},\"connectivity_graph\":[{\"from\":\"istio-system/istiod\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"Data Plane\",\"to_cluster\":\"west\"},{\"from\":\"istio-system/istiod\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"Data Plane\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/jaeger\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/istiod\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/Prometheus\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/Grafana\",\"to_cluster\":\"east\"}],\"environment\":{\"istio_version\":\"1.31.3\",\"kiali_version\":\"v2.35.0-SNAPSHOT\",\"timestamp\":\"2026-11-02T19:36:06Z\",\"trust_domain\":\"cluster.local\"}}"
+                  "text": "{\"components\":{\"control_plane\":{\"nodes\":[{\"cluster\":\"east\",\"name\":\"istiod\",\"namespace\":\"istio-system\",\"status\":\"Healthy\",\"version\":\"1.31.3\"}],\"status\":\"Healthy\"},\"data_plane\":{\"monitored_namespaces\":[{\"cluster\":\"east\",\"health\":\"NOT_READY\",\"name\":\"bookinfo\"},{\"cluster\":\"west\",\"health\":\"NOT_READY\",\"name\":\"bookinfo\"}]},\"observability_stack\":{\"grafana\":\"Healthy\",\"jaeger\":\"Healthy\",\"prometheus\":\"Healthy\"}},\"connectivity_graph\":[{\"from\":\"istio-system/istiod\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"Data Plane\",\"to_cluster\":\"west\"},{\"from\":\"istio-system/istiod\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"Data Plane\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/jaeger\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/istiod\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/Prometheus\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/Grafana\",\"to_cluster\":\"east\"}],\"environment\":{\"istio_version\":\"1.31.3\",\"kiali_version\":\"v2.35.0-SNAPSHOT\",\"timestamp\":\"2026-11-09T19:55:09Z\",\"trust_domain\":\"cluster.local\"}}"
                 }
               ],
               "resultType": "complete"
@@ -1220,86 +1270,36 @@
                 "TokenInfo": null
               }
             }
-          },
-          {
-            "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:08.802157041Z",
-            "success": true,
-            "name": "kiali_list_mesh_clusters",
-            "result": {
-              "_meta": {
-                "io.modelcontextprotocol/serverInfo": {
-                  "name": "kubernetes-mcp-server",
-                  "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
-                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
-                }
-              },
-              "content": [
-                {
-                  "type": "text",
-                  "text": "[{\"isHome\":true,\"name\":\"east\"},{\"isHome\":false,\"name\":\"west\"}]"
-                }
-              ],
-              "resultType": "complete"
-            },
-            "tokens": {
-              "inputTokens": 1,
-              "outputTokens": 33,
-              "totalTokens": 34
-            },
-            "request": {
-              "Session": {},
-              "Params": {
-                "_meta": {
-                  "io.modelcontextprotocol/clientCapabilities": {
-                    "roots": {
-                      "listChanged": true
-                    }
-                  },
-                  "io.modelcontextprotocol/clientInfo": {
-                    "name": "mcpchecker-agent",
-                    "version": "1.0.0"
-                  },
-                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
-                },
-                "name": "kiali_list_mesh_clusters",
-                "arguments": {}
-              },
-              "Extra": {
-                "TokenInfo": null
-              }
-            }
           }
         ],
         "ResourceReads": null,
         "PromptGets": null
       },
       "tokenEstimate": {
-        "inputTokens": 8033,
-        "outputTokens": 368,
-        "totalTokens": 23757,
+        "inputTokens": 8059,
+        "outputTokens": 314,
+        "totalTokens": 23446,
         "promptTokens": 37,
-        "messageTokens": 199,
+        "messageTokens": 180,
         "thinkingTokens": 0,
         "toolInputTokens": 2,
-        "toolOutputTokens": 844,
-        "mcpSchemaTokens": 8014,
+        "toolOutputTokens": 846,
+        "mcpSchemaTokens": 8038,
         "promptGetInputTokens": 0,
         "promptGetOutputTokens": 0,
         "resourceInputTokens": 0,
         "resourceOutputTokens": 0,
         "source": "actual",
         "actual": {
-          "inputTokens": 8033,
-          "outputTokens": 368,
-          "totalTokens": 23757
+          "inputTokens": 8059,
+          "outputTokens": 314,
+          "totalTokens": 23446
         }
       },
       "judgeTokenUsage": {
-        "inputTokens": 3231,
-        "outputTokens": 145,
-        "totalTokens": 3376
+        "inputTokens": 3151,
+        "outputTokens": 137,
+        "totalTokens": 3288
       },
       "setupOutput": {
         "Steps": [],
@@ -1311,79 +1311,79 @@
           {
             "type": "tool_call",
             "success": true,
-            "message": "kiali_get_mesh_status"
+            "message": "kiali_list_mesh_clusters"
           },
           {
             "type": "tool_call",
             "success": true,
-            "message": "kiali_list_mesh_clusters"
+            "message": "kiali_get_mesh_status"
           },
           {
             "type": "message",
             "success": true,
-            "message": "## Mesh health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version **1.31.3** | **NOT_READY** — monitored namespace `bookinfo` |\n| **west** | No separate control plane is reported; it is managed by the **east** `istiod`. Control-plane connectivity from east to west is **Healthy**. | **NOT_READY** — monitored namespace `bookinfo` |\n\n## Overall\n\nThe mesh is **partially healthy**. The east control plane and its connectivity to both clusters are healthy, and Kiali’s observability components (Grafana, Jaeger, Prometheus) are healthy. However, the data plane is **NOT_READY** in the monitored `bookinfo` namespace in both clusters. The health report doesn’t include details explaining why those namespaces are not ready."
+            "message": "## Multicluster Istio health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version **1.31.3** | **NOT_READY** — monitored namespace `bookinfo` |\n| **west** | No separate `istiod` is reported. The shared control plane in east has **Healthy** connectivity to west’s data plane. | **NOT_READY** — monitored namespace `bookinfo` |\n\n**Overall: Degraded.** The control plane and its reported cross-cluster connections are healthy, but the `bookinfo` data plane is **NOT_READY** in both clusters. Grafana, Jaeger, and Prometheus are all reported healthy. The status report doesn’t specify why the data planes are not ready."
           }
         ],
         "Success": true,
         "Error": "",
         "agentDetails": {
           "tokenEstimate": {
-            "inputTokens": 8033,
-            "outputTokens": 368,
-            "totalTokens": 23757,
+            "inputTokens": 8059,
+            "outputTokens": 314,
+            "totalTokens": 23446,
             "promptTokens": 37,
-            "messageTokens": 199,
+            "messageTokens": 180,
             "thinkingTokens": 0,
             "toolInputTokens": 2,
-            "toolOutputTokens": 844,
-            "mcpSchemaTokens": 8014,
+            "toolOutputTokens": 846,
+            "mcpSchemaTokens": 8038,
             "promptGetInputTokens": 0,
             "promptGetOutputTokens": 0,
             "resourceInputTokens": 0,
             "resourceOutputTokens": 0,
             "source": "actual",
             "actual": {
-              "inputTokens": 8033,
-              "outputTokens": 368,
-              "totalTokens": 23757
+              "inputTokens": 8059,
+              "outputTokens": 314,
+              "totalTokens": 23446
             }
           },
           "toolCalls": [
             {
-              "title": "kiali_get_mesh_status",
-              "status": "completed",
-              "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"components\\\":{\\\"control_plane\\\":{\\\"nodes\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"name\\\":\\\"istiod\\\",\\\"namespace\\\":\\\"istio-system\\\",\\\"status\\\":\\\"Healthy\\\",\\\"version\\\":\\\"1.31.3\\\"}],\\\"status\\\":\\\"Healthy\\\"},\\\"data_plane\\\":{\\\"monitored_namespaces\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"},{\\\"cluster\\\":\\\"west\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"}]},\\\"observability_stack\\\":{\\\"grafana\\\":\\\"Healthy\\\",\\\"jaeger\\\":\\\"Healthy\\\",\\\"prometheus\\\":\\\"Healthy\\\"}},\\\"connectivity_graph\\\":[{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"west\\\"},{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/jaeger\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/istiod\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Prometheus\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Grafana\\\",\\\"to_cluster\\\":\\\"east\\\"}],\\\"environment\\\":{\\\"istio_version\\\":\\\"1.31.3\\\",\\\"kiali_version\\\":\\\"v2.35.0-SNAPSHOT\\\",\\\"timestamp\\\":\\\"2026-11-02T19:36:06Z\\\",\\\"trust_domain\\\":\\\"cluster.local\\\"}}\"}],\"resultType\":\"complete\"}"
-            },
-            {
               "title": "kiali_list_mesh_clusters",
               "status": "completed",
               "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            },
+            {
+              "title": "kiali_get_mesh_status",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"components\\\":{\\\"control_plane\\\":{\\\"nodes\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"name\\\":\\\"istiod\\\",\\\"namespace\\\":\\\"istio-system\\\",\\\"status\\\":\\\"Healthy\\\",\\\"version\\\":\\\"1.31.3\\\"}],\\\"status\\\":\\\"Healthy\\\"},\\\"data_plane\\\":{\\\"monitored_namespaces\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"},{\\\"cluster\\\":\\\"west\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"}]},\\\"observability_stack\\\":{\\\"grafana\\\":\\\"Healthy\\\",\\\"jaeger\\\":\\\"Healthy\\\",\\\"prometheus\\\":\\\"Healthy\\\"}},\\\"connectivity_graph\\\":[{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"west\\\"},{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/jaeger\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/istiod\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Prometheus\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Grafana\\\",\\\"to_cluster\\\":\\\"east\\\"}],\\\"environment\\\":{\\\"istio_version\\\":\\\"1.31.3\\\",\\\"kiali_version\\\":\\\"v2.35.0-SNAPSHOT\\\",\\\"timestamp\\\":\\\"2026-11-09T19:55:09Z\\\",\\\"trust_domain\\\":\\\"cluster.local\\\"}}\"}],\"resultType\":\"complete\"}"
             }
           ],
           "outputSteps": [
             {
               "type": "tool_call",
               "toolCall": {
-                "title": "kiali_get_mesh_status",
+                "title": "kiali_list_mesh_clusters",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"components\\\":{\\\"control_plane\\\":{\\\"nodes\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"name\\\":\\\"istiod\\\",\\\"namespace\\\":\\\"istio-system\\\",\\\"status\\\":\\\"Healthy\\\",\\\"version\\\":\\\"1.31.3\\\"}],\\\"status\\\":\\\"Healthy\\\"},\\\"data_plane\\\":{\\\"monitored_namespaces\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"},{\\\"cluster\\\":\\\"west\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"}]},\\\"observability_stack\\\":{\\\"grafana\\\":\\\"Healthy\\\",\\\"jaeger\\\":\\\"Healthy\\\",\\\"prometheus\\\":\\\"Healthy\\\"}},\\\"connectivity_graph\\\":[{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"west\\\"},{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/jaeger\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/istiod\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Prometheus\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Grafana\\\",\\\"to_cluster\\\":\\\"east\\\"}],\\\"environment\\\":{\\\"istio_version\\\":\\\"1.31.3\\\",\\\"kiali_version\\\":\\\"v2.35.0-SNAPSHOT\\\",\\\"timestamp\\\":\\\"2026-11-02T19:36:06Z\\\",\\\"trust_domain\\\":\\\"cluster.local\\\"}}\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
               }
             },
             {
               "type": "tool_call",
               "toolCall": {
-                "title": "kiali_list_mesh_clusters",
+                "title": "kiali_get_mesh_status",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"components\\\":{\\\"control_plane\\\":{\\\"nodes\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"name\\\":\\\"istiod\\\",\\\"namespace\\\":\\\"istio-system\\\",\\\"status\\\":\\\"Healthy\\\",\\\"version\\\":\\\"1.31.3\\\"}],\\\"status\\\":\\\"Healthy\\\"},\\\"data_plane\\\":{\\\"monitored_namespaces\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"},{\\\"cluster\\\":\\\"west\\\",\\\"health\\\":\\\"NOT_READY\\\",\\\"name\\\":\\\"bookinfo\\\"}]},\\\"observability_stack\\\":{\\\"grafana\\\":\\\"Healthy\\\",\\\"jaeger\\\":\\\"Healthy\\\",\\\"prometheus\\\":\\\"Healthy\\\"}},\\\"connectivity_graph\\\":[{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"west\\\"},{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/jaeger\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/istiod\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Prometheus\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Grafana\\\",\\\"to_cluster\\\":\\\"east\\\"}],\\\"environment\\\":{\\\"istio_version\\\":\\\"1.31.3\\\",\\\"kiali_version\\\":\\\"v2.35.0-SNAPSHOT\\\",\\\"timestamp\\\":\\\"2026-11-09T19:55:09Z\\\",\\\"trust_domain\\\":\\\"cluster.local\\\"}}\"}],\"resultType\":\"complete\"}"
               }
             },
             {
               "type": "message",
-              "content": "## Mesh health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version **1.31.3** | **NOT_READY** — monitored namespace `bookinfo` |\n| **west** | No separate control plane is reported; it is managed by the **east** `istiod`. Control-plane connectivity from east to west is **Healthy**. | **NOT_READY** — monitored namespace `bookinfo` |\n\n## Overall\n\nThe mesh is **partially healthy**. The east control plane and its connectivity to both clusters are healthy, and Kiali’s observability components (Grafana, Jaeger, Prometheus) are healthy. However, the data plane is **NOT_READY** in the monitored `bookinfo` namespace in both clusters. The health report doesn’t include details explaining why those namespaces are not ready."
+              "content": "## Multicluster Istio health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version **1.31.3** | **NOT_READY** — monitored namespace `bookinfo` |\n| **west** | No separate `istiod` is reported. The shared control plane in east has **Healthy** connectivity to west’s data plane. | **NOT_READY** — monitored namespace `bookinfo` |\n\n**Overall: Degraded.** The control plane and its reported cross-cluster connections are healthy, but the `bookinfo` data plane is **NOT_READY** in both clusters. Grafana, Jaeger, and Prometheus are all reported healthy. The status report doesn’t specify why the data planes are not ready."
             }
           ]
         }
@@ -1393,21 +1393,21 @@
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer's core information is simply “east.” The model response explicitly identifies the mesh cluster as east, so it contains that information. Additional details do not contradict the reference.",
+            "message": "The reference answer is “east.” The model response explicitly identifies a mesh cluster named east, so it contains the full core information required by the reference.",
             "usage": {
-              "inputTokens": 1612,
-              "outputTokens": 69,
-              "totalTokens": 1681
+              "inputTokens": 1570,
+              "outputTokens": 63,
+              "totalTokens": 1633
             }
           },
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer's core information is that the relevant mesh cluster is west. The model response explicitly identifies and reports on the west cluster, so it contains the reference information. Additional status details are compatible with the reference.",
+            "message": "The reference answer is “west.” The model response explicitly identifies and reports the west mesh cluster, so it contains the full core information required by the reference. The additional audit details do not contradict that information.",
             "usage": {
-              "inputTokens": 1619,
-              "outputTokens": 76,
-              "totalTokens": 1695
+              "inputTokens": 1581,
+              "outputTokens": 74,
+              "totalTokens": 1655
             }
           }
         ],
@@ -1424,8 +1424,8 @@
       "taskName": "Analyze Remote Service Metrics",
       "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/metrics-west-reviews/metrics-west-reviews.yaml",
       "taskPassed": true,
-      "taskOutput": "**Inbound request rate — `reviews` service (`bookinfo`)**  \n**Mesh cluster:** `west` (remote; not Kiali’s home cluster)  \n**Requested rate interval:** 10 minutes  \n**Direction:** Inbound\n\n- **Average:** 0.984 requests/s\n- **Minimum:** 0.949 requests/s\n- **Maximum:** 1.000 requests/s\n- **Trend:** Rising, from about 0.949 to 0.999 requests/s across the returned buckets\n\nThe metrics response’s sampled window was **19:35:15–19:36:19 UTC** on 2026-11-02.",
-      "taskJudgeReason": "The reference answer is “reviews.” The model response explicitly identifies the metrics as belonging to the `reviews` service, so it contains the full core information required by the CONTAINS criterion.",
+      "taskOutput": "The remote mesh cluster is **west** (Kiali’s home cluster is east). The inbound request-rate metrics query for `reviews` in `bookinfo` over the last 10 minutes was rejected, so I couldn’t retrieve the metrics.",
+      "taskJudgeReason": "The reference contains only the core term “reviews.” The model response explicitly identifies the reviews service and states that the attempted inbound request-rate query was for reviews in bookinfo, so it includes the reference information. The inability to retrieve metrics and the cluster details are extra information and do not contradict the reference.",
       "difficulty": "medium",
       "totalRuns": 1,
       "assertionResults": {
@@ -1444,7 +1444,7 @@
         "ToolCalls": [
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:18.447660529Z",
+            "timestamp": "2026-11-09T19:55:21.817347393Z",
             "success": true,
             "name": "kiali_list_mesh_clusters",
             "result": {
@@ -1452,14 +1452,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "[{\"isHome\":true,\"name\":\"east\"},{\"isHome\":false,\"name\":\"west\"}]"
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
                 }
               ],
               "resultType": "complete"
@@ -1491,93 +1491,36 @@
                 "TokenInfo": null
               }
             }
-          },
-          {
-            "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:19.651550574Z",
-            "success": true,
-            "name": "kiali_get_metrics",
-            "result": {
-              "_meta": {
-                "io.modelcontextprotocol/serverInfo": {
-                  "name": "kubernetes-mcp-server",
-                  "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
-                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
-                }
-              },
-              "content": [
-                {
-                  "type": "text",
-                  "text": "{\"context\":{\"cluster\":\"west\",\"direction\":\"inbound\",\"namespace\":\"bookinfo\",\"rateInterval\":\"10m\",\"reporter\":\"source\",\"resourceName\":\"reviews\",\"resourceType\":\"service\",\"windowDuration\":\"1m5s\",\"windowEnd\":\"2026-11-02T19:36:19Z\",\"windowStart\":\"2026-11-02T19:35:15Z\"},\"empty\":false,\"errors\":{\"emptySeries\":false,\"max\":0.020676288288288294,\"total\":0.06184749483576709,\"zeroErrors\":false},\"latency\":{\"quantiles\":[{\"avg\":14.441505462370092,\"label\":\"P50\",\"max\":14.772837425162397,\"min\":13.886012606071299,\"stat\":\"0.5\",\"stdDev\":0.3405866085297155},{\"avg\":43.91499485237745,\"label\":\"P95\",\"max\":45.848386207415416,\"min\":40.74192480861786,\"stat\":\"0.95\",\"stdDev\":2.1228568638783365},{\"avg\":135.29610649383764,\"label\":\"P99\",\"max\":185.3710687628421,\"min\":59.583333333333115,\"stat\":\"0.99\",\"stdDev\":57.7086947870319},{\"avg\":790.4091682415701,\"label\":\"P99.9\",\"max\":1058.000166315856,\"min\":162.2499999999996,\"stat\":\"0.999\",\"stdDev\":339.6284979556338},{\"avg\":17.28990901588409,\"label\":\"Avg\",\"max\":18.287265958672567,\"min\":15.86421408916373,\"stat\":\"avg\",\"stdDev\":1.0518591567779827}],\"trend\":{\"bucketAverages\":[18.287265958672567,18.171888802014,17.964178495266243,16.013105911733817],\"bucketCount\":4,\"endValue\":16.013105911733817,\"maxBucketIndex\":0,\"maxValue\":18.287265958672567,\"pattern\":\"falling\",\"startValue\":18.287265958672567,\"title\":\"Latency (avg)\",\"unit\":\"ms\"}},\"overview\":{\"latency\":{\"avgMs\":17.28990901588409,\"flatSeries\":false,\"p95Ms\":43.91499485237745,\"p99Ms\":135.29610649383764,\"stdDevMs\":1.0518591567779827},\"requestRate\":{\"avgPerS\":0.9844794339063034,\"stable\":false}},\"sizes\":[{\"metric\":\"request_size\",\"stats\":[{\"constant\":true,\"label\":\"Avg\",\"stats\":{\"avg\":294.91525423728814,\"max\":294.91525423728814,\"min\":294.91525423728814,\"stdDev\":0}},{\"constant\":true,\"label\":\"P50\",\"stats\":{\"avg\":375,\"max\":375,\"min\":375,\"stdDev\":0}},{\"constant\":true,\"label\":\"P95\",\"stats\":{\"avg\":487.5,\"max\":487.5,\"min\":487.5,\"stdDev\":0}},{\"constant\":true,\"label\":\"P99\",\"stats\":{\"avg\":497.5,\"max\":497.5,\"min\":497.5,\"stdDev\":0}}],\"title\":\"Request Size\"},{\"metric\":\"response_size\",\"stats\":[{\"constant\":true,\"label\":\"Avg\",\"stats\":{\"avg\":619.2136803188622,\"max\":623.4725531310863,\"min\":616.4529505557732,\"stdDev\":3.3276959230734535}},{\"constant\":true,\"label\":\"P50\",\"stats\":{\"avg\":746.7556327600321,\"max\":750,\"min\":744.4335759638416,\"stdDev\":2.6510307174251047}},{\"constant\":true,\"label\":\"P95\",\"stats\":{\"avg\":974.6755632760032,\"max\":975,\"min\":974.4433575963842,\"stdDev\":0.26510307174250436}},{\"constant\":true,\"label\":\"P99\",\"stats\":{\"avg\":994.9351126552007,\"max\":995,\"min\":994.8886715192768,\"stdDev\":0.053020614348514565}}],\"title\":\"Response Size\"}],\"snapshot\":{\"direction\":\"inbound\",\"reporter\":\"source\",\"latencyP99AvgMs\":135.29610649383764,\"latencyP99MaxMs\":185.3710687628421,\"latencyP99MinMs\":59.583333333333115,\"latencyP99StdDevMs\":57.7086947870319,\"requestRateAvgPerS\":0.9844794339063034,\"requestRateMaxPerS\":0.9999999999999998,\"requestRateMinPerS\":0.9492925845845847},\"traffic\":{\"avg\":0.9844794339063034,\"max\":0.9999999999999998,\"min\":0.9492925845845847,\"stdDev\":0.02013388015263927,\"stable\":false,\"trend\":{\"bucketAverages\":[0.9492925845845847,0.974324211948791,0.9991982305479987,0.999791071225071],\"bucketCount\":4,\"endValue\":0.999791071225071,\"maxBucketIndex\":3,\"maxValue\":0.999791071225071,\"pattern\":\"rising\",\"startValue\":0.9492925845845847,\"title\":\"Request count\",\"unit\":\"req/s\"}},\"throughput\":[{\"name\":\"request_throughput\",\"stable\":false,\"stats\":{\"avg\":290.33800254185894,\"max\":294.9152542372881,\"min\":279.96086392833513,\"stdDev\":5.9377883839987025},\"trend\":{\"bucketAverages\":[279.96086392833513,287.3430726764231,294.6788001955115,294.85363795451246],\"bucketCount\":4,\"endValue\":294.85363795451246,\"maxBucketIndex\":3,\"maxValue\":294.85363795451246,\"pattern\":\"rising\",\"startValue\":279.96086392833513,\"title\":\"Request Throughput\",\"unit\":\"B/s\"},\"title\":\"Request Throughput\"},{\"name\":\"response_throughput\",\"stable\":false,\"stats\":{\"avg\":609.6446391353351,\"max\":623.4725531310862,\"min\":585.2102632421662,\"stdDev\":14.707086040615192},\"trend\":{\"bucketAverages\":[585.2102632421662,600.7418076867128,615.9586974114216,623.1562136681875],\"bucketCount\":4,\"endValue\":623.1562136681875,\"maxBucketIndex\":3,\"maxValue\":623.1562136681875,\"pattern\":\"rising\",\"startValue\":585.2102632421662,\"title\":\"Response Throughput\",\"unit\":\"B/s\"},\"title\":\"Response Throughput\"}]}"
-                }
-              ],
-              "resultType": "complete"
-            },
-            "tokens": {
-              "inputTokens": 32,
-              "outputTokens": 1584,
-              "totalTokens": 1616
-            },
-            "request": {
-              "Session": {},
-              "Params": {
-                "_meta": {
-                  "io.modelcontextprotocol/clientCapabilities": {
-                    "roots": {
-                      "listChanged": true
-                    }
-                  },
-                  "io.modelcontextprotocol/clientInfo": {
-                    "name": "mcpchecker-agent",
-                    "version": "1.0.0"
-                  },
-                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
-                },
-                "name": "kiali_get_metrics",
-                "arguments": {
-                  "direction": "inbound",
-                  "meshCluster": "west",
-                  "namespace": "bookinfo",
-                  "rateInterval": "10m",
-                  "resourceName": "reviews",
-                  "resourceType": "service"
-                }
-              },
-              "Extra": {
-                "TokenInfo": null
-              }
-            }
           }
         ],
         "ResourceReads": null,
         "PromptGets": null
       },
       "tokenEstimate": {
-        "inputTokens": 1893,
-        "outputTokens": 291,
-        "totalTokens": 24665,
+        "inputTokens": 260,
+        "outputTokens": 172,
+        "totalTokens": 22986,
         "promptTokens": 60,
-        "messageTokens": 137,
+        "messageTokens": 49,
         "thinkingTokens": 0,
         "toolInputTokens": 33,
-        "toolOutputTokens": 2469,
-        "mcpSchemaTokens": 8014,
+        "toolOutputTokens": 111,
+        "mcpSchemaTokens": 8038,
         "promptGetInputTokens": 0,
         "promptGetOutputTokens": 0,
         "resourceInputTokens": 0,
         "resourceOutputTokens": 0,
         "source": "actual",
         "actual": {
-          "inputTokens": 1893,
-          "outputTokens": 291,
-          "totalTokens": 24665
+          "inputTokens": 260,
+          "outputTokens": 172,
+          "totalTokens": 22986
         }
       },
       "judgeTokenUsage": {
-        "inputTokens": 3062,
-        "outputTokens": 140,
-        "totalTokens": 3202
+        "inputTokens": 2749,
+        "outputTokens": 171,
+        "totalTokens": 2920
       },
       "setupOutput": {
         "Steps": [],
@@ -1599,31 +1542,31 @@
           {
             "type": "message",
             "success": true,
-            "message": "**Inbound request rate — `reviews` service (`bookinfo`)**  \n**Mesh cluster:** `west` (remote; not Kiali’s home cluster)  \n**Requested rate interval:** 10 minutes  \n**Direction:** Inbound\n\n- **Average:** 0.984 requests/s\n- **Minimum:** 0.949 requests/s\n- **Maximum:** 1.000 requests/s\n- **Trend:** Rising, from about 0.949 to 0.999 requests/s across the returned buckets\n\nThe metrics response’s sampled window was **19:35:15–19:36:19 UTC** on 2026-11-02."
+            "message": "The remote mesh cluster is **west** (Kiali’s home cluster is east). The inbound request-rate metrics query for `reviews` in `bookinfo` over the last 10 minutes was rejected, so I couldn’t retrieve the metrics."
           }
         ],
         "Success": true,
         "Error": "",
         "agentDetails": {
           "tokenEstimate": {
-            "inputTokens": 1893,
-            "outputTokens": 291,
-            "totalTokens": 24665,
+            "inputTokens": 260,
+            "outputTokens": 172,
+            "totalTokens": 22986,
             "promptTokens": 60,
-            "messageTokens": 137,
+            "messageTokens": 49,
             "thinkingTokens": 0,
             "toolInputTokens": 33,
-            "toolOutputTokens": 2469,
-            "mcpSchemaTokens": 8014,
+            "toolOutputTokens": 111,
+            "mcpSchemaTokens": 8038,
             "promptGetInputTokens": 0,
             "promptGetOutputTokens": 0,
             "resourceInputTokens": 0,
             "resourceOutputTokens": 0,
             "source": "actual",
             "actual": {
-              "inputTokens": 1893,
-              "outputTokens": 291,
-              "totalTokens": 24665
+              "inputTokens": 260,
+              "outputTokens": 172,
+              "totalTokens": 22986
             }
           },
           "toolCalls": [
@@ -1631,7 +1574,7 @@
               "title": "kiali_list_mesh_clusters",
               "status": "completed",
               "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
             },
             {
               "title": "kiali_get_metrics",
@@ -1644,7 +1587,7 @@
                 "resourceName": "reviews",
                 "resourceType": "service"
               },
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"context\\\":{\\\"cluster\\\":\\\"west\\\",\\\"direction\\\":\\\"inbound\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"rateInterval\\\":\\\"10m\\\",\\\"reporter\\\":\\\"source\\\",\\\"resourceName\\\":\\\"reviews\\\",\\\"resourceType\\\":\\\"service\\\",\\\"windowDuration\\\":\\\"1m5s\\\",\\\"windowEnd\\\":\\\"2026-11-02T19:36:19Z\\\",\\\"windowStart\\\":\\\"2026-11-02T19:35:15Z\\\"},\\\"empty\\\":false,\\\"errors\\\":{\\\"emptySeries\\\":false,\\\"max\\\":0.020676288288288294,\\\"total\\\":0.06184749483576709,\\\"zeroErrors\\\":false},\\\"latency\\\":{\\\"quantiles\\\":[{\\\"avg\\\":14.441505462370092,\\\"label\\\":\\\"P50\\\",\\\"max\\\":14.772837425162397,\\\"min\\\":13.886012606071299,\\\"stat\\\":\\\"0.5\\\",\\\"stdDev\\\":0.3405866085297155},{\\\"avg\\\":43.91499485237745,\\\"label\\\":\\\"P95\\\",\\\"max\\\":45.848386207415416,\\\"min\\\":40.74192480861786,\\\"stat\\\":\\\"0.95\\\",\\\"stdDev\\\":2.1228568638783365},{\\\"avg\\\":135.29610649383764,\\\"label\\\":\\\"P99\\\",\\\"max\\\":185.3710687628421,\\\"min\\\":59.583333333333115,\\\"stat\\\":\\\"0.99\\\",\\\"stdDev\\\":57.7086947870319},{\\\"avg\\\":790.4091682415701,\\\"label\\\":\\\"P99.9\\\",\\\"max\\\":1058.000166315856,\\\"min\\\":162.2499999999996,\\\"stat\\\":\\\"0.999\\\",\\\"stdDev\\\":339.6284979556338},{\\\"avg\\\":17.28990901588409,\\\"label\\\":\\\"Avg\\\",\\\"max\\\":18.287265958672567,\\\"min\\\":15.86421408916373,\\\"stat\\\":\\\"avg\\\",\\\"stdDev\\\":1.0518591567779827}],\\\"trend\\\":{\\\"bucketAverages\\\":[18.287265958672567,18.171888802014,17.964178495266243,16.013105911733817],\\\"bucketCount\\\":4,\\\"endValue\\\":16.013105911733817,\\\"maxBucketIndex\\\":0,\\\"maxValue\\\":18.287265958672567,\\\"pattern\\\":\\\"falling\\\",\\\"startValue\\\":18.287265958672567,\\\"title\\\":\\\"Latency (avg)\\\",\\\"unit\\\":\\\"ms\\\"}},\\\"overview\\\":{\\\"latency\\\":{\\\"avgMs\\\":17.28990901588409,\\\"flatSeries\\\":false,\\\"p95Ms\\\":43.91499485237745,\\\"p99Ms\\\":135.29610649383764,\\\"stdDevMs\\\":1.0518591567779827},\\\"requestRate\\\":{\\\"avgPerS\\\":0.9844794339063034,\\\"stable\\\":false}},\\\"sizes\\\":[{\\\"metric\\\":\\\"request_size\\\",\\\"stats\\\":[{\\\"constant\\\":true,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":294.91525423728814,\\\"max\\\":294.91525423728814,\\\"min\\\":294.91525423728814,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":375,\\\"max\\\":375,\\\"min\\\":375,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":487.5,\\\"max\\\":487.5,\\\"min\\\":487.5,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":497.5,\\\"max\\\":497.5,\\\"min\\\":497.5,\\\"stdDev\\\":0}}],\\\"title\\\":\\\"Request Size\\\"},{\\\"metric\\\":\\\"response_size\\\",\\\"stats\\\":[{\\\"constant\\\":true,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":619.2136803188622,\\\"max\\\":623.4725531310863,\\\"min\\\":616.4529505557732,\\\"stdDev\\\":3.3276959230734535}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":746.7556327600321,\\\"max\\\":750,\\\"min\\\":744.4335759638416,\\\"stdDev\\\":2.6510307174251047}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":974.6755632760032,\\\"max\\\":975,\\\"min\\\":974.4433575963842,\\\"stdDev\\\":0.26510307174250436}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":994.9351126552007,\\\"max\\\":995,\\\"min\\\":994.8886715192768,\\\"stdDev\\\":0.053020614348514565}}],\\\"title\\\":\\\"Response Size\\\"}],\\\"snapshot\\\":{\\\"direction\\\":\\\"inbound\\\",\\\"reporter\\\":\\\"source\\\",\\\"latencyP99AvgMs\\\":135.29610649383764,\\\"latencyP99MaxMs\\\":185.3710687628421,\\\"latencyP99MinMs\\\":59.583333333333115,\\\"latencyP99StdDevMs\\\":57.7086947870319,\\\"requestRateAvgPerS\\\":0.9844794339063034,\\\"requestRateMaxPerS\\\":0.9999999999999998,\\\"requestRateMinPerS\\\":0.9492925845845847},\\\"traffic\\\":{\\\"avg\\\":0.9844794339063034,\\\"max\\\":0.9999999999999998,\\\"min\\\":0.9492925845845847,\\\"stdDev\\\":0.02013388015263927,\\\"stable\\\":false,\\\"trend\\\":{\\\"bucketAverages\\\":[0.9492925845845847,0.974324211948791,0.9991982305479987,0.999791071225071],\\\"bucketCount\\\":4,\\\"endValue\\\":0.999791071225071,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":0.999791071225071,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":0.9492925845845847,\\\"title\\\":\\\"Request count\\\",\\\"unit\\\":\\\"req/s\\\"}},\\\"throughput\\\":[{\\\"name\\\":\\\"request_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":290.33800254185894,\\\"max\\\":294.9152542372881,\\\"min\\\":279.96086392833513,\\\"stdDev\\\":5.9377883839987025},\\\"trend\\\":{\\\"bucketAverages\\\":[279.96086392833513,287.3430726764231,294.6788001955115,294.85363795451246],\\\"bucketCount\\\":4,\\\"endValue\\\":294.85363795451246,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":294.85363795451246,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":279.96086392833513,\\\"title\\\":\\\"Request Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Request Throughput\\\"},{\\\"name\\\":\\\"response_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":609.6446391353351,\\\"max\\\":623.4725531310862,\\\"min\\\":585.2102632421662,\\\"stdDev\\\":14.707086040615192},\\\"trend\\\":{\\\"bucketAverages\\\":[585.2102632421662,600.7418076867128,615.9586974114216,623.1562136681875],\\\"bucketCount\\\":4,\\\"endValue\\\":623.1562136681875,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":623.1562136681875,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":585.2102632421662,\\\"title\\\":\\\"Response Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Response Throughput\\\"}]}\"}],\"resultType\":\"complete\"}"
+              "rawOutput": ""
             }
           ],
           "outputSteps": [
@@ -1654,7 +1597,7 @@
                 "title": "kiali_list_mesh_clusters",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
               }
             },
             {
@@ -1670,12 +1613,12 @@
                   "resourceName": "reviews",
                   "resourceType": "service"
                 },
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"context\\\":{\\\"cluster\\\":\\\"west\\\",\\\"direction\\\":\\\"inbound\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"rateInterval\\\":\\\"10m\\\",\\\"reporter\\\":\\\"source\\\",\\\"resourceName\\\":\\\"reviews\\\",\\\"resourceType\\\":\\\"service\\\",\\\"windowDuration\\\":\\\"1m5s\\\",\\\"windowEnd\\\":\\\"2026-11-02T19:36:19Z\\\",\\\"windowStart\\\":\\\"2026-11-02T19:35:15Z\\\"},\\\"empty\\\":false,\\\"errors\\\":{\\\"emptySeries\\\":false,\\\"max\\\":0.020676288288288294,\\\"total\\\":0.06184749483576709,\\\"zeroErrors\\\":false},\\\"latency\\\":{\\\"quantiles\\\":[{\\\"avg\\\":14.441505462370092,\\\"label\\\":\\\"P50\\\",\\\"max\\\":14.772837425162397,\\\"min\\\":13.886012606071299,\\\"stat\\\":\\\"0.5\\\",\\\"stdDev\\\":0.3405866085297155},{\\\"avg\\\":43.91499485237745,\\\"label\\\":\\\"P95\\\",\\\"max\\\":45.848386207415416,\\\"min\\\":40.74192480861786,\\\"stat\\\":\\\"0.95\\\",\\\"stdDev\\\":2.1228568638783365},{\\\"avg\\\":135.29610649383764,\\\"label\\\":\\\"P99\\\",\\\"max\\\":185.3710687628421,\\\"min\\\":59.583333333333115,\\\"stat\\\":\\\"0.99\\\",\\\"stdDev\\\":57.7086947870319},{\\\"avg\\\":790.4091682415701,\\\"label\\\":\\\"P99.9\\\",\\\"max\\\":1058.000166315856,\\\"min\\\":162.2499999999996,\\\"stat\\\":\\\"0.999\\\",\\\"stdDev\\\":339.6284979556338},{\\\"avg\\\":17.28990901588409,\\\"label\\\":\\\"Avg\\\",\\\"max\\\":18.287265958672567,\\\"min\\\":15.86421408916373,\\\"stat\\\":\\\"avg\\\",\\\"stdDev\\\":1.0518591567779827}],\\\"trend\\\":{\\\"bucketAverages\\\":[18.287265958672567,18.171888802014,17.964178495266243,16.013105911733817],\\\"bucketCount\\\":4,\\\"endValue\\\":16.013105911733817,\\\"maxBucketIndex\\\":0,\\\"maxValue\\\":18.287265958672567,\\\"pattern\\\":\\\"falling\\\",\\\"startValue\\\":18.287265958672567,\\\"title\\\":\\\"Latency (avg)\\\",\\\"unit\\\":\\\"ms\\\"}},\\\"overview\\\":{\\\"latency\\\":{\\\"avgMs\\\":17.28990901588409,\\\"flatSeries\\\":false,\\\"p95Ms\\\":43.91499485237745,\\\"p99Ms\\\":135.29610649383764,\\\"stdDevMs\\\":1.0518591567779827},\\\"requestRate\\\":{\\\"avgPerS\\\":0.9844794339063034,\\\"stable\\\":false}},\\\"sizes\\\":[{\\\"metric\\\":\\\"request_size\\\",\\\"stats\\\":[{\\\"constant\\\":true,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":294.91525423728814,\\\"max\\\":294.91525423728814,\\\"min\\\":294.91525423728814,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":375,\\\"max\\\":375,\\\"min\\\":375,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":487.5,\\\"max\\\":487.5,\\\"min\\\":487.5,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":497.5,\\\"max\\\":497.5,\\\"min\\\":497.5,\\\"stdDev\\\":0}}],\\\"title\\\":\\\"Request Size\\\"},{\\\"metric\\\":\\\"response_size\\\",\\\"stats\\\":[{\\\"constant\\\":true,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":619.2136803188622,\\\"max\\\":623.4725531310863,\\\"min\\\":616.4529505557732,\\\"stdDev\\\":3.3276959230734535}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":746.7556327600321,\\\"max\\\":750,\\\"min\\\":744.4335759638416,\\\"stdDev\\\":2.6510307174251047}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":974.6755632760032,\\\"max\\\":975,\\\"min\\\":974.4433575963842,\\\"stdDev\\\":0.26510307174250436}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":994.9351126552007,\\\"max\\\":995,\\\"min\\\":994.8886715192768,\\\"stdDev\\\":0.053020614348514565}}],\\\"title\\\":\\\"Response Size\\\"}],\\\"snapshot\\\":{\\\"direction\\\":\\\"inbound\\\",\\\"reporter\\\":\\\"source\\\",\\\"latencyP99AvgMs\\\":135.29610649383764,\\\"latencyP99MaxMs\\\":185.3710687628421,\\\"latencyP99MinMs\\\":59.583333333333115,\\\"latencyP99StdDevMs\\\":57.7086947870319,\\\"requestRateAvgPerS\\\":0.9844794339063034,\\\"requestRateMaxPerS\\\":0.9999999999999998,\\\"requestRateMinPerS\\\":0.9492925845845847},\\\"traffic\\\":{\\\"avg\\\":0.9844794339063034,\\\"max\\\":0.9999999999999998,\\\"min\\\":0.9492925845845847,\\\"stdDev\\\":0.02013388015263927,\\\"stable\\\":false,\\\"trend\\\":{\\\"bucketAverages\\\":[0.9492925845845847,0.974324211948791,0.9991982305479987,0.999791071225071],\\\"bucketCount\\\":4,\\\"endValue\\\":0.999791071225071,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":0.999791071225071,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":0.9492925845845847,\\\"title\\\":\\\"Request count\\\",\\\"unit\\\":\\\"req/s\\\"}},\\\"throughput\\\":[{\\\"name\\\":\\\"request_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":290.33800254185894,\\\"max\\\":294.9152542372881,\\\"min\\\":279.96086392833513,\\\"stdDev\\\":5.9377883839987025},\\\"trend\\\":{\\\"bucketAverages\\\":[279.96086392833513,287.3430726764231,294.6788001955115,294.85363795451246],\\\"bucketCount\\\":4,\\\"endValue\\\":294.85363795451246,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":294.85363795451246,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":279.96086392833513,\\\"title\\\":\\\"Request Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Request Throughput\\\"},{\\\"name\\\":\\\"response_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":609.6446391353351,\\\"max\\\":623.4725531310862,\\\"min\\\":585.2102632421662,\\\"stdDev\\\":14.707086040615192},\\\"trend\\\":{\\\"bucketAverages\\\":[585.2102632421662,600.7418076867128,615.9586974114216,623.1562136681875],\\\"bucketCount\\\":4,\\\"endValue\\\":623.1562136681875,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":623.1562136681875,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":585.2102632421662,\\\"title\\\":\\\"Response Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Response Throughput\\\"}]}\"}],\"resultType\":\"complete\"}"
+                "rawOutput": ""
               }
             },
             {
               "type": "message",
-              "content": "**Inbound request rate — `reviews` service (`bookinfo`)**  \n**Mesh cluster:** `west` (remote; not Kiali’s home cluster)  \n**Requested rate interval:** 10 minutes  \n**Direction:** Inbound\n\n- **Average:** 0.984 requests/s\n- **Minimum:** 0.949 requests/s\n- **Maximum:** 1.000 requests/s\n- **Trend:** Rising, from about 0.949 to 0.999 requests/s across the returned buckets\n\nThe metrics response’s sampled window was **19:35:15–19:36:19 UTC** on 2026-11-02."
+              "content": "The remote mesh cluster is **west** (Kiali’s home cluster is east). The inbound request-rate metrics query for `reviews` in `bookinfo` over the last 10 minutes was rejected, so I couldn’t retrieve the metrics."
             }
           ]
         }
@@ -1685,21 +1628,21 @@
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer is “reviews.” The model response explicitly identifies the metrics as belonging to the `reviews` service, so it contains the full core information required by the CONTAINS criterion.",
+            "message": "The reference contains only the core term “reviews.” The model response explicitly identifies the reviews service and states that the attempted inbound request-rate query was for reviews in bookinfo, so it includes the reference information. The inability to retrieve metrics and the cluster details are extra information and do not contradict the reference.",
             "usage": {
-              "inputTokens": 1532,
-              "outputTokens": 71,
-              "totalTokens": 1603
+              "inputTokens": 1382,
+              "outputTokens": 93,
+              "totalTokens": 1475
             }
           },
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer identifies the cluster as west. The model response explicitly states that the mesh cluster is west, so it contains the full core information required by the CONTAINS criterion.",
+            "message": "The reference answer is “west.” The model response explicitly identifies the remote mesh cluster as west, so it contains the full core information required by the reference. Its additional note about the query being rejected does not contradict that information.",
             "usage": {
-              "inputTokens": 1530,
-              "outputTokens": 69,
-              "totalTokens": 1599
+              "inputTokens": 1367,
+              "outputTokens": 78,
+              "totalTokens": 1445
             }
           }
         ],
@@ -1715,9 +1658,10 @@
     {
       "taskName": "Discover Accessible Mesh Clusters",
       "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/resource-list-clusters/resource-list-clusters.yaml",
-      "taskPassed": true,
-      "taskOutput": "Kiali can access these mesh clusters:\n\n- **east** — home cluster where Kiali is running\n- **west**",
-      "taskJudgeReason": "The reference answer identifies the home cluster as “home.” The model response instead says the home cluster is “east,” so it does not contain the reference’s core information and gives a different cluster name.",
+      "taskPassed": false,
+      "taskOutput": "Kiali can access these Istio mesh clusters:\n\n- **east** — Home cluster (where Kiali is running)\n- **west** — Remote cluster",
+      "taskError": "task exceeded timeout of 15m0s",
+      "timedOut": true,
       "difficulty": "easy",
       "totalRuns": 1,
       "assertionResults": {
@@ -1736,7 +1680,7 @@
         "ToolCalls": [
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:30.071971865Z",
+            "timestamp": "2026-11-09T19:55:34.604977811Z",
             "success": true,
             "name": "kiali_list_mesh_clusters",
             "result": {
@@ -1744,14 +1688,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "[{\"isHome\":true,\"name\":\"east\"},{\"isHome\":false,\"name\":\"west\"}]"
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
                 }
               ],
               "resultType": "complete"
@@ -1789,30 +1733,25 @@
         "PromptGets": null
       },
       "tokenEstimate": {
-        "inputTokens": 163,
-        "outputTokens": 46,
-        "totalTokens": 15068,
+        "inputTokens": 164,
+        "outputTokens": 52,
+        "totalTokens": 15123,
         "promptTokens": 33,
-        "messageTokens": 25,
+        "messageTokens": 31,
         "thinkingTokens": 0,
         "toolInputTokens": 1,
-        "toolOutputTokens": 109,
-        "mcpSchemaTokens": 8014,
+        "toolOutputTokens": 110,
+        "mcpSchemaTokens": 8038,
         "promptGetInputTokens": 0,
         "promptGetOutputTokens": 0,
         "resourceInputTokens": 0,
         "resourceOutputTokens": 0,
         "source": "actual",
         "actual": {
-          "inputTokens": 163,
-          "outputTokens": 46,
-          "totalTokens": 15068
+          "inputTokens": 164,
+          "outputTokens": 52,
+          "totalTokens": 15123
         }
-      },
-      "judgeTokenUsage": {
-        "inputTokens": 4609,
-        "outputTokens": 369,
-        "totalTokens": 4978
       },
       "setupOutput": {
         "Steps": [],
@@ -1829,31 +1768,31 @@
           {
             "type": "message",
             "success": true,
-            "message": "Kiali can access these mesh clusters:\n\n- **east** — home cluster where Kiali is running\n- **west**"
+            "message": "Kiali can access these Istio mesh clusters:\n\n- **east** — Home cluster (where Kiali is running)\n- **west** — Remote cluster"
           }
         ],
         "Success": true,
         "Error": "",
         "agentDetails": {
           "tokenEstimate": {
-            "inputTokens": 163,
-            "outputTokens": 46,
-            "totalTokens": 15068,
+            "inputTokens": 164,
+            "outputTokens": 52,
+            "totalTokens": 15123,
             "promptTokens": 33,
-            "messageTokens": 25,
+            "messageTokens": 31,
             "thinkingTokens": 0,
             "toolInputTokens": 1,
-            "toolOutputTokens": 109,
-            "mcpSchemaTokens": 8014,
+            "toolOutputTokens": 110,
+            "mcpSchemaTokens": 8038,
             "promptGetInputTokens": 0,
             "promptGetOutputTokens": 0,
             "resourceInputTokens": 0,
             "resourceOutputTokens": 0,
             "source": "actual",
             "actual": {
-              "inputTokens": 163,
-              "outputTokens": 46,
-              "totalTokens": 15068
+              "inputTokens": 164,
+              "outputTokens": 52,
+              "totalTokens": 15123
             }
           },
           "toolCalls": [
@@ -1861,7 +1800,7 @@
               "title": "kiali_list_mesh_clusters",
               "status": "completed",
               "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
             }
           ],
           "outputSteps": [
@@ -1871,51 +1810,22 @@
                 "title": "kiali_list_mesh_clusters",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
               }
             },
             {
               "type": "message",
-              "content": "Kiali can access these mesh clusters:\n\n- **east** — home cluster where Kiali is running\n- **west**"
+              "content": "Kiali can access these Istio mesh clusters:\n\n- **east** — Home cluster (where Kiali is running)\n- **west** — Remote cluster"
             }
           ]
         }
       },
       "verifyOutput": {
         "Steps": [
-          {
-            "type": "llmJudge",
-            "success": true,
-            "message": "The reference answer identifies the home cluster as “home.” The model response instead says the home cluster is “east,” so it does not contain the reference’s core information and gives a different cluster name.",
-            "usage": {
-              "inputTokens": 2085,
-              "outputTokens": 219,
-              "totalTokens": 2304
-            }
-          },
-          {
-            "type": "llmJudge",
-            "success": true,
-            "message": "The reference answer identifies the cluster name “east.” The model response explicitly lists east as a mesh cluster and identifies it as the home cluster where Kiali is running, so it contains the core referenced information. The additional west cluster is non-contradictory.",
-            "usage": {
-              "inputTokens": 1273,
-              "outputTokens": 86,
-              "totalTokens": 1359
-            }
-          },
-          {
-            "type": "llmJudge",
-            "success": true,
-            "message": "The reference answer identifies west as an accessible mesh cluster. The model response explicitly includes west in its cluster list, so it contains the reference's core information.",
-            "usage": {
-              "inputTokens": 1251,
-              "outputTokens": 64,
-              "totalTokens": 1315
-            }
-          }
+          null
         ],
-        "Success": true,
-        "Error": ""
+        "Success": false,
+        "Error": "failed to call llm judge: failed to run judge agent: failed to run LLM agent: failed to send prompt to acp session: {\"code\":-32603,\"message\":\"Internal error\",\"data\":{\"error\":\"context deadline exceeded\"}}"
       },
       "cleanupOutput": {
         "Steps": [],
@@ -1927,8 +1837,8 @@
       "taskName": "Inspect Remote Cluster Workload",
       "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/resource-remote-workload/resource-remote-workload.yaml",
       "taskPassed": true,
-      "taskOutput": "Kiali can access two mesh clusters: **east** (home) and **west** (remote).\n\nOn **west**, the `reviews-v2` workload in `bookinfo` is a Deployment and is **Healthy**: 1 of 1 desired replicas is available and running, with 100% inbound and outbound traffic success. Its Istio sidecar is ready and proxy configuration is synced.",
-      "taskJudgeReason": "The reference answer identifies the workload as reviews-v2. The model response explicitly names the reviews-v2 workload and provides additional status and cluster details, so it contains the reference information.",
+      "taskOutput": "Kiali can access two mesh clusters: **east** (home cluster) and **west** (remote cluster).\n\nThe **reviews-v2** workload in the **bookinfo** namespace is on **west**. It is a Deployment with **1 of 1 replicas available** and is reported **Healthy**. Its pod is Running, the Istio sidecar is ready and synced, and inbound and outbound traffic success rates are both **100%**.",
+      "taskJudgeReason": "The reference specifies only the workload name, reviews-v2. The response explicitly identifies the reviews-v2 workload, so it contains the reference's core information. The additional namespace, cluster, and health details are not contradictory.",
       "difficulty": "medium",
       "totalRuns": 1,
       "assertionResults": {
@@ -1947,7 +1857,7 @@
         "ToolCalls": [
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:41.777982862Z",
+            "timestamp": "2026-11-09T20:10:33.731748785Z",
             "success": true,
             "name": "kiali_list_mesh_clusters",
             "result": {
@@ -1955,14 +1865,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "[{\"isHome\":true,\"name\":\"east\"},{\"isHome\":false,\"name\":\"west\"}]"
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
                 }
               ],
               "resultType": "complete"
@@ -1997,7 +1907,7 @@
           },
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:43.33160489Z",
+            "timestamp": "2026-11-09T20:10:35.630350786Z",
             "success": true,
             "name": "kiali_get_resource_details",
             "result": {
@@ -2005,14 +1915,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "{\"associated_services\":[\"reviews\"],\"istio\":{\"istio_sidecar\":true,\"is_ambient\":false,\"is_gateway\":false,\"is_waypoint\":false,\"is_ztunnel\":false,\"mode\":\"Sidecar\",\"proxy_version\":\"1.31.3\",\"sync_status\":{\"CDS\":\"Synced\",\"EDS\":\"Synced\",\"LDS\":\"Synced\",\"RDS\":\"Synced\"},\"validations\":[\"ratings\",\"reviews\",\"productpage\",\"details\",\"reviews-v2\"]},\"pods\":[{\"containers\":[\"reviews\"],\"istio_init\":\"Ready\",\"istio_proxy\":\"Ready\",\"name\":\"reviews-v2-6654685b49-82p5x\",\"status\":\"Running\"}],\"status\":{\"overall\":\"Healthy\",\"replicas\":{\"available\":1,\"current\":1,\"desired\":1},\"traffic_success_rate\":{\"inbound\":\"100%\",\"outbound\":\"100%\"}},\"workload\":{\"created_at\":\"2026-11-02T19:25:20Z\",\"kind\":\"Deployment\",\"labels\":{\"app\":\"reviews\",\"pod-template-hash\":\"6654685b49\",\"version\":\"v2\"},\"name\":\"reviews-v2\",\"namespace\":\"bookinfo\",\"service_account\":\"bookinfo-reviews\"}}"
+                  "text": "{\"associated_services\":[\"reviews\"],\"istio\":{\"istio_sidecar\":true,\"is_ambient\":false,\"is_gateway\":false,\"is_waypoint\":false,\"is_ztunnel\":false,\"mode\":\"Sidecar\",\"proxy_version\":\"1.31.3\",\"sync_status\":{\"CDS\":\"Synced\",\"EDS\":\"Synced\",\"LDS\":\"Synced\",\"RDS\":\"Synced\"},\"validations\":[\"productpage\",\"reviews-v2\",\"details\",\"ratings\",\"reviews\"]},\"pods\":[{\"containers\":[\"reviews\"],\"istio_init\":\"Ready\",\"istio_proxy\":\"Ready\",\"name\":\"reviews-v2-6654685b49-7kcs4\",\"status\":\"Running\"}],\"status\":{\"overall\":\"Healthy\",\"replicas\":{\"available\":1,\"current\":1,\"desired\":1},\"traffic_success_rate\":{\"inbound\":\"100%\",\"outbound\":\"100%\"}},\"workload\":{\"created_at\":\"2026-11-09T19:44:11Z\",\"kind\":\"Deployment\",\"labels\":{\"app\":\"reviews\",\"pod-template-hash\":\"6654685b49\",\"version\":\"v2\"},\"name\":\"reviews-v2\",\"namespace\":\"bookinfo\",\"service_account\":\"bookinfo-reviews\"}}"
                 }
               ],
               "resultType": "complete"
@@ -2055,30 +1965,30 @@
         "PromptGets": null
       },
       "tokenEstimate": {
-        "inputTokens": 565,
-        "outputTokens": 143,
-        "totalTokens": 23169,
+        "inputTokens": 567,
+        "outputTokens": 154,
+        "totalTokens": 23255,
         "promptTokens": 50,
-        "messageTokens": 80,
+        "messageTokens": 92,
         "thinkingTokens": 0,
         "toolInputTokens": 26,
-        "toolOutputTokens": 637,
-        "mcpSchemaTokens": 8014,
+        "toolOutputTokens": 639,
+        "mcpSchemaTokens": 8038,
         "promptGetInputTokens": 0,
         "promptGetOutputTokens": 0,
         "resourceInputTokens": 0,
         "resourceOutputTokens": 0,
         "source": "actual",
         "actual": {
-          "inputTokens": 565,
-          "outputTokens": 143,
-          "totalTokens": 23169
+          "inputTokens": 567,
+          "outputTokens": 154,
+          "totalTokens": 23255
         }
       },
       "judgeTokenUsage": {
-        "inputTokens": 2807,
-        "outputTokens": 137,
-        "totalTokens": 2944
+        "inputTokens": 2855,
+        "outputTokens": 141,
+        "totalTokens": 2996
       },
       "setupOutput": {
         "Steps": [],
@@ -2100,31 +2010,31 @@
           {
             "type": "message",
             "success": true,
-            "message": "Kiali can access two mesh clusters: **east** (home) and **west** (remote).\n\nOn **west**, the `reviews-v2` workload in `bookinfo` is a Deployment and is **Healthy**: 1 of 1 desired replicas is available and running, with 100% inbound and outbound traffic success. Its Istio sidecar is ready and proxy configuration is synced."
+            "message": "Kiali can access two mesh clusters: **east** (home cluster) and **west** (remote cluster).\n\nThe **reviews-v2** workload in the **bookinfo** namespace is on **west**. It is a Deployment with **1 of 1 replicas available** and is reported **Healthy**. Its pod is Running, the Istio sidecar is ready and synced, and inbound and outbound traffic success rates are both **100%**."
           }
         ],
         "Success": true,
         "Error": "",
         "agentDetails": {
           "tokenEstimate": {
-            "inputTokens": 565,
-            "outputTokens": 143,
-            "totalTokens": 23169,
+            "inputTokens": 567,
+            "outputTokens": 154,
+            "totalTokens": 23255,
             "promptTokens": 50,
-            "messageTokens": 80,
+            "messageTokens": 92,
             "thinkingTokens": 0,
             "toolInputTokens": 26,
-            "toolOutputTokens": 637,
-            "mcpSchemaTokens": 8014,
+            "toolOutputTokens": 639,
+            "mcpSchemaTokens": 8038,
             "promptGetInputTokens": 0,
             "promptGetOutputTokens": 0,
             "resourceInputTokens": 0,
             "resourceOutputTokens": 0,
             "source": "actual",
             "actual": {
-              "inputTokens": 565,
-              "outputTokens": 143,
-              "totalTokens": 23169
+              "inputTokens": 567,
+              "outputTokens": 154,
+              "totalTokens": 23255
             }
           },
           "toolCalls": [
@@ -2132,7 +2042,7 @@
               "title": "kiali_list_mesh_clusters",
               "status": "completed",
               "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
             },
             {
               "title": "kiali_get_resource_details",
@@ -2143,7 +2053,7 @@
                 "resourceName": "reviews-v2",
                 "resourceType": "workload"
               },
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"associated_services\\\":[\\\"reviews\\\"],\\\"istio\\\":{\\\"istio_sidecar\\\":true,\\\"is_ambient\\\":false,\\\"is_gateway\\\":false,\\\"is_waypoint\\\":false,\\\"is_ztunnel\\\":false,\\\"mode\\\":\\\"Sidecar\\\",\\\"proxy_version\\\":\\\"1.31.3\\\",\\\"sync_status\\\":{\\\"CDS\\\":\\\"Synced\\\",\\\"EDS\\\":\\\"Synced\\\",\\\"LDS\\\":\\\"Synced\\\",\\\"RDS\\\":\\\"Synced\\\"},\\\"validations\\\":[\\\"ratings\\\",\\\"reviews\\\",\\\"productpage\\\",\\\"details\\\",\\\"reviews-v2\\\"]},\\\"pods\\\":[{\\\"containers\\\":[\\\"reviews\\\"],\\\"istio_init\\\":\\\"Ready\\\",\\\"istio_proxy\\\":\\\"Ready\\\",\\\"name\\\":\\\"reviews-v2-6654685b49-82p5x\\\",\\\"status\\\":\\\"Running\\\"}],\\\"status\\\":{\\\"overall\\\":\\\"Healthy\\\",\\\"replicas\\\":{\\\"available\\\":1,\\\"current\\\":1,\\\"desired\\\":1},\\\"traffic_success_rate\\\":{\\\"inbound\\\":\\\"100%\\\",\\\"outbound\\\":\\\"100%\\\"}},\\\"workload\\\":{\\\"created_at\\\":\\\"2026-11-02T19:25:20Z\\\",\\\"kind\\\":\\\"Deployment\\\",\\\"labels\\\":{\\\"app\\\":\\\"reviews\\\",\\\"pod-template-hash\\\":\\\"6654685b49\\\",\\\"version\\\":\\\"v2\\\"},\\\"name\\\":\\\"reviews-v2\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"service_account\\\":\\\"bookinfo-reviews\\\"}}\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"associated_services\\\":[\\\"reviews\\\"],\\\"istio\\\":{\\\"istio_sidecar\\\":true,\\\"is_ambient\\\":false,\\\"is_gateway\\\":false,\\\"is_waypoint\\\":false,\\\"is_ztunnel\\\":false,\\\"mode\\\":\\\"Sidecar\\\",\\\"proxy_version\\\":\\\"1.31.3\\\",\\\"sync_status\\\":{\\\"CDS\\\":\\\"Synced\\\",\\\"EDS\\\":\\\"Synced\\\",\\\"LDS\\\":\\\"Synced\\\",\\\"RDS\\\":\\\"Synced\\\"},\\\"validations\\\":[\\\"productpage\\\",\\\"reviews-v2\\\",\\\"details\\\",\\\"ratings\\\",\\\"reviews\\\"]},\\\"pods\\\":[{\\\"containers\\\":[\\\"reviews\\\"],\\\"istio_init\\\":\\\"Ready\\\",\\\"istio_proxy\\\":\\\"Ready\\\",\\\"name\\\":\\\"reviews-v2-6654685b49-7kcs4\\\",\\\"status\\\":\\\"Running\\\"}],\\\"status\\\":{\\\"overall\\\":\\\"Healthy\\\",\\\"replicas\\\":{\\\"available\\\":1,\\\"current\\\":1,\\\"desired\\\":1},\\\"traffic_success_rate\\\":{\\\"inbound\\\":\\\"100%\\\",\\\"outbound\\\":\\\"100%\\\"}},\\\"workload\\\":{\\\"created_at\\\":\\\"2026-11-09T19:44:11Z\\\",\\\"kind\\\":\\\"Deployment\\\",\\\"labels\\\":{\\\"app\\\":\\\"reviews\\\",\\\"pod-template-hash\\\":\\\"6654685b49\\\",\\\"version\\\":\\\"v2\\\"},\\\"name\\\":\\\"reviews-v2\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"service_account\\\":\\\"bookinfo-reviews\\\"}}\"}],\"resultType\":\"complete\"}"
             }
           ],
           "outputSteps": [
@@ -2153,7 +2063,7 @@
                 "title": "kiali_list_mesh_clusters",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
               }
             },
             {
@@ -2167,12 +2077,12 @@
                   "resourceName": "reviews-v2",
                   "resourceType": "workload"
                 },
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"associated_services\\\":[\\\"reviews\\\"],\\\"istio\\\":{\\\"istio_sidecar\\\":true,\\\"is_ambient\\\":false,\\\"is_gateway\\\":false,\\\"is_waypoint\\\":false,\\\"is_ztunnel\\\":false,\\\"mode\\\":\\\"Sidecar\\\",\\\"proxy_version\\\":\\\"1.31.3\\\",\\\"sync_status\\\":{\\\"CDS\\\":\\\"Synced\\\",\\\"EDS\\\":\\\"Synced\\\",\\\"LDS\\\":\\\"Synced\\\",\\\"RDS\\\":\\\"Synced\\\"},\\\"validations\\\":[\\\"ratings\\\",\\\"reviews\\\",\\\"productpage\\\",\\\"details\\\",\\\"reviews-v2\\\"]},\\\"pods\\\":[{\\\"containers\\\":[\\\"reviews\\\"],\\\"istio_init\\\":\\\"Ready\\\",\\\"istio_proxy\\\":\\\"Ready\\\",\\\"name\\\":\\\"reviews-v2-6654685b49-82p5x\\\",\\\"status\\\":\\\"Running\\\"}],\\\"status\\\":{\\\"overall\\\":\\\"Healthy\\\",\\\"replicas\\\":{\\\"available\\\":1,\\\"current\\\":1,\\\"desired\\\":1},\\\"traffic_success_rate\\\":{\\\"inbound\\\":\\\"100%\\\",\\\"outbound\\\":\\\"100%\\\"}},\\\"workload\\\":{\\\"created_at\\\":\\\"2026-11-02T19:25:20Z\\\",\\\"kind\\\":\\\"Deployment\\\",\\\"labels\\\":{\\\"app\\\":\\\"reviews\\\",\\\"pod-template-hash\\\":\\\"6654685b49\\\",\\\"version\\\":\\\"v2\\\"},\\\"name\\\":\\\"reviews-v2\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"service_account\\\":\\\"bookinfo-reviews\\\"}}\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"associated_services\\\":[\\\"reviews\\\"],\\\"istio\\\":{\\\"istio_sidecar\\\":true,\\\"is_ambient\\\":false,\\\"is_gateway\\\":false,\\\"is_waypoint\\\":false,\\\"is_ztunnel\\\":false,\\\"mode\\\":\\\"Sidecar\\\",\\\"proxy_version\\\":\\\"1.31.3\\\",\\\"sync_status\\\":{\\\"CDS\\\":\\\"Synced\\\",\\\"EDS\\\":\\\"Synced\\\",\\\"LDS\\\":\\\"Synced\\\",\\\"RDS\\\":\\\"Synced\\\"},\\\"validations\\\":[\\\"productpage\\\",\\\"reviews-v2\\\",\\\"details\\\",\\\"ratings\\\",\\\"reviews\\\"]},\\\"pods\\\":[{\\\"containers\\\":[\\\"reviews\\\"],\\\"istio_init\\\":\\\"Ready\\\",\\\"istio_proxy\\\":\\\"Ready\\\",\\\"name\\\":\\\"reviews-v2-6654685b49-7kcs4\\\",\\\"status\\\":\\\"Running\\\"}],\\\"status\\\":{\\\"overall\\\":\\\"Healthy\\\",\\\"replicas\\\":{\\\"available\\\":1,\\\"current\\\":1,\\\"desired\\\":1},\\\"traffic_success_rate\\\":{\\\"inbound\\\":\\\"100%\\\",\\\"outbound\\\":\\\"100%\\\"}},\\\"workload\\\":{\\\"created_at\\\":\\\"2026-11-09T19:44:11Z\\\",\\\"kind\\\":\\\"Deployment\\\",\\\"labels\\\":{\\\"app\\\":\\\"reviews\\\",\\\"pod-template-hash\\\":\\\"6654685b49\\\",\\\"version\\\":\\\"v2\\\"},\\\"name\\\":\\\"reviews-v2\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"service_account\\\":\\\"bookinfo-reviews\\\"}}\"}],\"resultType\":\"complete\"}"
               }
             },
             {
               "type": "message",
-              "content": "Kiali can access two mesh clusters: **east** (home) and **west** (remote).\n\nOn **west**, the `reviews-v2` workload in `bookinfo` is a Deployment and is **Healthy**: 1 of 1 desired replicas is available and running, with 100% inbound and outbound traffic success. Its Istio sidecar is ready and proxy configuration is synced."
+              "content": "Kiali can access two mesh clusters: **east** (home cluster) and **west** (remote cluster).\n\nThe **reviews-v2** workload in the **bookinfo** namespace is on **west**. It is a Deployment with **1 of 1 replicas available** and is reported **Healthy**. Its pod is Running, the Istio sidecar is ready and synced, and inbound and outbound traffic success rates are both **100%**."
             }
           ]
         }
@@ -2182,21 +2092,21 @@
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer identifies the workload as reviews-v2. The model response explicitly names the reviews-v2 workload and provides additional status and cluster details, so it contains the reference information.",
+            "message": "The reference specifies only the workload name, reviews-v2. The response explicitly identifies the reviews-v2 workload, so it contains the reference's core information. The additional namespace, cluster, and health details are not contradictory.",
             "usage": {
-              "inputTokens": 1406,
-              "outputTokens": 69,
-              "totalTokens": 1475
+              "inputTokens": 1436,
+              "outputTokens": 77,
+              "totalTokens": 1513
             }
           },
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer identifies the cluster as west. The model response explicitly says the remote cluster is west and places reviews-v2 there, so it contains the reference's core information.",
+            "message": "The reference answer identifies the cluster as west. The model response explicitly states that the reviews-v2 workload is on west, thereby containing the core information required.",
             "usage": {
-              "inputTokens": 1401,
-              "outputTokens": 68,
-              "totalTokens": 1469
+              "inputTokens": 1419,
+              "outputTokens": 64,
+              "totalTokens": 1483
             }
           }
         ],
@@ -2213,8 +2123,8 @@
       "taskName": "Visualize West Cluster Traffic",
       "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/topology-west-cluster-graph/topology-west-cluster-graph.yaml",
       "taskPassed": true,
-      "taskOutput": "## Bookinfo workload traffic graph — **west** mesh cluster\n\nKiali’s home cluster is **east**; this graph is from the remote cluster **west**.\n\n```mermaid\nflowchart LR\n  ingress[\"istio-ingressgateway (latest)\"]\n  product[\"productpage (v1)\"]\n  details[\"details (v1)\"]\n  reviews1[\"reviews (v1)\"]\n  reviews2[\"reviews (v2)\"]\n  reviews3[\"reviews (v3)\"]\n  ratings[\"ratings (v1)\"]\n\n  ingress --\u003e|\"13,875 throughput · 50 ms\"| product\n  product --\u003e|\"955 throughput · 5 ms\"| details\n  product --\u003e|\"363 throughput · 10 ms\"| reviews1\n  product --\u003e|\"427 throughput · 36 ms\"| reviews2\n  product --\u003e|\"431 throughput · 39 ms\"| reviews3\n  reviews2 --\u003e|\"286 throughput · 2 ms\"| ratings\n  reviews3 --\u003e|\"290 throughput · 3 ms\"| ratings\n```\n\nAll shown edges are healthy HTTP traffic with mTLS enabled. The graph reports **zero error rate**. Overall namespace health is **HEALTHY**, with 4 of 6 workloads healthy and 2 not ready.",
-      "taskJudgeReason": "The reference answer is “west.” The model response explicitly identifies the graph as representing the remote mesh cluster west, so it contains the reference’s core information.",
+      "taskOutput": "## Bookinfo workload traffic graph\n\n**Mesh cluster: `west`** — the remote cluster (`east` is Kiali’s home cluster).\n\n```text\nistio-ingressgateway (latest) ──13,892──▶ productpage (v1)\n                                          ├──955──▶ details (v1)\n                                          ├──367──▶ reviews (v1)\n                                          ├──411──▶ reviews (v2)\n                                          └──431──▶ reviews (v3)\n\nreviews (v2) ──283──▶ ratings (v1)\nreviews (v3) ──292──▶ ratings (v1)\n```\n\nAll shown edges are healthy HTTP traffic with mTLS enabled. Reported response times range from **1–24 ms**. The namespace health summary is **HEALTHY**, with **4 of 6 workloads healthy** and **2 not ready**; the graph lists reviews versions v1, v2, and v3. Throughput figures are as reported by Kiali for its 10-minute rate interval.",
+      "taskJudgeReason": "The reference answer identifies the mesh cluster as “west.” The model response explicitly states “Mesh cluster: west,” so it contains the complete core information required by the CONTAINS criterion.",
       "difficulty": "medium",
       "totalRuns": 1,
       "assertionResults": {
@@ -2233,7 +2143,7 @@
         "ToolCalls": [
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:51.295528237Z",
+            "timestamp": "2026-11-09T20:10:44.197168968Z",
             "success": true,
             "name": "kiali_list_mesh_clusters",
             "result": {
@@ -2241,14 +2151,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "[{\"isHome\":true,\"name\":\"east\"},{\"isHome\":false,\"name\":\"west\"}]"
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
                 }
               ],
               "resultType": "complete"
@@ -2283,7 +2193,7 @@
           },
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:36:52.425587315Z",
+            "timestamp": "2026-11-09T20:10:45.548303689Z",
             "success": true,
             "name": "kiali_get_mesh_traffic_graph",
             "result": {
@@ -2291,14 +2201,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "{\"graphType\":\"workload\",\"health\":{\"overallStatus\":\"HEALTHY\",\"availability\":66.66666666666666,\"totalErrorRate\":0,\"namespaceCount\":1,\"entityCounts\":{\"apps\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"services\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"workloads\":{\"total\":6,\"healthy\":4,\"degraded\":0,\"unhealthy\":0,\"notReady\":2}},\"namespaceSummary\":{\"bookinfo\":{\"status\":\"HEALTHY\",\"availability\":66.66666666666666,\"errorRate\":0,\"apps\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"services\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"workloads\":{\"total\":6,\"healthy\":4,\"degraded\":0,\"unhealthy\":0,\"notReady\":2}}},\"timestamp\":\"2026-11-02T19:36:52Z\",\"rateInterval\":\"10m\"},\"namespaces\":[\"bookinfo\"],\"nodes\":[{\"name\":\"details\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"productpage\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"istio-ingressgateway\",\"type\":\"workload\",\"version\":\"latest\"},{\"name\":\"ratings\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v2\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v3\"}],\"traffic\":[{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":2,\"source\":\"reviews (v2)\",\"target\":\"ratings (v1)\",\"throughput\":\"286\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":36,\"source\":\"productpage (v1)\",\"target\":\"reviews (v2)\",\"throughput\":\"427\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":5,\"source\":\"productpage (v1)\",\"target\":\"details (v1)\",\"throughput\":\"955\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":10,\"source\":\"productpage (v1)\",\"target\":\"reviews (v1)\",\"throughput\":\"363\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":39,\"source\":\"productpage (v1)\",\"target\":\"reviews (v3)\",\"throughput\":\"431\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":50,\"source\":\"istio-ingressgateway (latest)\",\"target\":\"productpage (v1)\",\"throughput\":\"13875\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":3,\"source\":\"reviews (v3)\",\"target\":\"ratings (v1)\",\"throughput\":\"290\"}]}"
+                  "text": "{\"graphType\":\"workload\",\"health\":{\"overallStatus\":\"HEALTHY\",\"availability\":66.66666666666666,\"totalErrorRate\":0,\"namespaceCount\":1,\"entityCounts\":{\"apps\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"services\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"workloads\":{\"total\":6,\"healthy\":4,\"degraded\":0,\"unhealthy\":0,\"notReady\":2}},\"namespaceSummary\":{\"bookinfo\":{\"status\":\"HEALTHY\",\"availability\":66.66666666666666,\"errorRate\":0,\"apps\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"services\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"workloads\":{\"total\":6,\"healthy\":4,\"degraded\":0,\"unhealthy\":0,\"notReady\":2}}},\"timestamp\":\"2026-11-09T20:10:45Z\",\"rateInterval\":\"10m\"},\"namespaces\":[\"bookinfo\"],\"nodes\":[{\"name\":\"details\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"productpage\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"istio-ingressgateway\",\"type\":\"workload\",\"version\":\"latest\"},{\"name\":\"ratings\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v2\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v3\"}],\"traffic\":[{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":1,\"source\":\"reviews (v2)\",\"target\":\"ratings (v1)\",\"throughput\":\"283\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":10,\"source\":\"productpage (v1)\",\"target\":\"reviews (v2)\",\"throughput\":\"411\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":2,\"source\":\"productpage (v1)\",\"target\":\"details (v1)\",\"throughput\":\"955\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":5,\"source\":\"productpage (v1)\",\"target\":\"reviews (v1)\",\"throughput\":\"367\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":10,\"source\":\"productpage (v1)\",\"target\":\"reviews (v3)\",\"throughput\":\"431\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":24,\"source\":\"istio-ingressgateway (latest)\",\"target\":\"productpage (v1)\",\"throughput\":\"13892\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":1,\"source\":\"reviews (v3)\",\"target\":\"ratings (v1)\",\"throughput\":\"292\"}]}"
                 }
               ],
               "resultType": "complete"
@@ -2340,30 +2250,30 @@
         "PromptGets": null
       },
       "tokenEstimate": {
-        "inputTokens": 992,
-        "outputTokens": 413,
-        "totalTokens": 23846,
+        "inputTokens": 994,
+        "outputTokens": 276,
+        "totalTokens": 23784,
         "promptTokens": 40,
-        "messageTokens": 257,
+        "messageTokens": 220,
         "thinkingTokens": 0,
         "toolInputTokens": 19,
-        "toolOutputTokens": 1406,
-        "mcpSchemaTokens": 8014,
+        "toolOutputTokens": 1408,
+        "mcpSchemaTokens": 8038,
         "promptGetInputTokens": 0,
         "promptGetOutputTokens": 0,
         "resourceInputTokens": 0,
         "resourceOutputTokens": 0,
         "source": "actual",
         "actual": {
-          "inputTokens": 992,
-          "outputTokens": 413,
-          "totalTokens": 23846
+          "inputTokens": 994,
+          "outputTokens": 276,
+          "totalTokens": 23784
         }
       },
       "judgeTokenUsage": {
-        "inputTokens": 3469,
-        "outputTokens": 141,
-        "totalTokens": 3610
+        "inputTokens": 3322,
+        "outputTokens": 142,
+        "totalTokens": 3464
       },
       "setupOutput": {
         "Steps": [],
@@ -2385,31 +2295,31 @@
           {
             "type": "message",
             "success": true,
-            "message": "## Bookinfo workload traffic graph — **west** mesh cluster\n\nKiali’s home cluster is **east**; this graph is from the remote cluster **west**.\n\n```mermaid\nflowchart LR\n  ingress[\"istio-ingressgateway (latest)\"]\n  product[\"productpage (v1)\"]\n  details[\"details (v1)\"]\n  reviews1[\"reviews (v1)\"]\n  reviews2[\"reviews (v2)\"]\n  reviews3[\"reviews (v3)\"]\n  ratings[\"ratings (v1)\"]\n\n  ingress --\u003e|\"13,875 throughput · 50 ms\"| product\n  product --\u003e|\"955 throughput · 5 ms\"| details\n  product --\u003e|\"363 throughput · 10 ms\"| reviews1\n  product --\u003e|\"427 throughput · 36 ms\"| reviews2\n  product --\u003e|\"431 throughput · 39 ms\"| reviews3\n  reviews2 --\u003e|\"286 throughput · 2 ms\"| ratings\n  reviews3 --\u003e|\"290 throughput · 3 ms\"| ratings\n```\n\nAll shown edges are healthy HTTP traffic with mTLS enabled. The graph reports **zero error rate**. Overall namespace health is **HEALTHY**, with 4 of 6 workloads healthy and 2 not ready."
+            "message": "## Bookinfo workload traffic graph\n\n**Mesh cluster: `west`** — the remote cluster (`east` is Kiali’s home cluster).\n\n```text\nistio-ingressgateway (latest) ──13,892──▶ productpage (v1)\n                                          ├──955──▶ details (v1)\n                                          ├──367──▶ reviews (v1)\n                                          ├──411──▶ reviews (v2)\n                                          └──431──▶ reviews (v3)\n\nreviews (v2) ──283──▶ ratings (v1)\nreviews (v3) ──292──▶ ratings (v1)\n```\n\nAll shown edges are healthy HTTP traffic with mTLS enabled. Reported response times range from **1–24 ms**. The namespace health summary is **HEALTHY**, with **4 of 6 workloads healthy** and **2 not ready**; the graph lists reviews versions v1, v2, and v3. Throughput figures are as reported by Kiali for its 10-minute rate interval."
           }
         ],
         "Success": true,
         "Error": "",
         "agentDetails": {
           "tokenEstimate": {
-            "inputTokens": 992,
-            "outputTokens": 413,
-            "totalTokens": 23846,
+            "inputTokens": 994,
+            "outputTokens": 276,
+            "totalTokens": 23784,
             "promptTokens": 40,
-            "messageTokens": 257,
+            "messageTokens": 220,
             "thinkingTokens": 0,
             "toolInputTokens": 19,
-            "toolOutputTokens": 1406,
-            "mcpSchemaTokens": 8014,
+            "toolOutputTokens": 1408,
+            "mcpSchemaTokens": 8038,
             "promptGetInputTokens": 0,
             "promptGetOutputTokens": 0,
             "resourceInputTokens": 0,
             "resourceOutputTokens": 0,
             "source": "actual",
             "actual": {
-              "inputTokens": 992,
-              "outputTokens": 413,
-              "totalTokens": 23846
+              "inputTokens": 994,
+              "outputTokens": 276,
+              "totalTokens": 23784
             }
           },
           "toolCalls": [
@@ -2417,7 +2327,7 @@
               "title": "kiali_list_mesh_clusters",
               "status": "completed",
               "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
             },
             {
               "title": "kiali_get_mesh_traffic_graph",
@@ -2427,7 +2337,7 @@
                 "meshCluster": "west",
                 "namespaces": "bookinfo"
               },
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"graphType\\\":\\\"workload\\\",\\\"health\\\":{\\\"overallStatus\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"totalErrorRate\\\":0,\\\"namespaceCount\\\":1,\\\"entityCounts\\\":{\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}},\\\"namespaceSummary\\\":{\\\"bookinfo\\\":{\\\"status\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"errorRate\\\":0,\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}}},\\\"timestamp\\\":\\\"2026-11-02T19:36:52Z\\\",\\\"rateInterval\\\":\\\"10m\\\"},\\\"namespaces\\\":[\\\"bookinfo\\\"],\\\"nodes\\\":[{\\\"name\\\":\\\"details\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"productpage\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"istio-ingressgateway\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"latest\\\"},{\\\"name\\\":\\\"ratings\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v2\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v3\\\"}],\\\"traffic\\\":[{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":2,\\\"source\\\":\\\"reviews (v2)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"286\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":36,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v2)\\\",\\\"throughput\\\":\\\"427\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":5,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"details (v1)\\\",\\\"throughput\\\":\\\"955\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v1)\\\",\\\"throughput\\\":\\\"363\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":39,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v3)\\\",\\\"throughput\\\":\\\"431\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":50,\\\"source\\\":\\\"istio-ingressgateway (latest)\\\",\\\"target\\\":\\\"productpage (v1)\\\",\\\"throughput\\\":\\\"13875\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":3,\\\"source\\\":\\\"reviews (v3)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"290\\\"}]}\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"graphType\\\":\\\"workload\\\",\\\"health\\\":{\\\"overallStatus\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"totalErrorRate\\\":0,\\\"namespaceCount\\\":1,\\\"entityCounts\\\":{\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}},\\\"namespaceSummary\\\":{\\\"bookinfo\\\":{\\\"status\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"errorRate\\\":0,\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}}},\\\"timestamp\\\":\\\"2026-11-09T20:10:45Z\\\",\\\"rateInterval\\\":\\\"10m\\\"},\\\"namespaces\\\":[\\\"bookinfo\\\"],\\\"nodes\\\":[{\\\"name\\\":\\\"details\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"productpage\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"istio-ingressgateway\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"latest\\\"},{\\\"name\\\":\\\"ratings\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v2\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v3\\\"}],\\\"traffic\\\":[{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":1,\\\"source\\\":\\\"reviews (v2)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"283\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v2)\\\",\\\"throughput\\\":\\\"411\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":2,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"details (v1)\\\",\\\"throughput\\\":\\\"955\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":5,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v1)\\\",\\\"throughput\\\":\\\"367\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v3)\\\",\\\"throughput\\\":\\\"431\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":24,\\\"source\\\":\\\"istio-ingressgateway (latest)\\\",\\\"target\\\":\\\"productpage (v1)\\\",\\\"throughput\\\":\\\"13892\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":1,\\\"source\\\":\\\"reviews (v3)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"292\\\"}]}\"}],\"resultType\":\"complete\"}"
             }
           ],
           "outputSteps": [
@@ -2437,7 +2347,7 @@
                 "title": "kiali_list_mesh_clusters",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
               }
             },
             {
@@ -2450,12 +2360,12 @@
                   "meshCluster": "west",
                   "namespaces": "bookinfo"
                 },
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"graphType\\\":\\\"workload\\\",\\\"health\\\":{\\\"overallStatus\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"totalErrorRate\\\":0,\\\"namespaceCount\\\":1,\\\"entityCounts\\\":{\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}},\\\"namespaceSummary\\\":{\\\"bookinfo\\\":{\\\"status\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"errorRate\\\":0,\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}}},\\\"timestamp\\\":\\\"2026-11-02T19:36:52Z\\\",\\\"rateInterval\\\":\\\"10m\\\"},\\\"namespaces\\\":[\\\"bookinfo\\\"],\\\"nodes\\\":[{\\\"name\\\":\\\"details\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"productpage\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"istio-ingressgateway\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"latest\\\"},{\\\"name\\\":\\\"ratings\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v2\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v3\\\"}],\\\"traffic\\\":[{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":2,\\\"source\\\":\\\"reviews (v2)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"286\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":36,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v2)\\\",\\\"throughput\\\":\\\"427\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":5,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"details (v1)\\\",\\\"throughput\\\":\\\"955\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v1)\\\",\\\"throughput\\\":\\\"363\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":39,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v3)\\\",\\\"throughput\\\":\\\"431\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":50,\\\"source\\\":\\\"istio-ingressgateway (latest)\\\",\\\"target\\\":\\\"productpage (v1)\\\",\\\"throughput\\\":\\\"13875\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":3,\\\"source\\\":\\\"reviews (v3)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"290\\\"}]}\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"graphType\\\":\\\"workload\\\",\\\"health\\\":{\\\"overallStatus\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"totalErrorRate\\\":0,\\\"namespaceCount\\\":1,\\\"entityCounts\\\":{\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}},\\\"namespaceSummary\\\":{\\\"bookinfo\\\":{\\\"status\\\":\\\"HEALTHY\\\",\\\"availability\\\":66.66666666666666,\\\"errorRate\\\":0,\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":4,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":2}}},\\\"timestamp\\\":\\\"2026-11-09T20:10:45Z\\\",\\\"rateInterval\\\":\\\"10m\\\"},\\\"namespaces\\\":[\\\"bookinfo\\\"],\\\"nodes\\\":[{\\\"name\\\":\\\"details\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"productpage\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"istio-ingressgateway\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"latest\\\"},{\\\"name\\\":\\\"ratings\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v2\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v3\\\"}],\\\"traffic\\\":[{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":1,\\\"source\\\":\\\"reviews (v2)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"283\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v2)\\\",\\\"throughput\\\":\\\"411\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":2,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"details (v1)\\\",\\\"throughput\\\":\\\"955\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":5,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v1)\\\",\\\"throughput\\\":\\\"367\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v3)\\\",\\\"throughput\\\":\\\"431\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":24,\\\"source\\\":\\\"istio-ingressgateway (latest)\\\",\\\"target\\\":\\\"productpage (v1)\\\",\\\"throughput\\\":\\\"13892\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":1,\\\"source\\\":\\\"reviews (v3)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"292\\\"}]}\"}],\"resultType\":\"complete\"}"
               }
             },
             {
               "type": "message",
-              "content": "## Bookinfo workload traffic graph — **west** mesh cluster\n\nKiali’s home cluster is **east**; this graph is from the remote cluster **west**.\n\n```mermaid\nflowchart LR\n  ingress[\"istio-ingressgateway (latest)\"]\n  product[\"productpage (v1)\"]\n  details[\"details (v1)\"]\n  reviews1[\"reviews (v1)\"]\n  reviews2[\"reviews (v2)\"]\n  reviews3[\"reviews (v3)\"]\n  ratings[\"ratings (v1)\"]\n\n  ingress --\u003e|\"13,875 throughput · 50 ms\"| product\n  product --\u003e|\"955 throughput · 5 ms\"| details\n  product --\u003e|\"363 throughput · 10 ms\"| reviews1\n  product --\u003e|\"427 throughput · 36 ms\"| reviews2\n  product --\u003e|\"431 throughput · 39 ms\"| reviews3\n  reviews2 --\u003e|\"286 throughput · 2 ms\"| ratings\n  reviews3 --\u003e|\"290 throughput · 3 ms\"| ratings\n```\n\nAll shown edges are healthy HTTP traffic with mTLS enabled. The graph reports **zero error rate**. Overall namespace health is **HEALTHY**, with 4 of 6 workloads healthy and 2 not ready."
+              "content": "## Bookinfo workload traffic graph\n\n**Mesh cluster: `west`** — the remote cluster (`east` is Kiali’s home cluster).\n\n```text\nistio-ingressgateway (latest) ──13,892──▶ productpage (v1)\n                                          ├──955──▶ details (v1)\n                                          ├──367──▶ reviews (v1)\n                                          ├──411──▶ reviews (v2)\n                                          └──431──▶ reviews (v3)\n\nreviews (v2) ──283──▶ ratings (v1)\nreviews (v3) ──292──▶ ratings (v1)\n```\n\nAll shown edges are healthy HTTP traffic with mTLS enabled. Reported response times range from **1–24 ms**. The namespace health summary is **HEALTHY**, with **4 of 6 workloads healthy** and **2 not ready**; the graph lists reviews versions v1, v2, and v3. Throughput figures are as reported by Kiali for its 10-minute rate interval."
             }
           ]
         }
@@ -2465,21 +2375,21 @@
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer is “west.” The model response explicitly identifies the graph as representing the remote mesh cluster west, so it contains the reference’s core information.",
+            "message": "The reference answer identifies the mesh cluster as “west.” The model response explicitly states “Mesh cluster: west,” so it contains the complete core information required by the CONTAINS criterion.",
             "usage": {
-              "inputTokens": 1727,
-              "outputTokens": 64,
-              "totalTokens": 1791
+              "inputTokens": 1659,
+              "outputTokens": 70,
+              "totalTokens": 1729
             }
           },
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer is simply “bookinfo,” identifying the namespace. The model response explicitly labels the graph as “Bookinfo workload traffic graph” and refers to the Bookinfo namespace, so it contains the required core information.",
+            "message": "The reference answer is “bookinfo,” and the model response explicitly identifies the graph as “Bookinfo” and labels it a Bookinfo workload traffic graph. It therefore contains the core reference information.",
             "usage": {
-              "inputTokens": 1742,
-              "outputTokens": 77,
-              "totalTokens": 1819
+              "inputTokens": 1663,
+              "outputTokens": 72,
+              "totalTokens": 1735
             }
           }
         ],
@@ -2495,10 +2405,9 @@
     {
       "taskName": "List Remote Cluster Traces",
       "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/traces-west-reviews/traces-west-reviews.yaml",
-      "taskPassed": false,
-      "taskOutput": "The traces are from the **west** mesh cluster, the remote cluster (Kiali’s home cluster is east).\n\nKiali found **10 traces** for `reviews` in `bookinfo`. All are marked as having no errors. The slowest reported service spans are at `istio-ingressgateway.istio-system`, reaching **22.4 ms**; none stand out as unusually slow in this batch.",
-      "taskError": "one or more verification steps failed",
-      "taskJudgeReason": "The reference answer is simply “reviews,” identifying the requested service. The model response does mention reviews, but then adds a specific cluster, count, and trace findings that are not supported by the reference; under the stated criterion the relevant meaning is the service name, which is present. However, extra non-contradictory information is allowed, so this should pass.",
+      "taskPassed": true,
+      "taskOutput": "Found **10 recent traces** for `reviews` in `bookinfo` on mesh cluster **west** (Kiali’s home cluster is east). Their average duration was about **17.3 ms**.\n\nAll 10 were marked as having no errors. The reported slowest service in each trace was `istio-ingressgateway.istio-system`, at roughly **13.3–20.0 ms**; no notably slow or error spans were indicated.",
+      "taskJudgeReason": "The reference answer's entire core information is simply “reviews.” The model response explicitly identifies the service as `reviews`, so it contains the reference meaning. The additional trace count, cluster, and span details do not contradict that information.",
       "difficulty": "medium",
       "totalRuns": 1,
       "assertionResults": {
@@ -2517,7 +2426,7 @@
         "ToolCalls": [
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:37:03.290653739Z",
+            "timestamp": "2026-11-09T20:10:55.21653355Z",
             "success": true,
             "name": "kiali_list_mesh_clusters",
             "result": {
@@ -2525,14 +2434,14 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "[{\"isHome\":true,\"name\":\"east\"},{\"isHome\":false,\"name\":\"west\"}]"
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
                 }
               ],
               "resultType": "complete"
@@ -2567,7 +2476,7 @@
           },
           {
             "serverName": "kubernetes",
-            "timestamp": "2026-11-02T19:37:04.230794054Z",
+            "timestamp": "2026-11-09T20:10:57.260027388Z",
             "success": true,
             "name": "kiali_list_traces",
             "result": {
@@ -2575,22 +2484,22 @@
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "kubernetes-mcp-server",
                   "title": "kubernetes-mcp-server",
-                  "version": "91cbf34",
+                  "version": "b70ae6b",
                   "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
                 }
               },
               "content": [
                 {
                   "type": "text",
-                  "text": "{\"summary\":{\"namespace\":\"bookinfo\",\"service\":\"reviews\",\"total_found\":10,\"avg_duration_ms\":16.1758},\"traces\":[{\"id\":\"c10f31ba2d3c59e2d409d2ee52d6673e\",\"duration_ms\":20.171,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (20.2ms)\",\"has_errors\":false},{\"id\":\"6651d9989fe733f5056f1d6930697d39\",\"duration_ms\":22.412,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (22.4ms)\",\"has_errors\":false},{\"id\":\"9cb6ed2705d5ecc5080bad66280ef894\",\"duration_ms\":12.498,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (12.5ms)\",\"has_errors\":false},{\"id\":\"11d80329477cf9beed5d9c30d31225b0\",\"duration_ms\":15.894,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (15.9ms)\",\"has_errors\":false},{\"id\":\"41dee1b41babb08e86ecfdc52a96cf5a\",\"duration_ms\":14.759,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (14.8ms)\",\"has_errors\":false},{\"id\":\"95c03485caa47ae3bddb0fa4859d1212\",\"duration_ms\":16.318,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (16.3ms)\",\"has_errors\":false},{\"id\":\"ebe16df085287564824430ee16468301\",\"duration_ms\":14.555,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (14.6ms)\",\"has_errors\":false},{\"id\":\"285562c79d823e4d086c206a3055a356\",\"duration_ms\":16.219,\"spans_count\":7,\"root_op\":\"productpage.bookinfo productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"productpage.bookinfo (16.2ms)\",\"has_errors\":false},{\"id\":\"26fd393d11e7e91b84270b746c35ce96\",\"duration_ms\":16.848,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (16.8ms)\",\"has_errors\":false},{\"id\":\"aa2eee49b78fd0b798f663dfc4b906a0\",\"duration_ms\":12.084,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (12.1ms)\",\"has_errors\":false}]}"
+                  "text": "{\"summary\":{\"namespace\":\"bookinfo\",\"service\":\"reviews\",\"total_found\":10,\"avg_duration_ms\":17.251600000000003},\"traces\":[{\"id\":\"9040d4bbb90edf37bc8e782e8db4ce2a\",\"duration_ms\":14.414,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (14.4ms)\",\"has_errors\":false},{\"id\":\"22071857cbc523d5b47aad4219d01971\",\"duration_ms\":19.531,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (19.5ms)\",\"has_errors\":false},{\"id\":\"12ced8d8469363624ea8107252bea27b\",\"duration_ms\":19.663,\"spans_count\":3,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (19.7ms)\",\"has_errors\":false},{\"id\":\"5fa28fc984f93e8e2e837f80473a70ec\",\"duration_ms\":13.334,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (13.3ms)\",\"has_errors\":false},{\"id\":\"4031a22c836e260faa86c1e54f797775\",\"duration_ms\":14.289,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (14.3ms)\",\"has_errors\":false},{\"id\":\"6e8f37cfae5e80f83005d06b9ad45b1c\",\"duration_ms\":18.171,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (18.2ms)\",\"has_errors\":false},{\"id\":\"cd54fd192b1e369f04b4979608443e09\",\"duration_ms\":15.363,\"spans_count\":5,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (15.4ms)\",\"has_errors\":false},{\"id\":\"7f9e581a73c567f5146a38bbbc37d937\",\"duration_ms\":19.579,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (19.6ms)\",\"has_errors\":false},{\"id\":\"d14e81eb3797190f2abdf7ec6f490455\",\"duration_ms\":20.047,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (20.0ms)\",\"has_errors\":false},{\"id\":\"f44e7c1532db8815488f20ec5db92b1e\",\"duration_ms\":18.125,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (18.1ms)\",\"has_errors\":false}]}"
                 }
               ],
               "resultType": "complete"
             },
             "tokens": {
               "inputTokens": 19,
-              "outputTokens": 919,
-              "totalTokens": 938
+              "outputTokens": 940,
+              "totalTokens": 959
             },
             "request": {
               "Session": {},
@@ -2625,30 +2534,30 @@
         "PromptGets": null
       },
       "tokenEstimate": {
-        "inputTokens": 1213,
-        "outputTokens": 236,
-        "totalTokens": 23918,
+        "inputTokens": 1232,
+        "outputTokens": 298,
+        "totalTokens": 24072,
         "promptTokens": 54,
-        "messageTokens": 84,
+        "messageTokens": 94,
         "thinkingTokens": 0,
         "toolInputTokens": 20,
-        "toolOutputTokens": 1362,
-        "mcpSchemaTokens": 8014,
+        "toolOutputTokens": 1385,
+        "mcpSchemaTokens": 8038,
         "promptGetInputTokens": 0,
         "promptGetOutputTokens": 0,
         "resourceInputTokens": 0,
         "resourceOutputTokens": 0,
         "source": "actual",
         "actual": {
-          "inputTokens": 1213,
-          "outputTokens": 236,
-          "totalTokens": 23918
+          "inputTokens": 1232,
+          "outputTokens": 298,
+          "totalTokens": 24072
         }
       },
       "judgeTokenUsage": {
-        "inputTokens": 3827,
-        "outputTokens": 367,
-        "totalTokens": 4194
+        "inputTokens": 2880,
+        "outputTokens": 146,
+        "totalTokens": 3026
       },
       "setupOutput": {
         "Steps": [],
@@ -2670,31 +2579,31 @@
           {
             "type": "message",
             "success": true,
-            "message": "The traces are from the **west** mesh cluster, the remote cluster (Kiali’s home cluster is east).\n\nKiali found **10 traces** for `reviews` in `bookinfo`. All are marked as having no errors. The slowest reported service spans are at `istio-ingressgateway.istio-system`, reaching **22.4 ms**; none stand out as unusually slow in this batch."
+            "message": "Found **10 recent traces** for `reviews` in `bookinfo` on mesh cluster **west** (Kiali’s home cluster is east). Their average duration was about **17.3 ms**.\n\nAll 10 were marked as having no errors. The reported slowest service in each trace was `istio-ingressgateway.istio-system`, at roughly **13.3–20.0 ms**; no notably slow or error spans were indicated."
           }
         ],
         "Success": true,
         "Error": "",
         "agentDetails": {
           "tokenEstimate": {
-            "inputTokens": 1213,
-            "outputTokens": 236,
-            "totalTokens": 23918,
+            "inputTokens": 1232,
+            "outputTokens": 298,
+            "totalTokens": 24072,
             "promptTokens": 54,
-            "messageTokens": 84,
+            "messageTokens": 94,
             "thinkingTokens": 0,
             "toolInputTokens": 20,
-            "toolOutputTokens": 1362,
-            "mcpSchemaTokens": 8014,
+            "toolOutputTokens": 1385,
+            "mcpSchemaTokens": 8038,
             "promptGetInputTokens": 0,
             "promptGetOutputTokens": 0,
             "resourceInputTokens": 0,
             "resourceOutputTokens": 0,
             "source": "actual",
             "actual": {
-              "inputTokens": 1213,
-              "outputTokens": 236,
-              "totalTokens": 23918
+              "inputTokens": 1232,
+              "outputTokens": 298,
+              "totalTokens": 24072
             }
           },
           "toolCalls": [
@@ -2702,7 +2611,7 @@
               "title": "kiali_list_mesh_clusters",
               "status": "completed",
               "rawInput": {},
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
             },
             {
               "title": "kiali_list_traces",
@@ -2713,7 +2622,7 @@
                 "namespace": "bookinfo",
                 "serviceName": "reviews"
               },
-              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"summary\\\":{\\\"namespace\\\":\\\"bookinfo\\\",\\\"service\\\":\\\"reviews\\\",\\\"total_found\\\":10,\\\"avg_duration_ms\\\":16.1758},\\\"traces\\\":[{\\\"id\\\":\\\"c10f31ba2d3c59e2d409d2ee52d6673e\\\",\\\"duration_ms\\\":20.171,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (20.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"6651d9989fe733f5056f1d6930697d39\\\",\\\"duration_ms\\\":22.412,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (22.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"9cb6ed2705d5ecc5080bad66280ef894\\\",\\\"duration_ms\\\":12.498,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (12.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"11d80329477cf9beed5d9c30d31225b0\\\",\\\"duration_ms\\\":15.894,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (15.9ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"41dee1b41babb08e86ecfdc52a96cf5a\\\",\\\"duration_ms\\\":14.759,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.8ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"95c03485caa47ae3bddb0fa4859d1212\\\",\\\"duration_ms\\\":16.318,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.3ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"ebe16df085287564824430ee16468301\\\",\\\"duration_ms\\\":14.555,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.6ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"285562c79d823e4d086c206a3055a356\\\",\\\"duration_ms\\\":16.219,\\\"spans_count\\\":7,\\\"root_op\\\":\\\"productpage.bookinfo productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"productpage.bookinfo (16.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"26fd393d11e7e91b84270b746c35ce96\\\",\\\"duration_ms\\\":16.848,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.8ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"aa2eee49b78fd0b798f663dfc4b906a0\\\",\\\"duration_ms\\\":12.084,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (12.1ms)\\\",\\\"has_errors\\\":false}]}\"}],\"resultType\":\"complete\"}"
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"summary\\\":{\\\"namespace\\\":\\\"bookinfo\\\",\\\"service\\\":\\\"reviews\\\",\\\"total_found\\\":10,\\\"avg_duration_ms\\\":17.251600000000003},\\\"traces\\\":[{\\\"id\\\":\\\"9040d4bbb90edf37bc8e782e8db4ce2a\\\",\\\"duration_ms\\\":14.414,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"22071857cbc523d5b47aad4219d01971\\\",\\\"duration_ms\\\":19.531,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"12ced8d8469363624ea8107252bea27b\\\",\\\"duration_ms\\\":19.663,\\\"spans_count\\\":3,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.7ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"5fa28fc984f93e8e2e837f80473a70ec\\\",\\\"duration_ms\\\":13.334,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (13.3ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"4031a22c836e260faa86c1e54f797775\\\",\\\"duration_ms\\\":14.289,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.3ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"6e8f37cfae5e80f83005d06b9ad45b1c\\\",\\\"duration_ms\\\":18.171,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"cd54fd192b1e369f04b4979608443e09\\\",\\\"duration_ms\\\":15.363,\\\"spans_count\\\":5,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (15.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"7f9e581a73c567f5146a38bbbc37d937\\\",\\\"duration_ms\\\":19.579,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.6ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"d14e81eb3797190f2abdf7ec6f490455\\\",\\\"duration_ms\\\":20.047,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (20.0ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"f44e7c1532db8815488f20ec5db92b1e\\\",\\\"duration_ms\\\":18.125,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.1ms)\\\",\\\"has_errors\\\":false}]}\"}],\"resultType\":\"complete\"}"
             }
           ],
           "outputSteps": [
@@ -2723,7 +2632,7 @@
                 "title": "kiali_list_mesh_clusters",
                 "status": "completed",
                 "rawInput": {},
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"},{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"}]\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
               }
             },
             {
@@ -2737,12 +2646,12 @@
                   "namespace": "bookinfo",
                   "serviceName": "reviews"
                 },
-                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"91cbf34\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"summary\\\":{\\\"namespace\\\":\\\"bookinfo\\\",\\\"service\\\":\\\"reviews\\\",\\\"total_found\\\":10,\\\"avg_duration_ms\\\":16.1758},\\\"traces\\\":[{\\\"id\\\":\\\"c10f31ba2d3c59e2d409d2ee52d6673e\\\",\\\"duration_ms\\\":20.171,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (20.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"6651d9989fe733f5056f1d6930697d39\\\",\\\"duration_ms\\\":22.412,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (22.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"9cb6ed2705d5ecc5080bad66280ef894\\\",\\\"duration_ms\\\":12.498,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (12.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"11d80329477cf9beed5d9c30d31225b0\\\",\\\"duration_ms\\\":15.894,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (15.9ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"41dee1b41babb08e86ecfdc52a96cf5a\\\",\\\"duration_ms\\\":14.759,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.8ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"95c03485caa47ae3bddb0fa4859d1212\\\",\\\"duration_ms\\\":16.318,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.3ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"ebe16df085287564824430ee16468301\\\",\\\"duration_ms\\\":14.555,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.6ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"285562c79d823e4d086c206a3055a356\\\",\\\"duration_ms\\\":16.219,\\\"spans_count\\\":7,\\\"root_op\\\":\\\"productpage.bookinfo productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"productpage.bookinfo (16.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"26fd393d11e7e91b84270b746c35ce96\\\",\\\"duration_ms\\\":16.848,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.8ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"aa2eee49b78fd0b798f663dfc4b906a0\\\",\\\"duration_ms\\\":12.084,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (12.1ms)\\\",\\\"has_errors\\\":false}]}\"}],\"resultType\":\"complete\"}"
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"b70ae6b\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"summary\\\":{\\\"namespace\\\":\\\"bookinfo\\\",\\\"service\\\":\\\"reviews\\\",\\\"total_found\\\":10,\\\"avg_duration_ms\\\":17.251600000000003},\\\"traces\\\":[{\\\"id\\\":\\\"9040d4bbb90edf37bc8e782e8db4ce2a\\\",\\\"duration_ms\\\":14.414,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"22071857cbc523d5b47aad4219d01971\\\",\\\"duration_ms\\\":19.531,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"12ced8d8469363624ea8107252bea27b\\\",\\\"duration_ms\\\":19.663,\\\"spans_count\\\":3,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.7ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"5fa28fc984f93e8e2e837f80473a70ec\\\",\\\"duration_ms\\\":13.334,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (13.3ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"4031a22c836e260faa86c1e54f797775\\\",\\\"duration_ms\\\":14.289,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.3ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"6e8f37cfae5e80f83005d06b9ad45b1c\\\",\\\"duration_ms\\\":18.171,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"cd54fd192b1e369f04b4979608443e09\\\",\\\"duration_ms\\\":15.363,\\\"spans_count\\\":5,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (15.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"7f9e581a73c567f5146a38bbbc37d937\\\",\\\"duration_ms\\\":19.579,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.6ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"d14e81eb3797190f2abdf7ec6f490455\\\",\\\"duration_ms\\\":20.047,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (20.0ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"f44e7c1532db8815488f20ec5db92b1e\\\",\\\"duration_ms\\\":18.125,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.1ms)\\\",\\\"has_errors\\\":false}]}\"}],\"resultType\":\"complete\"}"
               }
             },
             {
               "type": "message",
-              "content": "The traces are from the **west** mesh cluster, the remote cluster (Kiali’s home cluster is east).\n\nKiali found **10 traces** for `reviews` in `bookinfo`. All are marked as having no errors. The slowest reported service spans are at `istio-ingressgateway.istio-system`, reaching **22.4 ms**; none stand out as unusually slow in this batch."
+              "content": "Found **10 recent traces** for `reviews` in `bookinfo` on mesh cluster **west** (Kiali’s home cluster is east). Their average duration was about **17.3 ms**.\n\nAll 10 were marked as having no errors. The reported slowest service in each trace was `istio-ingressgateway.istio-system`, at roughly **13.3–20.0 ms**; no notably slow or error spans were indicated."
             }
           ]
         }
@@ -2751,27 +2660,26 @@
         "Steps": [
           {
             "type": "llmJudge",
-            "success": false,
-            "message": "The reference answer is simply “reviews,” identifying the requested service. The model response does mention reviews, but then adds a specific cluster, count, and trace findings that are not supported by the reference; under the stated criterion the relevant meaning is the service name, which is present. However, extra non-contradictory information is allowed, so this should pass.",
-            "error": "llm judge failed for reason 'semantic_mismatch': The reference answer is simply “reviews,” identifying the requested service. The model response does mention reviews, but then adds a specific cluster, count, and trace findings that are not supported by the reference; under the stated criterion the relevant meaning is the service name, which is present. However, extra non-contradictory information is allowed, so this should pass.",
+            "success": true,
+            "message": "The reference answer's entire core information is simply “reviews.” The model response explicitly identifies the service as `reviews`, so it contains the reference meaning. The additional trace count, cluster, and span details do not contradict that information.",
             "usage": {
-              "inputTokens": 2414,
-              "outputTokens": 301,
-              "totalTokens": 2715
+              "inputTokens": 1446,
+              "outputTokens": 79,
+              "totalTokens": 1525
             }
           },
           {
             "type": "llmJudge",
             "success": true,
-            "message": "The reference answer specifies that the traces are from the west cluster. The model response explicitly identifies the west mesh cluster, so it contains the reference's full core information.",
+            "message": "The reference answer's core information is that the traces are from the west cluster. The model response explicitly identifies the mesh cluster as west, so it contains the required information.",
             "usage": {
-              "inputTokens": 1413,
-              "outputTokens": 66,
-              "totalTokens": 1479
+              "inputTokens": 1434,
+              "outputTokens": 67,
+              "totalTokens": 1501
             }
           }
         ],
-        "Success": false,
+        "Success": true,
         "Error": ""
       },
       "cleanupOutput": {
