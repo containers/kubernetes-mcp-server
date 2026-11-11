@@ -57,7 +57,7 @@ func BuildRoundTripper(ctx context.Context, cfg *config.Config, restConfig *rest
 	// AccessControlRoundTripper from kubernetes-mcp-server, which provides access control for
 	// the Kubernetes HTTP API and misinterprets the Prometheus HTTP API endpoints
 	// (e.g. /api/v1/label) as Kubernetes endpoints.
-	token, err := readToken(ctx, restConfig, authMode)
+	token, err := ReadToken(ctx, restConfig, authMode)
 	if err != nil {
 		return nil, err
 	}

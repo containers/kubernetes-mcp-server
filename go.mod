@@ -1,6 +1,6 @@
 module github.com/containers/kubernetes-mcp-server
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -14,6 +14,8 @@ require (
 	github.com/google/gnostic-models v0.7.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
+	github.com/korrel8r/korrel8r/pkg/api v0.13.4
+	github.com/korrel8r/korrel8r/pkg/mcp v0.13.4
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/os-observability/redhat-opentelemetry-collector/configschemas v0.0.0-20260712195227-4e7d75e0d2ec
 	github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen v0.0.0-20260710124846-8bb49fd6ccc7
@@ -45,7 +47,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 	golang.org/x/mod v0.42.0
-	golang.org/x/oauth2 v0.37.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/time v0.16.0
 	google.golang.org/protobuf v1.36.12
@@ -95,6 +97,7 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
+	github.com/getkin/kin-openapi v0.153.0 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -167,7 +170,7 @@ require (
 	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
-	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
@@ -182,12 +185,13 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v4 v4.0.0 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597 // indirect
 	golang.org/x/net v0.62.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect

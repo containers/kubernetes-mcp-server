@@ -3,74 +3,83 @@
 # Shared paths appear once, with approvers combined from the listed toolsets.
 
 # default
-*                          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+*                                                             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: config
-/pkg/toolsets/config/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/config/                                         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: core
-/pkg/toolsets/core/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/core/                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: helm
-/pkg/toolsets/helm/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/helm/                 @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/evals/tasks/helm/         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/helm/                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/helm/                                                    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/evals/tasks/helm/                                            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: kcp
-/pkg/toolsets/kcp/         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
-/pkg/kcp/                  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/toolsets/kcp/                                            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
+/pkg/kcp/                                                     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo
 
 # toolset: kiali
-/pkg/toolsets/kiali/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
-/pkg/kiali/                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
-/pkg/mcp/kiali*            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
-/build/kiali.mk            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
-/evals/tasks/kiali/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
-/docs/KIALI.md             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/pkg/toolsets/kiali/                                          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/pkg/kiali/                                                   @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/pkg/mcp/kiali*                                               @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/build/kiali.mk                                               @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/evals/tasks/kiali/                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
+/docs/KIALI.md                                                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @aljesusg @josunect
 
 # toolset: kubevirt
-/pkg/toolsets/kubevirt/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
-/pkg/kubevirt/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
-/pkg/mcp/kubevirt*         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
-/build/kubevirt.mk         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
-/evals/tasks/kubevirt/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
-/docs/kubevirt.md          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/pkg/toolsets/kubevirt/                                       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/pkg/kubevirt/                                                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/pkg/mcp/kubevirt*                                            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/build/kubevirt.mk                                            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/evals/tasks/kubevirt/                                        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+/docs/kubevirt.md                                             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1 @lyarwood
+
+# toolset: observability/korrel8r
+/pkg/toolsets/korrel8r/                                       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/mcp/korrel8r*                                            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/mcp/testdata/toolsets-observability-korrel8r-tools.json  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/build/korrel8r.mk                                            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/evals/tasks/korrel8r/                                        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/dev/config/mcp-configs/korrel8r.toml                         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/docs/korrel8r.md                                             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: observability/logs
-/pkg/toolsets/logs/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
-/pkg/obs/logs/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/toolsets/logs/                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/logs/                                                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: observability/metrics
-/pkg/toolsets/metrics/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
-/pkg/obs/metrics/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/toolsets/metrics/                                        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/metrics/                                             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: netobserv
-/pkg/toolsets/netobserv/   @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
-/pkg/netobserv/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
-/pkg/mcp/netobserv*        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
-/build/netobserv.mk        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
-/evals/tasks/netobserv/    @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/pkg/toolsets/netobserv/                                      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/pkg/netobserv/                                               @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/pkg/mcp/netobserv*                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/build/netobserv.mk                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
+/evals/tasks/netobserv/                                       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @jpinsonneau
 
 # toolset: observability/otelcol
-/pkg/toolsets/otelcol/     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/toolsets/otelcol/                                        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # toolset: tekton
-/pkg/toolsets/tekton/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
-/pkg/mcp/tekton*           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
-/build/tekton.mk           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
-/evals/tasks/tekton/       @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/pkg/toolsets/tekton/                                         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/pkg/mcp/tekton*                                              @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/build/tekton.mk                                              @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
+/evals/tasks/tekton/                                          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @ksimon1
 
 # toolset: observability/traces
-/pkg/toolsets/traces/      @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
-/pkg/obs/traces/           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/toolsets/traces/                                         @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/traces/                                              @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # shared: observability/logs, observability/metrics, observability/traces
-/pkg/obs/auth/             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/auth/                                                @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # shared: observability/logs, observability/traces
-/pkg/obs/instrumentation/  @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
-/pkg/obs/openshift/        @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/instrumentation/                                     @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/openshift/                                           @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
 
 # shared: observability/logs, observability/metrics, observability/otelcol, observability/traces
-/pkg/obs/tools/            @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
-/pkg/obs/toolcfg/          @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/tools/                                               @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
+/pkg/obs/toolcfg/                                             @Cali0707 @manusa @matzew @nader-ziada @2uasimojo @andreasgerstmayr @iNecas @saswatamcode @slashpai
