@@ -47,6 +47,7 @@ func init() {
 func newKcpClusterProvider(ctx context.Context, cfg *config.Config) (kubernetes.Provider, error) {
 	ret := &kcpClusterProvider{cfg: cfg}
 	ret.SetReset(ret.reset)
+	ret.SetInvalidate(ret.invalidateManagers)
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
@@ -328,6 +329,17 @@ func (p *kcpClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
 	for _, m := range p.managers {
 		if m != nil {
 			m.SetConfig(cfg)
+		}
+	}
+}
+
+// invalidateManagers resets the cached discovery of every initialized workspace.
+func (p *kcpClusterProvider) invalidateManagers() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.Invalidate()
 		}
 	}
 }
