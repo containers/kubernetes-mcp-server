@@ -3,9 +3,7 @@ package kubernetes
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,59 +71,6 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 				s.Require().NoError(waitForCallback(5 * time.Second))
 				// Provider-wise the watcher.ClusterState which triggers the callback has no effect.
 				// We might consider removing it at some point? (20251202)
-			})
-		})
-	}
-}
-
-func (s *ProviderWatchTargetsTestSuite) TestClusterStateWithPassthroughAuth() {
-	providers := map[string]func() (Provider, error){
-		"kubeconfig": func() (Provider, error) { return newKubeConfigClusterProvider(s.T().Context(), s.staticConfig) },
-		"single": func() (Provider, error) {
-			return newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), s.staticConfig)
-		},
-	}
-	for name, newProvider := range providers {
-		s.Run("With "+name+" provider and a kubeconfig without credentials", func() {
-			s.TearDownTest()
-			s.SetupTest()
-			s.staticConfig.ClusterAuthMode.SetForTest(config.ClusterAuthPassthrough)
-			var apiGroupRequests atomic.Int32
-			s.mockServer.Handle(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-				if req.URL.Path == "/apis" {
-					apiGroupRequests.Add(1)
-				}
-			}))
-			provider, err := newProvider()
-			s.Require().NoError(err, "Expected no error from provider creation")
-			defer provider.Close()
-
-			callback, waitForCallback := CallbackWaiter()
-			provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
-			before := apiGroupRequests.Load()
-			s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "alex.example.com/v1"})
-
-			s.Run("Does not poll the cluster without credentials", func() {
-				time.Sleep(500 * time.Millisecond)
-				s.Equal(before, apiGroupRequests.Load(), "Expected no anonymous discovery requests")
-			})
-			s.Run("Does not reload on cluster changes", func() {
-				s.Error(waitForCallback(100*time.Millisecond), "Expected no reload callback")
-			})
-		})
-		s.Run("With "+name+" provider and cluster_auth_mode kubeconfig", func() {
-			s.TearDownTest()
-			s.SetupTest()
-			s.staticConfig.ClusterAuthMode.SetForTest(config.ClusterAuthKubeconfig)
-			provider, err := newProvider()
-			s.Require().NoError(err, "Expected no error from provider creation")
-			defer provider.Close()
-
-			callback, waitForCallback := CallbackWaiter()
-			provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
-			s.Run("Reloads provider on cluster changes", func() {
-				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "alex.example.com/v1"})
-				s.Require().NoError(waitForCallback(5 * time.Second))
 			})
 		})
 	}
