@@ -38,6 +38,7 @@ func newSingleClusterProvider(strategy string) ProviderFactory {
 			strategy: strategy,
 		}
 		ret.SetReset(ret.reset)
+		ret.SetInvalidate(ret.invalidateManager)
 		if err := ret.reset(ctx); err != nil {
 			return nil, err
 		}
@@ -172,5 +173,14 @@ func (p *singleClusterProvider) RefreshCAs() {
 	p.mu.RUnlock()
 	if manager != nil {
 		manager.RefreshCAs()
+	}
+}
+
+// invalidateManager resets the cached discovery of the manager.
+func (p *singleClusterProvider) invalidateManager() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.manager != nil {
+		p.manager.Invalidate()
 	}
 }
