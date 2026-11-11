@@ -111,8 +111,6 @@ func newKubernetesFromLive(
 			ConfirmationRules:    cfg.ConfirmationRules.Get(),
 			ConfirmationFallback: cfg.ConfirmationFallback.Get(),
 			SchemaCache:          k.schemaCache,
-			// Per-request clients build a fresh REST mapper, so only long-lived ones reset it.
-			ResetRESTMapperOnNoMatch: resetRESTMapperOnNoMatch,
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
@@ -142,7 +140,8 @@ func newKubernetesFromLive(
 	}
 	k.rawDiscoveryClient = discoveryClient
 	k.discoveryClient = memory.NewMemCacheClient(discoveryClient)
-	k.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient)
+	// Per-request clients build a fresh REST mapper, so only long-lived ones reset it.
+	k.restMapper = newRefreshingRESTMapper(restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient), resetRESTMapperOnNoMatch)
 	k.Interface, err = kubernetes.NewForConfigAndClient(k.restConfig, k.httpClient)
 	if err != nil {
 		return nil, err

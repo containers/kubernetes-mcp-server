@@ -358,6 +358,24 @@ func (h *DiscoveryClientHandler) AddAPIResourceList(resourceList metav1.APIResou
 	h.APIResourceLists = append(h.APIResourceLists, resourceList)
 }
 
+// AddAPIResource adds a resource to the API resource list of groupVersion, creating the
+// list if it does not exist. This is useful to add a kind to an API group that is
+// already served, which leaves the API group list unchanged.
+func (h *DiscoveryClientHandler) AddAPIResource(groupVersion string, resource metav1.APIResource) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := range h.APIResourceLists {
+		if h.APIResourceLists[i].GroupVersion == groupVersion {
+			h.APIResourceLists[i].APIResources = append(h.APIResourceLists[i].APIResources, resource)
+			return
+		}
+	}
+	h.APIResourceLists = append(h.APIResourceLists, metav1.APIResourceList{
+		GroupVersion: groupVersion,
+		APIResources: []metav1.APIResource{resource},
+	})
+}
+
 // NewInOpenShiftHandler creates a DiscoveryClientHandler configured for OpenShift clusters.
 // It includes the OpenShift project.openshift.io API group by default.
 // Additional API resource lists can be passed to extend the handler.
