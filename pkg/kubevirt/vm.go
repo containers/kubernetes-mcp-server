@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -273,34 +275,44 @@ func UnpauseVM(ctx context.Context, dynamicClient dynamic.Interface, restConfig 
 }
 
 // RestartVM restarts a VirtualMachine by temporarily setting runStrategy to Halted then back to the specified run policy
+// setVMRunStrategyWithRetry sets the runStrategy on a VirtualMachine, retrying
+// on resource-version conflicts: the virt-controller annotates VMs concurrently,
+// so an update based on a stale Get can be rejected.
+func setVMRunStrategyWithRetry(ctx context.Context, client dynamic.Interface, namespace, name string, strategy RunStrategy) (*unstructured.Unstructured, error) {
+	const attempts = 3
+	for range attempts {
+		vm, err := GetVirtualMachine(ctx, client, namespace, name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get VirtualMachine: %w", err)
+		}
+		if err := SetVMRunStrategy(vm, strategy); err != nil {
+			return nil, err
+		}
+		updated, err := UpdateVirtualMachine(ctx, client, vm)
+		if err != nil {
+			if apierrors.IsConflict(err) {
+				continue
+			}
+			return nil, err
+		}
+		return updated, nil
+	}
+	return nil, fmt.Errorf("failed to update runStrategy of VirtualMachine %s/%s after %d attempts", namespace, name, attempts)
+}
+
 func RestartVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string, runPolicy RunPolicy) (*unstructured.Unstructured, error) {
 	desiredStrategy, err := runStrategyFromRunPolicy(runPolicy)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the current VirtualMachine
-	vm, err := GetVirtualMachine(ctx, dynamicClient, namespace, name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VirtualMachine: %w", err)
-	}
-
-	// Stop the VM first
-	if err := SetVMRunStrategy(vm, RunStrategyHalted); err != nil {
-		return nil, fmt.Errorf("failed to set runStrategy to Halted: %w", err)
-	}
-
-	vm, err = UpdateVirtualMachine(ctx, dynamicClient, vm)
-	if err != nil {
+	// Stop the VM first, then start it again with the specified run policy.
+	// Each step re-reads the VM so it survives concurrent controller updates.
+	if _, err := setVMRunStrategyWithRetry(ctx, dynamicClient, namespace, name, RunStrategyHalted); err != nil {
 		return nil, fmt.Errorf("failed to stop VirtualMachine: %w", err)
 	}
 
-	// Start the VM again with the specified run policy
-	if err := SetVMRunStrategy(vm, desiredStrategy); err != nil {
-		return nil, fmt.Errorf("failed to set runStrategy: %w", err)
-	}
-
-	updatedVM, err := UpdateVirtualMachine(ctx, dynamicClient, vm)
+	updatedVM, err := setVMRunStrategyWithRetry(ctx, dynamicClient, namespace, name, desiredStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start VirtualMachine: %w", err)
 	}
