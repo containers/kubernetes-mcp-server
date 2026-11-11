@@ -10,7 +10,8 @@
   - [Vectors at a glance](#vectors-at-a-glance)
   - [Migration examples](#migration-examples)
 - [Upgrading from 0.0.66](#upgrading-from-0066)
-- [Target compatibility filters on by default](#target-compatibility-filters-on-by-default)
+- [Upgrading from 0.1.z](#upgrading-from-01z)
+  - [Target compatibility filters on by default](#target-compatibility-filters-on-by-default)
 
 This document records configuration changes that may require action when upgrading between releases. Add newer release transitions as separate sections so upgrade guidance remains available without cluttering the current [configuration reference](configuration.md).
 
@@ -184,7 +185,9 @@ The legacy top-level `token_exchange_strategy` and `sts_*` settings were removed
 
 Map legacy `sts_auth_style` values as follows: `params` to `client_secret_post`, `header` to `client_secret_basic`, `assertion` to `private_key_jwt`, and `federated` to `jwt_file`. Configurations that omitted `token_exchange_strategy` used the built-in STS path and should use `client_secret_basic` to preserve HTTP Basic client authentication.
 
-## Target compatibility filters on by default
+## Upgrading from 0.1.z
+
+### Target compatibility filters on by default
 
 `experimental_enable_target_compatibility_tool_filters` is now `enable_target_compatibility_tool_filters`, and it defaults to `true`. Tools that need an API the target cluster does not have (for example `projects_list` outside OpenShift, or `pods_top` without the Metrics Server) are hidden unless you opt out with `enable_target_compatibility_tool_filters = false`. The Kiali toolset now also checks that Kiali is reachable before it registers its tools.
 

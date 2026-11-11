@@ -931,10 +931,7 @@ func resolve(ctx context.Context, merged map[string]any, sources map[string]stri
 		cfg.TokenExchange.present = true
 	}
 
-	if err := applyTOML(cfg, merged, sources); err != nil {
-		return nil, err
-	}
-	if err := applyDeprecatedKeys(ctx, cfg, merged, sources); err != nil {
+	if err := applyTOML(ctx, cfg, merged, sources); err != nil {
 		return nil, err
 	}
 	if err := rejectUnknownKeys(merged, cfg, sources); err != nil {
@@ -982,7 +979,7 @@ func walkApply(cfg *Config, fn func(option) error) error {
 }
 
 // applyTOML copies present TOML keys onto matching Options.
-func applyTOML(cfg *Config, merged map[string]any, sources map[string]string) error {
+func applyTOML(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string) error {
 	var applyErr error
 	walkOptions(cfg, func(o option, path string) {
 		if applyErr != nil || path == "" {
@@ -998,7 +995,10 @@ func applyTOML(cfg *Config, merged map[string]any, sources map[string]string) er
 		}
 		applyErr = o.applyTOML(raw, src, path)
 	})
-	return applyErr
+	if applyErr != nil {
+		return applyErr
+	}
+	return applyDeprecatedKeys(ctx, cfg, merged, sources)
 }
 
 // mapLookup walks a dotted key path through nested maps.
@@ -1023,13 +1023,8 @@ func mapLookup(m map[string]any, dotted string) (any, bool) {
 const legacyTargetCompatibilityKey = "experimental_enable_target_compatibility_tool_filters"
 
 // applyDeprecatedKeys converts deprecated TOML keys to their replacements and
-// removes them from merged so rejectUnknownKeys accepts them. It runs after
-// applyTOML, so a replacement key set in the TOML has already been applied
-// and wins over the deprecated one.
-//
-// experimental_enable_target_compatibility_tool_filters: true is a no-op (the
-// new default is already true); false is an explicit opt-out, so
-// enable_target_compatibility_tool_filters becomes false.
+// removes them from merged so rejectUnknownKeys accepts them. A replacement key
+// set in the TOML wins over the deprecated one.
 func applyDeprecatedKeys(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string) error {
 	raw, ok := merged[legacyTargetCompatibilityKey]
 	if !ok {
@@ -1045,14 +1040,14 @@ func applyDeprecatedKeys(ctx context.Context, cfg *Config, merged map[string]any
 			cfg.EnableTargetCompatibilityToolFilters.TOMLKey+" instead",
 		klogutil.Field("config.key", legacyTargetCompatibilityKey),
 	)
-	if _, replaced := merged[cfg.EnableTargetCompatibilityToolFilters.TOMLKey]; replaced || legacy {
+	if _, replaced := merged[cfg.EnableTargetCompatibilityToolFilters.TOMLKey]; replaced {
 		return nil
 	}
 	src := Source(sources[legacyTargetCompatibilityKey])
 	if src == "" {
 		src = Source("<file>")
 	}
-	cfg.EnableTargetCompatibilityToolFilters.setParsed(false, src)
+	cfg.EnableTargetCompatibilityToolFilters.setParsed(legacy, src)
 	return nil
 }
 
