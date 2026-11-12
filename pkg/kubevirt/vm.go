@@ -25,18 +25,37 @@ func GetVirtualMachine(ctx context.Context, client dynamic.Interface, namespace,
 }
 
 // GetVMRunStrategy retrieves the current runStrategy from a VirtualMachine
-// Returns the strategy, whether it was found, and any error
+// Returns the strategy, whether it was found, and any error.
+// A VirtualMachine that still uses the deprecated spec.running field is
+// reported as Always (running: true) or Halted (running: false), which is how
+// KubeVirt itself interprets the field.
 func GetVMRunStrategy(vm *unstructured.Unstructured) (RunStrategy, bool, error) {
 	strategy, found, err := unstructured.NestedString(vm.Object, "spec", "runStrategy")
 	if err != nil {
 		return "", false, fmt.Errorf("failed to read runStrategy: %w", err)
 	}
+	if found {
+		return RunStrategy(strategy), true, nil
+	}
 
-	return RunStrategy(strategy), found, nil
+	running, found, err := unstructured.NestedBool(vm.Object, "spec", "running")
+	if err != nil {
+		return "", false, fmt.Errorf("failed to read running: %w", err)
+	}
+	if !found {
+		return "", false, nil
+	}
+	if running {
+		return RunStrategyAlways, true, nil
+	}
+	return RunStrategyHalted, true, nil
 }
 
-// SetVMRunStrategy sets the runStrategy on a VirtualMachine
+// SetVMRunStrategy sets the runStrategy on a VirtualMachine.
+// The deprecated spec.running field is removed at the same time, because
+// KubeVirt rejects a VirtualMachine that sets both fields.
 func SetVMRunStrategy(vm *unstructured.Unstructured, strategy RunStrategy) error {
+	unstructured.RemoveNestedField(vm.Object, "spec", "running")
 	return unstructured.SetNestedField(vm.Object, string(strategy), "spec", "runStrategy")
 }
 
