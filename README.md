@@ -393,7 +393,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `image` (`string`) **(required)** - Container Image to run in the Pod
   - `name` (`string`) - Name of the Pod (Optional, random name if not provided)
   - `namespace` (`string`) - Namespace to run the Pod in
-  - `port` (`number`) - TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)
+  - `port` (`number`) - TCP/IP port to expose from the Pod container, 1-65535 (Optional, no port exposed if not provided)
 
 - **resources_list** - List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector. Use limit and continue to retrieve a large list one page at a time.
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)

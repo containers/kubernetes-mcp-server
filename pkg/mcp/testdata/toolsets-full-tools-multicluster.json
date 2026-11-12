@@ -940,7 +940,7 @@
           "type": "string"
         },
         "port": {
-          "description": "TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)",
+          "description": "TCP/IP port to expose from the Pod container, 1-65535 (Optional, no port exposed if not provided)",
           "type": "number"
         }
       },
