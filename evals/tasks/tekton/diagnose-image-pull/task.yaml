@@ -30,6 +30,8 @@ spec:
           set -euo pipefail
           source ../helpers/require-output.sh
           require 'failed-run'
+          require 'image'
+          require 'pull'
     - llmJudge:
         contains: "The response diagnoses the failure as the step image failing to be pulled, based on observed runtime evidence."
 

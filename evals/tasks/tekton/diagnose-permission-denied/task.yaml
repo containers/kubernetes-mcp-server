@@ -31,6 +31,7 @@ spec:
           source ../helpers/require-output.sh
           require 'failed-run'
           require 'failing-step'
+          require 'permission denied'
     - llmJudge:
         contains: "The response diagnoses the failed step as failing with a permission denied error, based on observed runtime evidence."
 
