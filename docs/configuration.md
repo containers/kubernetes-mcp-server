@@ -701,13 +701,13 @@ Hides tools that require API groups the target cluster does not advertise. This 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enable_target_compatibility_tool_filters` | boolean | `true` | When `true`, tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). Set to `false` to always expose every tool. |
+| `enable_target_compatibility_tool_filters` | boolean | `true` | When `true`, tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). Set to `false` to turn this check off, so no tool is hidden for a missing API group (other settings such as `read_only` can still hide tools). |
 
 The old name `experimental_enable_target_compatibility_tool_filters` is deprecated and still read, with a warning in the log. See [Configuration Changes](configuration-changes.md#target-compatibility-filters-on-by-default).
 
 **Example:**
 ```toml
-# Always expose every tool, whatever the target cluster supports
+# Do not hide tools based on which API groups the target cluster(s) support
 enable_target_compatibility_tool_filters = false
 ```
 
