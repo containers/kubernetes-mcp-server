@@ -37,7 +37,7 @@ func (s *NetObservFilteringSuite) configuration(enabled bool, extra string) *con
 	name := (&netobservToolset.Toolset{}).GetName()
 	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = [%q]
-		experimental_enable_target_compatibility_tool_filters = %t
+		enable_target_compatibility_tool_filters = %t
 		%s
 	`, name, enabled, extra)), config.WithBaseDefault())
 	s.Require().NoError(err)

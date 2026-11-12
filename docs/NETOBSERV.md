@@ -28,7 +28,7 @@ When `netobserv` is listed in `toolsets`, configuration is loaded from `[toolset
 
 ### Cluster compatibility filtering
 
-With `experimental_enable_target_compatibility_tool_filters = true`, all three
+With `enable_target_compatibility_tool_filters` on (the default), all three
 NetObserv tools are hidden unless at least one target cluster exposes the
 `flows.netobserv.io` `FlowCollector` kind in any served API version.
 
