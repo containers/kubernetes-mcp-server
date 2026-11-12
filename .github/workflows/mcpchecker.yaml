@@ -16,12 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, argocd, obs, or all)'
+        description: 'Which task suite to run (core, core-readonly, helm, kubevirt, kiali, tekton, netobserv, argocd, obs, or all)'
         required: false
         default: 'core'
         type: choice
         options:
           - core
+          - core-readonly
           - helm
           - kubevirt
           - kiali
@@ -184,7 +185,7 @@ jobs:
 
               // Parse suite from the review body (trusted — fetched from API).
               const suiteMatch = triggerReview.body.match(
-                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|argocd|obs|all)/i,
+                /\/run-mcpchecker\s+(core-readonly|core|helm|kubevirt|kiali|tekton|netobserv|argocd|obs|all)/i,
               );
               const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
@@ -221,11 +222,12 @@ jobs:
 
           # Build a JSON matrix consumed by run-evaluation via fromJSON().
           # Each entry carries suite name, eval config path, and required toolsets.
+          # read_only defaults to false unless a suite requires read-only mode.
           EVAL_DIR="evals/core-eval-testing/builtin-openai"
 
-          # Helper: emit a single-entry matrix for the given suite/config/toolsets.
+          # Helper: emit a single-entry matrix for the given suite/config/toolsets/read-only mode.
           single_matrix() {
-            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s"}]}' "$1" "$2" "$3"
+            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s","read_only":%s}]}' "$1" "$2" "$3" "${4:-false}"
           }
 
           kiali_multicluster_entry='{
@@ -260,6 +262,7 @@ jobs:
               MATRIX=$(cat <<'EOFM'
           {"include":[
             {"suite":"core","eval-config":"evals/core-eval-testing/builtin-openai/eval-core.yaml","toolsets":"core,config"},
+            {"suite":"core-readonly","eval-config":"evals/core-eval-testing/builtin-openai/eval-core-readonly.yaml","toolsets":"core,config","read_only":true},
             {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
             {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
@@ -272,6 +275,9 @@ jobs:
           ]}
           EOFM
           )
+              ;;
+            core-readonly)
+              MATRIX=$(single_matrix core-readonly "${EVAL_DIR}/eval-core-readonly.yaml" "core,config" true)
               ;;
             helm)
               MATRIX=$(single_matrix helm "${EVAL_DIR}/eval-helm.yaml" "core,config,helm")
@@ -401,6 +407,7 @@ jobs:
         run: make run-server
         env:
           TOOLSETS: ${{ matrix.toolsets }}
+          READ_ONLY: ${{ matrix.read_only || false }}
           MCP_CONFIG_DIR: ${{ matrix.mcp-config-dir || 'dev/config/mcp-configs' }}
           MCP_EVAL_KUBECONFIG: ${{ matrix.suite == 'config-multicluster' && '_output/kubeconfig-multicluster' || '' }}
 
