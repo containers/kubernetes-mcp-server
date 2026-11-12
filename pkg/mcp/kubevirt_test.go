@@ -763,6 +763,19 @@ func (s *KubevirtSuite) TestVMClone() {
 
 }
 
+func (s *KubevirtSuite) TestVMCloneIsNotIdempotent() {
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	for _, tool := range tools.Tools {
+		if tool.Name == "vm_clone" {
+			s.Require().NotNil(tool.Annotations)
+			s.False(tool.Annotations.IdempotentHint, "every vm_clone call creates a new VirtualMachineClone")
+			return
+		}
+	}
+	s.Fail("vm_clone not listed")
+}
+
 func (s *KubevirtSuite) TestVMTroubleshootPrompt() {
 	s.Run("vm-troubleshoot prompt returns troubleshooting guide", func() {
 		result, err := s.GetPrompt("vm-troubleshoot", map[string]string{
