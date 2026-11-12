@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -237,12 +236,11 @@ type APIResourceInfo struct {
 // callers can decide whether partial results are still useful.
 func (c *Core) APIResourcesList(ctx context.Context, kindFilter string) ([]APIResourceInfo, error) {
 	// Use the raw discovery client because the cached discovery client can
-	// remain stale after a CRD is installed outside this server. Resetting the
-	// RESTMapper below refreshes resource mapping only; it does not invalidate
-	// the discovery cache. Preferred discovery is intentional here: callers
-	// need one server-preferred top-level version per kind. A future use case
-	// that needs every served version or subresource can use a broader
-	// discovery method instead.
+	// remain stale after a CRD is installed outside this server: it is only
+	// refreshed when the REST mapper resets. Preferred discovery is intentional
+	// here: callers need one server-preferred top-level version per kind. A
+	// future use case that needs every served version or subresource can use
+	// a broader discovery method instead.
 	rawDiscoveryClient := c.RawDiscoveryClient()
 	var (
 		lists []*metav1.APIResourceList
@@ -286,22 +284,7 @@ func (c *Core) APIResourcesList(ctx context.Context, kindFilter string) ([]APIRe
 func (c *Core) resourceFor(gvk *schema.GroupVersionKind) (*schema.GroupVersionResource, error) {
 	m, err := c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 	if err != nil {
-		if !meta.IsNoMatchError(err) {
-			return nil, err
-		}
-		// The RESTMapper builds and caches its full group/resource snapshot on
-		// first use and never refreshes it on its own -- resourcesCreateOrUpdate
-		// resets it, but only when a CustomResourceDefinition is applied
-		// through *this server's own* resources_create_or_update tool. A CRD
-		// installed any other way (kubectl, an operator, Helm, a different MCP
-		// client) after the mapper was already warmed left every other
-		// resource tool permanently unable to find it without a server
-		// restart. Reset once and retry so a fresh CRD resolves without one.
-		c.RESTMapper().Reset()
-		m, err = c.RESTMapper().RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	return &m.Resource, nil
 }

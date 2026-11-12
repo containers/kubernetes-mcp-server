@@ -58,6 +58,22 @@ func (r McpReloader) ClusterStateCallback() func() error {
 	}
 }
 
+// ClusterStateCallbackWithInvalidate returns the cluster-state watcher callback that
+// re-applies the toolsets and, once they are applied, calls invalidate so cached
+// discovery and REST mappers see the new cluster state.
+func (r McpReloader) ClusterStateCallbackWithInvalidate(invalidate func()) func() error {
+	apply := r.ClusterStateCallback()
+	return func() error {
+		if err := apply(); err != nil {
+			return err
+		}
+		if invalidate != nil {
+			invalidate()
+		}
+		return nil
+	}
+}
+
 type Provider interface {
 	// Embed the base TargetProvider interface.
 	api.TargetProvider
