@@ -2,6 +2,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"sigs.k8s.io/yaml"
 
@@ -119,14 +121,20 @@ func (h *Helm) Uninstall(ctx context.Context, name string, namespace string) (st
 		return "", err
 	}
 	uninstall := action.NewUninstall(cfg)
-	uninstall.IgnoreNotFound = true
+	// Helm's IgnoreNotFound turns every error of the release-history lookup into
+	// "not found", including a refused list of the release Secrets (RBAC). Only a
+	// release that really does not exist is reported as not found (with success, as
+	// before); any other lookup error is returned.
+	uninstall.IgnoreNotFound = false
 	uninstall.Wait = true
 	uninstall.Timeout = 5 * time.Minute
 	uninstalledRelease, err := uninstall.Run(name)
-	if uninstalledRelease == nil && err == nil {
+	if errors.Is(err, driver.ErrReleaseNotFound) {
 		return fmt.Sprintf("Release %s not found", name), nil
 	} else if err != nil {
 		return "", err
+	} else if uninstalledRelease == nil {
+		return fmt.Sprintf("Release %s not found", name), nil
 	}
 	return fmt.Sprintf("Uninstalled release %s %s", uninstalledRelease.Release.Name, uninstalledRelease.Info), nil
 }
