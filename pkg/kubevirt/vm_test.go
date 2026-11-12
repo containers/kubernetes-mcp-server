@@ -12,8 +12,17 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 )
 
-// createTestVM creates a test VirtualMachine with the given name, namespace, and runStrategy
-func createTestVM(name, namespace string, runStrategy RunStrategy) *unstructured.Unstructured {
+// createTestVM creates a test VirtualMachine with the given name, namespace, and runStrategy.
+// An empty runStrategy leaves spec.runStrategy unset. If running is given, the deprecated
+// spec.running field is set as well.
+func createTestVM(name, namespace string, runStrategy RunStrategy, running ...bool) *unstructured.Unstructured {
+	spec := map[string]interface{}{}
+	if runStrategy != "" {
+		spec["runStrategy"] = string(runStrategy)
+	}
+	if len(running) > 0 {
+		spec["running"] = running[0]
+	}
 	vm := &unstructured.Unstructured{}
 	vm.SetUnstructuredContent(map[string]interface{}{
 		"apiVersion": "kubevirt.io/v1",
@@ -22,9 +31,7 @@ func createTestVM(name, namespace string, runStrategy RunStrategy) *unstructured
 			"name":      name,
 			"namespace": namespace,
 		},
-		"spec": map[string]interface{}{
-			"runStrategy": string(runStrategy),
-		},
+		"spec": spec,
 	})
 	return vm
 }
@@ -509,6 +516,88 @@ func TestUnpauseVM(t *testing.T) {
 			}
 			if vm == nil {
 				t.Errorf("Expected non-nil VM, got nil")
+			}
+		})
+	}
+}
+
+// KubeVirt rejects a VirtualMachine that sets both spec.running and
+// spec.runStrategy ("Running and RunStrategy are mutually exclusive"), so the
+// lifecycle helpers must drop spec.running when they set spec.runStrategy.
+func TestLifecycleWithDeprecatedRunning(t *testing.T) {
+	tests := []struct {
+		name         string
+		initialVM    *unstructured.Unstructured
+		action       string
+		wantChanged  bool
+		wantStrategy RunStrategy
+	}{
+		{
+			name:         "Start VM with running: false",
+			initialVM:    createTestVM("test-vm", "default", "", false),
+			action:       "start",
+			wantChanged:  true,
+			wantStrategy: RunStrategyAlways,
+		},
+		{
+			name:        "Start VM with running: true is a no-op",
+			initialVM:   createTestVM("test-vm", "default", "", true),
+			action:      "start",
+			wantChanged: false,
+		},
+		{
+			name:         "Stop VM with running: true",
+			initialVM:    createTestVM("test-vm", "default", "", true),
+			action:       "stop",
+			wantChanged:  true,
+			wantStrategy: RunStrategyHalted,
+		},
+		{
+			name:         "Restart VM with running: true",
+			initialVM:    createTestVM("test-vm", "default", "", true),
+			action:       "restart",
+			wantChanged:  true,
+			wantStrategy: RunStrategyAlways,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewSimpleDynamicClient(runtime.NewScheme(), tt.initialVM)
+			ctx := context.Background()
+			ns, name := tt.initialVM.GetNamespace(), tt.initialVM.GetName()
+
+			var vm *unstructured.Unstructured
+			var changed bool
+			var err error
+			switch tt.action {
+			case "start":
+				vm, changed, err = StartVM(ctx, client, ns, name)
+			case "stop":
+				vm, changed, err = StopVM(ctx, client, ns, name)
+			case "restart":
+				vm, err = RestartVM(ctx, client, ns, name)
+				changed = true
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+			if tt.wantStrategy == "" {
+				return
+			}
+
+			if _, found, _ := unstructured.NestedFieldNoCopy(vm.Object, "spec", "running"); found {
+				t.Errorf("spec.running is still set, KubeVirt would reject the update")
+			}
+			strategy, found, err := GetVMRunStrategy(vm)
+			if err != nil || !found {
+				t.Fatalf("runStrategy not found: %v", err)
+			}
+			if strategy != tt.wantStrategy {
+				t.Errorf("Strategy = %q, want %q", strategy, tt.wantStrategy)
 			}
 		})
 	}
