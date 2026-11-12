@@ -91,6 +91,35 @@ func (s *HelmSuite) TestHelmInstall() {
 	})
 }
 
+func (s *HelmSuite) TestHelmInstallInNamespace() {
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	_, file, _, _ := runtime.Caller(0)
+	chartPath := filepath.Join(filepath.Dir(file), "testdata", "helm-chart-secret")
+	toolResult, err := s.CallTool("helm_install", map[string]interface{}{
+		"chart":     chartPath,
+		"name":      "ns-arg-release",
+		"namespace": "ns-1",
+	})
+	s.Require().NoError(err)
+	s.Require().Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+	s.Run("creates the chart's objects in the namespace argument", func() {
+		_, getErr := kc.CoreV1().Secrets("ns-1").Get(s.T().Context(), "ns-arg-release-secret", metav1.GetOptions{})
+		s.NoError(getErr)
+	})
+	s.Run("creates nothing in the kubeconfig namespace", func() {
+		_, getErr := kc.CoreV1().Secrets("default").Get(s.T().Context(), "ns-arg-release-secret", metav1.GetOptions{})
+		s.Truef(errors.IsNotFound(getErr), "chart object must not be created in the kubeconfig namespace")
+	})
+	s.Run("helm_uninstall with the namespace argument deletes the chart's objects there", func() {
+		uninstall, uninstallErr := s.CallTool("helm_uninstall", map[string]interface{}{"name": "ns-arg-release", "namespace": "ns-1"})
+		s.Require().NoError(uninstallErr)
+		s.Falsef(uninstall.IsError, "call tool failed: %v", uninstall.Content)
+		_, getErr := kc.CoreV1().Secrets("ns-1").Get(s.T().Context(), "ns-arg-release-secret", metav1.GetOptions{})
+		s.Truef(errors.IsNotFound(getErr), "chart object must be deleted from the namespace argument")
+	})
+}
+
 func (s *HelmSuite) TestHelmInstallDenied() {
 	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Secret" } ]
