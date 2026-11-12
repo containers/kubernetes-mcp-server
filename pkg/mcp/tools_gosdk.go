@@ -122,7 +122,12 @@ func ServerToolToGoSdkTool(s *Server, tool api.ServerTool) (*mcp.Tool, mcp.ToolH
 		if len(result.ContentBlocks) > 0 {
 			return NewMultiContentResult(result.ContentBlocks, result.StructuredContent, result.Error), nil
 		}
-		return NewStructuredResult(result.Content, result.StructuredContent, result.Error), nil
+		callResult := NewStructuredResult(result.Content, result.StructuredContent, result.Error)
+		if result.Error != nil && result.StructuredContent != nil {
+			// Keep text + isError for compatibility, and expose the structured error (e.g. Kubernetes Status).
+			callResult.StructuredContent = ensureStructuredObject(result.StructuredContent)
+		}
+		return callResult, nil
 	}
 	return goSdkTool, goSdkHandler, nil
 }
