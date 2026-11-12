@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -121,6 +122,22 @@ type StreamContext struct {
 	StderrStream io.WriteCloser
 	errorStream  io.WriteCloser
 	writeStatus  func(status *apierrors.StatusError) error
+	statusSent   bool
+}
+
+// WriteExitCode sends the v4 terminal status of a command that exited with a
+// non-zero code, as the kubelet does. Close then sends no success status.
+func (c *StreamContext) WriteExitCode(code int) error {
+	if c.writeStatus == nil {
+		return errors.New("no error stream")
+	}
+	c.statusSent = true
+	return c.writeStatus(&apierrors.StatusError{ErrStatus: metav1.Status{
+		Status:  metav1.StatusFailure,
+		Reason:  "NonZeroExitCode",
+		Message: fmt.Sprintf("command terminated with non-zero exit code: exit code %d", code),
+		Details: &metav1.StatusDetails{Causes: []metav1.StatusCause{{Type: "ExitCode", Message: strconv.Itoa(code)}}},
+	}})
 }
 
 // Close gracefully tears down the exec streams so the client always observes a
@@ -134,7 +151,7 @@ type StreamContext struct {
 // the streams down — this graceful teardown is the only path.
 func (c *StreamContext) Close() error {
 	// Send the v4 success terminal status on the error stream.
-	if c.writeStatus != nil {
+	if c.writeStatus != nil && !c.statusSent {
 		_ = c.writeStatus(&apierrors.StatusError{ErrStatus: metav1.Status{Status: metav1.StatusSuccess}})
 	}
 	// Close every stream so each delivers a clean EOF (and flushes its reply)
