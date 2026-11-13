@@ -1,0 +1,69 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+
+metadata:
+  labels:
+    suite: guest-observability
+    project: kubevirt
+    requires: guest-observability
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "windows-event-129-missing-vm-name"
+  category: "Guest failure investigation"
+  description: "Detect a Windows storage reset when guest telemetry is missing VM identity."
+  difficulty: medium
+
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          GUEST_OBSERVABILITY_SCENARIO=event129-missing-vm-name \
+            "${REPO_ROOT}/evals/tasks/guest-observability/shared/setup-mock.sh"
+        timeout: 180s
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash \
+            "${REPO_ROOT}/evals/tasks/guest-observability/windows-event-129-missing-vm-name/verify.sh"
+        timeout: 30s
+    - llmJudge:
+        contains: "Event 129"
+
+    - llmJudge:
+        contains: >-
+          The telemetry stream is missing the vm_name label, so the
+          affected VM cannot be reliably identified and no specific
+          VM name should be claimed.
+
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash "${REPO_ROOT}/evals/tasks/guest-observability/shared/cleanup-mock.sh"
+        timeout: 60s
+
+  prompt:
+    inline: |
+      Check whether any Windows VM in the
+      guest-observability-eval namespace experienced a storage reset
+      during the last hour.
+      Identify the affected VM and summarize the evidence you find.

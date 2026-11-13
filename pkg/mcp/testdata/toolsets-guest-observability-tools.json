@@ -1,0 +1,52 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Query Guest Logs with LogQL"
+    },
+    "description": "Executes a LogQL range query against the configured Loki backend for virtual machine guest log investigation.\n\nGuest telemetry uses namespace and vm_name as VM identity labels, while os and source classify the guest operating system and telemetry source. A collector label may also be available for orphan guest telemetry when the standard contract labels are absent.\n\nLoki label matchers exclude streams where the matched label is absent. An empty result from a query using namespace, vm_name, os, or source therefore does not prove that matching guest events are absent. When relevant telemetry may have incomplete labels, a bounded follow-up query can use progressively fewer contract-label matchers while preserving filters for the event itself.\n\nA missing label matcher should not be replaced with a log-content filter containing that label's value unless the value is known to occur in the log message. Removing namespace=\"example\" and adding |= \"example\", for example, does not establish namespace association.\n\nFor event-content searches, stable event identifiers and case-insensitive matching are useful when provider or component capitalization is not guaranteed. For Windows guest-log investigations, available classification labels such as os=\"windows\" or source=\"windows_eventlog\" should be retained in the initial query together with the event-content filter. Windows storage reset telemetry commonly contains Event ID 129 and the StorPort provider.\n\nIf an event is discovered after identity labels are removed, event detection and VM attribution must be treated separately. Reliable VM identity requires both namespace and vm_name from the telemetry. Missing os or source represents classification uncertainty but does not by itself invalidate identity when namespace and vm_name are present.\n\nResults may include guest telemetry contract warnings identifying missing identity or classification labels and whether VM attribution is reliable.",
+    "inputSchema": {
+      "properties": {
+        "direction": {
+          "default": "backward",
+          "description": "Log ordering direction: backward returns newest matching entries first; forward returns oldest matching entries first.",
+          "enum": [
+            "forward",
+            "backward"
+          ],
+          "type": "string"
+        },
+        "end": {
+          "description": "Optional RFC3339 end timestamp with explicit timezone.\nWhen start and end are omitted, the query defaults to the previous one\nhour ending at the server's current time.",
+          "type": "string"
+        },
+        "limit": {
+          "default": 100,
+          "description": "Maximum raw log entries to return. Defaults to 100 and is capped at 1000.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "LogQL query expression to execute.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Optional RFC3339 start timestamp with explicit timezone.\nWhen start and end are omitted, the query defaults to the previous one\nhour ending at the server's current time.",
+          "type": "string"
+        },
+        "step": {
+          "description": "Optional query resolution for metric-style LogQL range queries, for example 30s, 1m, or 5m.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "guest-observability_loki_query",
+    "title": "Query Guest Logs with LogQL"
+  }
+]
