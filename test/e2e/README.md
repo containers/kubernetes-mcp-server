@@ -55,6 +55,8 @@ make e2e-test-obs
 |----------|----------------|
 | `OBS_PROMETHEUS_URL` | `http://prometheus-k8s.monitoring.svc:9090` |
 | `OBS_ALERTMANAGER_URL` | `http://alertmanager-main.monitoring.svc:9093` |
+| `PROMETHEUS_K8S_TOKEN` | unset (optional; forwarded as MCP `Authorization` for header auth) |
+| `SKIP_OBS_LOKI` / `SKIP_OBS_TEMPO` | unset (when set, skips the matching `TestObs*` suite) |
 
 ### NetObserv tests
 

@@ -27,7 +27,7 @@ func TestObsMetricsTools(t *testing.T) {
 				withConfig(obsMetricsConfig()),
 				withValues(viewClusterRoleBindingValues()),
 			)
-			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
+			mcpClient := test.NewMcpClient(t, nil, obsMcpClientOptions(dep.serverURL+"/mcp")...)
 			t.Cleanup(mcpClient.Close)
 			return obsMetricsTS.set(ctx, &obsMetricsState{dep: dep, mcpClient: mcpClient})
 		}).

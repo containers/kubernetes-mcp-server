@@ -34,6 +34,19 @@ func obsAlertmanagerURL() string {
 	return obsEnvOr("OBS_ALERTMANAGER_URL", defaultObsAlertmanagerURL)
 }
 
+// obsMcpClientOptions returns MCP client options for obs e2e.
+// When PROMETHEUS_K8S_TOKEN is set (e.g. OpenShift CI), forward it as Authorization
+// so metrics toolset auth_mode=header (default) can reach monitoring backends.
+func obsMcpClientOptions(endpoint string) []test.McpClientOption {
+	opts := []test.McpClientOption{test.WithEndpoint(endpoint)}
+	if token := strings.TrimSpace(os.Getenv("PROMETHEUS_K8S_TOKEN")); token != "" {
+		opts = append(opts, test.WithHTTPHeaders(map[string]string{
+			"Authorization": "Bearer " + token,
+		}))
+	}
+	return opts
+}
+
 // obsTracesRBACValues returns Helm values granting the server SA permission
 // to list Tempo CRDs (TempoStacks, TempoMonolithics) at cluster scope.
 func obsTracesRBACValues() map[string]any {
