@@ -30,7 +30,7 @@ spec:
           set -euo pipefail
           source ../helpers/require-output.sh
           require 'failed-run'
-          require 'OOM'
+          require 'OOMKilled'
           require 'memory'
     - llmJudge:
         contains: "The response diagnoses the failed step as terminated for exceeding its memory limit (OOMKilled), based on observed runtime evidence."
