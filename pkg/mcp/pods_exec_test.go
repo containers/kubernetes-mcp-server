@@ -221,6 +221,52 @@ func (s *PodsExecSuite) TestPodsExecDenied() {
 	})
 }
 
+func (s *PodsExecSuite) TestPodsExecNonZeroExit() {
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/api/v1/namespaces/default/pods/pod-to-exec/exec" {
+			return
+		}
+		var stdout, stderr bytes.Buffer
+		ctx, err := test.CreateHTTPStreams(w, req, &test.StreamOptions{Stdout: &stdout, Stderr: &stderr})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(err.Error()))
+			return
+		}
+		defer func() { _ = ctx.Close() }()
+		_, _ = io.WriteString(ctx.StdoutStream, "partial\n")
+		_, _ = io.WriteString(ctx.StderrStream, "why it failed\n")
+		_ = ctx.WriteExitCode(3)
+	}))
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/api/v1/namespaces/default/pods/pod-to-exec" {
+			return
+		}
+		test.WriteObject(w, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-to-exec"},
+			Spec:       v1.PodSpec{Containers: []v1.Container{{Name: "container-to-exec"}}},
+		})
+	}))
+	s.InitMcpClient()
+	result, err := s.CallTool("pods_exec", map[string]interface{}{
+		"name":      "pod-to-exec",
+		"namespace": "default",
+		"command":   []interface{}{"sh", "-c", "exit 3"},
+	})
+	s.Require().NoError(err)
+	text := result.Content[0].(*mcp.TextContent).Text
+	s.Run("returns an error with the exit code", func() {
+		s.True(result.IsError)
+		s.Contains(text, "command terminated with exit code 3")
+	})
+	s.Run("returns the captured stdout", func() {
+		s.Contains(text, "--- stdout ---\npartial\n")
+	})
+	s.Run("returns the captured stderr", func() {
+		s.Contains(text, "--- stderr ---\nwhy it failed\n")
+	})
+}
+
 func TestPodsExec(t *testing.T) {
 	suite.Run(t, new(PodsExecSuite))
 }
