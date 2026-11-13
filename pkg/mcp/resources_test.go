@@ -1523,6 +1523,16 @@ func (s *ResourcesSuite) TestResourcesCreateOrUpdateDocumentSeparators() {
 		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
 		s.True(exists("sep-commentdoc-2"))
 	})
+	s.Run("explicit empty object fails before anything is written", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-emptyobj-1") + "---\n{}\n---\n" + cm("sep-emptyobj-2"),
+		})
+		s.Require().NoError(err)
+		s.True(result.IsError, "a {} document must fail the call")
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "document 2: apiVersion and kind are required")
+		s.False(exists("sep-emptyobj-1"), "no document may be applied when one is an empty object")
+		s.False(exists("sep-emptyobj-2"), "no document may be applied when one is an empty object")
+	})
 	s.Run("document without kind fails before anything is written", func() {
 		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
 			"resource": cm("sep-nokind-1") + "---\napiVersion: v1\nmetadata:\n  name: sep-nokind-2\n",

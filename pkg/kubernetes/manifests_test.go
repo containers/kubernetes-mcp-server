@@ -52,8 +52,16 @@ func (s *ParseManifestsSuite) TestSeparators() {
 	s.Run("blank document is skipped", func() {
 		s.Equal([]string{"a", "c"}, names(s, cmA+"---\n\n---\n"+cmC))
 	})
+	s.Run("null document is skipped", func() {
+		s.Equal([]string{"a", "c"}, names(s, cmA+"---\nnull\n---\n"+cmC))
+	})
 	s.Run("JSON object", func() {
 		s.Equal([]string{"j"}, names(s, `{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"j"}}`))
+	})
+	s.Run("integers decode as int64, as unstructured.Unstructured does", func() {
+		objs, err := ParseManifests("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: d\nspec:\n  replicas: 3\n")
+		s.Require().NoError(err)
+		s.IsType(int64(0), objs[0].Object["spec"].(map[string]interface{})["replicas"])
 	})
 	s.Run("status is removed", func() {
 		objs, err := ParseManifests(cmA + "status:\n  phase: Ready\n")
@@ -71,6 +79,15 @@ func (s *ParseManifestsSuite) TestErrors() {
 	s.Run("document without kind names its position", func() {
 		_, err := ParseManifests(cmA + "---\napiVersion: v1\nmetadata:\n  name: b\n")
 		s.EqualError(err, "document 2: apiVersion and kind are required (nothing was applied)")
+	})
+	s.Run("explicit empty object between documents is an error, as in kubectl", func() {
+		objs, err := ParseManifests(cmA + "---\n{}\n---\n" + cmB)
+		s.EqualError(err, "document 2: apiVersion and kind are required (nothing was applied)")
+		s.Nil(objs)
+	})
+	s.Run("explicit empty object alone is an error", func() {
+		_, err := ParseManifests("{}")
+		s.EqualError(err, "document 1: apiVersion and kind are required (nothing was applied)")
 	})
 	s.Run("text after a separator is a syntax error, as in kubectl", func() {
 		_, err := ParseManifests(cmA + "--- apiVersion: v1\n" + cmB)

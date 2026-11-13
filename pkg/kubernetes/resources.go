@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utiljson "k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/discovery"
 )
@@ -76,7 +77,7 @@ func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]
 // ParseManifests splits a YAML or JSON stream into Kubernetes objects the way
 // kubectl's YAML reader does: a document separator is a line starting with
 // "---", optionally followed by spaces and a comment, and documents that hold
-// nothing (blank, comment-only, a trailing separator) are skipped. Every
+// nothing (blank, comment-only, null, a trailing separator) are skipped. Every
 // document is decoded before anything is sent to the cluster, so a document
 // that cannot be decoded, or has no apiVersion or kind, fails the whole call
 // without writing anything.
@@ -93,13 +94,20 @@ func ParseManifests(resource string) ([]*unstructured.Unstructured, error) {
 		if err != nil {
 			return nil, fmt.Errorf("document %d: %w", index, err)
 		}
-		obj := &unstructured.Unstructured{}
-		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(document), 4096).Decode(&obj.Object); err != nil && !errors.Is(err, io.EOF) {
+		// As in kubectl's StreamVisitor, only a document that decodes to nothing or to
+		// null (blank, comment-only, a trailing separator) is skipped. An explicit empty
+		// object such as {} is kept, so it fails the apiVersion and kind check below.
+		var raw runtime.RawExtension
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(document), 4096).Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("document %d: %w", index, err)
 		}
-		if len(obj.Object) == 0 {
-			// blank or comment-only document, or a trailing separator
+		raw.Raw = bytes.TrimSpace(raw.Raw)
+		if len(raw.Raw) == 0 || bytes.Equal(raw.Raw, []byte("null")) {
 			continue
+		}
+		obj := &unstructured.Unstructured{}
+		if err := utiljson.Unmarshal(raw.Raw, &obj.Object); err != nil {
+			return nil, fmt.Errorf("document %d: %w", index, err)
 		}
 		if obj.GetAPIVersion() == "" || obj.GetKind() == "" {
 			return nil, fmt.Errorf("document %d: apiVersion and kind are required (nothing was applied)", index)
