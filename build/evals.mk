@@ -46,6 +46,8 @@ EVAL_CONFIG ?= $(or $(wildcard evals/tasks/$(SUITE)/$(AGENT)/eval.yaml),evals/co
 EVAL_LABEL_SELECTOR ?= $(if $(filter core-readonly,$(SUITE)),readonly=true,suite=$(SUITE))
 EVAL_TASK_FILTER ?=
 EVAL_VERBOSE ?= false
+# Glob or path(s) to result files checked by check-evals (defaults to local run output).
+EVAL_RESULTS ?= mcpchecker-*-out.json
 
 # Download and install jq static binary if not already installed
 .PHONY: jq
@@ -98,6 +100,22 @@ run-evals: mcpchecker jq $(if $(filter acp-anthropic,$(AGENT)),claude-agent-acp)
 		$(if $(EVAL_TASK_FILTER),--run "$(EVAL_TASK_FILTER)",) \
 		$(if $(filter true,$(EVAL_VERBOSE)),--verbose,) \
 		--output json
+
+.PHONY: check-evals
+check-evals: jq ## Check task results AND tool-use assertions in mcpchecker output (EVAL_RESULTS overrides files)
+	@found=false; failed=false; \
+	for file in $(EVAL_RESULTS); do \
+		[ -f "$$file" ] || continue; \
+		found=true; \
+		if $(JQ) -e '.results | type == "array" and length > 0 and all(.[]; .taskPassed == true and .allAssertionsPassed == true)' "$$file" >/dev/null; then \
+			echo "PASS $$file"; \
+		else \
+			failed=true; echo "FAIL $$file"; \
+			$(JQ) -r '.results[]? | select(.taskPassed != true or .allAssertionsPassed != true) | "  \(.taskName // "<unnamed>"): taskPassed=\(.taskPassed), allAssertionsPassed=\(.allAssertionsPassed)", (if .taskPassed != true then "    \(.taskError // .taskJudgeReason // "task did not pass")" else empty end), (.assertionResults // {} | to_entries[] | select(.value.passed != true) | "    \(.key): \(.value.reason // "failed")")' "$$file" || true; \
+		fi; \
+	done; \
+	if [ "$$found" = false ]; then echo "No mcpchecker result files found: $(EVAL_RESULTS)" >&2; exit 1; fi; \
+	[ "$$failed" = false ]
 
 .PHONY: diff-evals
 diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline

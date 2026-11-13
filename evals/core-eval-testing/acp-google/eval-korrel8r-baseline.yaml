@@ -1,0 +1,25 @@
+kind: Eval
+metadata:
+  name: "korrel8r-core-baseline"
+config:
+  agent:
+    type: file
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+  taskSets:
+    - path: ../../tasks/korrel8r/deployment-correlations/task.yaml
+      labelSelector:
+        suite: korrel8r
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "(resources_.*|pods_.*|events_.*)"
+        minToolCalls: 1
+        maxToolCalls: 25
