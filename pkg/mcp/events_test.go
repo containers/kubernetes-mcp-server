@@ -126,10 +126,27 @@ func (s *EventsSuite) TestEventsListTimestampsAreRFC3339UTC() {
 		FirstTimestamp: metav1.NewTime(at.In(time.FixedZone("MST", -7*3600))),
 	}, metav1.CreateOptions{})
 	s.Require().NoError(err)
+	_, err = client.CoreV1().Events(ns.Name).Create(s.T().Context(), &v1.Event{
+		ObjectMeta:          metav1.ObjectMeta{Name: "a-microsecond-event"},
+		InvolvedObject:      v1.ObjectReference{APIVersion: "v1", Kind: "Pod", Name: "a-pod", Namespace: ns.Name},
+		Type:                "Normal",
+		Reason:              "Timed",
+		Message:             "timed to the microsecond",
+		EventTime:           metav1.NewMicroTime(at.Add(123456 * time.Microsecond).In(time.FixedZone("MST", -7*3600))),
+		ReportingController: "example.com/events-test",
+		ReportingInstance:   "events-test",
+		Action:              "Test",
+	}, metav1.CreateOptions{})
+	s.Require().NoError(err)
 	toolResult, err := s.CallTool("events_list", map[string]interface{}{"namespace": ns.Name})
 	s.Require().NoError(err)
 	s.Require().Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
-	s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "Timestamp: \"2026-11-11T00:00:00Z\"")
+	s.Run("whole seconds", func() {
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "Timestamp: \"2026-11-11T00:00:00Z\"")
+	})
+	s.Run("keeps fractional seconds", func() {
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "Timestamp: \"2026-11-11T00:00:00.123456Z\"")
+	})
 }
 
 func (s *EventsSuite) TestEventsListDenied() {

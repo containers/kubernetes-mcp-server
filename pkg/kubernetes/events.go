@@ -41,8 +41,7 @@ func (c *Core) EventsList(ctx context.Context, namespace string, options api.Lis
 		}
 		eventMap = append(eventMap, map[string]any{
 			"Namespace": event.Namespace,
-			// RFC 3339 in UTC, like every other timestamp the server returns (time.String() used the host's zone)
-			"Timestamp": timestamp.UTC().Format(time.RFC3339),
+			"Timestamp": timestamp.UTC().Format(time.RFC3339Nano),
 			"Type":      event.Type,
 			"Reason":    event.Reason,
 			"InvolvedObject": map[string]string{
