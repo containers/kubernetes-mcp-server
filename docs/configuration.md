@@ -587,7 +587,7 @@ Non-Kubernetes backends enforce their own checks on the credential this server p
 - **Request denial.** `denied_resources` rejects matching group/version/kind calls on the Kubernetes client and omits those kinds from discovery. A match is by kind and API version. Verb, namespace, and name are ignored. An empty `kind` matches every kind in that group and version. Calls made with another HTTP client — Kiali, NetObserv, Prometheus, Loki, Tempo, and Helm registry fetches — do not consult this list.
 - **Prompts and pre-checks.** `confirmation_rules` prompt at tool invocation and on the Kubernetes client path. If the client cannot elicit a confirmation, the call proceeds unless `confirmation_fallback` is `"deny"` (the default is `"allow"`). With `validation_enabled`, the server sends a `SelfSubjectAccessReview` before the Kubernetes call. The API server still authorizes the real request. Schema validation from that flag checks the manifest.
 
-`experimental_enable_target_compatibility_tool_filters` hides tools whose required APIs are absent. See [Target compatibility](#target-compatibility). That filter reflects which APIs the cluster advertises.
+`enable_target_compatibility_tool_filters` (on by default) hides tools whose required APIs are absent. See [Target compatibility](#target-compatibility). That filter reflects which APIs the cluster advertises.
 
 OAuth settings (`require_oauth`, `authorization_url`, `skip_jwt_verification`, and the rest of [OAuth and Authorization](#oauth-and-authorization)), `cluster_auth_mode`, and TLS settings configure how clients authenticate to this server and which identity is sent to the cluster. Those settings stand apart from the guardrails in this section. With `cluster_auth_mode = "passthrough"` (the default when a bearer token is present), the API server authorizes that token, after token exchange when configured. With `cluster_auth_mode = "kubeconfig"`, or when no token is present and passthrough falls back, the API server authorizes the kubeconfig or in-cluster ServiceAccount identity.
 
@@ -701,12 +701,14 @@ Hides tools that require API groups the target cluster does not advertise. This 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `experimental_enable_target_compatibility_tool_filters` | boolean | `false` | When `true`, tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). **NOTE:** This feature is experimental, and this option is subject to change or removal in a future release. |
+| `enable_target_compatibility_tool_filters` | boolean | `true` | When `true`, tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). Set to `false` to turn this check off, so no tool is hidden for a missing API group (other settings such as `read_only` can still hide tools). |
+
+The old name `experimental_enable_target_compatibility_tool_filters` is deprecated and still read, with a warning in the log. See [Configuration Changes](configuration-changes.md#target-compatibility-filters-on-by-default).
 
 **Example:**
 ```toml
-# Probe every target for API-group compatibility
-experimental_enable_target_compatibility_tool_filters = true
+# Do not hide tools based on which API groups the target cluster(s) support
+enable_target_compatibility_tool_filters = false
 ```
 
 ### Tool Overrides

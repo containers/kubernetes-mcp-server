@@ -664,10 +664,10 @@ startup.
 <td></td>
 </tr>
 <tr>
-<td>experimental_enable_target_compatibility_tool_filters</td>
+<td>enable_target_compatibility_tool_filters</td>
 <td>bool</td>
-<td><code>false</code></td>
-<td><code>experimental_enable_target_compatibility_tool_filters</code></td>
+<td><code>true</code></td>
+<td><code>enable_target_compatibility_tool_filters</code></td>
 <td>—</td>
 <td>—</td>
 <td>yes</td>

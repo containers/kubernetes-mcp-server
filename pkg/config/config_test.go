@@ -124,6 +124,47 @@ func (s *ConfigSuite) TestDocumentedOptions() {
 	s.True(paths["token_exchange.client_auth.client_secret"].Sensitive)
 }
 
+func (s *ConfigSuite) TestTargetCompatibilityToolFilters() {
+	const legacy = "experimental_enable_target_compatibility_tool_filters"
+	const current = "enable_target_compatibility_tool_filters"
+	tests := []struct {
+		name     string
+		toml     string
+		expected bool
+		warns    bool
+	}{
+		{"neither key defaults to true", ``, true, false},
+		{"new key true", current + " = true", true, false},
+		{"new key false", current + " = false", false, false},
+		{"old key true is a no-op", legacy + " = true", true, true},
+		{"old key false opts out", legacy + " = false", false, true},
+		{"both keys: new true wins over old false", current + " = true\n" + legacy + " = false", true, true},
+		{"both keys: new false wins over old true", current + " = false\n" + legacy + " = true", false, true},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			buf := &bytes.Buffer{}
+			logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Output(buf)))
+			ctx := klog.NewContext(s.T().Context(), logger)
+			cfg, err := ReadToml(ctx, []byte(tt.toml), WithBaseDefault())
+			s.Require().NoError(err)
+			s.Equal(tt.expected, cfg.EnableTargetCompatibilityToolFilters.Get())
+			s.Equal(tt.warns, strings.Contains(buf.String(), legacy+" is deprecated"))
+		})
+	}
+	s.Run("old key with a non-boolean value fails the load", func() {
+		_, err := ReadToml(s.T().Context(), []byte(legacy+` = "yes"`), WithBaseDefault())
+		s.Error(err)
+	})
+	s.Run("old key false survives a reload that still sets it", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(legacy+" = false"), WithBaseDefault())
+		s.Require().NoError(err)
+		next, err := ReadToml(s.T().Context(), []byte(legacy+" = false"), WithPrevious(prev), WithBaseDefault())
+		s.Require().NoError(err)
+		s.False(next.EnableTargetCompatibilityToolFilters.Get())
+	})
+}
+
 func (s *ConfigSuite) TestOptInTools() {
 	s.Run("no additional tools by default", func() {
 		s.Empty(BaseDefault().OptInTools.Get())

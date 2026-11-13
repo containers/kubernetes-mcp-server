@@ -36,6 +36,7 @@ func (s *KialiSuite) SetupTest() {
 	readOnly := s.Cfg.ReadOnly.Get()
 	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host)))
@@ -686,7 +687,7 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		kubeConfig := s.Cfg.KubeConfig.Get()
 		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
+			enable_target_compatibility_tool_filters = true
 			read_only = false
 			disable_destructive = false
 			[toolset_configs.kiali]
@@ -714,7 +715,7 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		kubeConfig := s.Cfg.KubeConfig.Get()
 		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
+			enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
 			url = "http://127.0.0.1:1"
 			insecure = true
@@ -757,6 +758,7 @@ func (s *KialiSuite) applyDeniedVirtualServiceConfig() {
 	readOnly := s.Cfg.ReadOnly.Get()
 	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
 		read_only = false
 		disable_destructive = false
 		[[denied_resources]]

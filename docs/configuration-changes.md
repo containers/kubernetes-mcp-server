@@ -10,6 +10,8 @@
   - [Vectors at a glance](#vectors-at-a-glance)
   - [Migration examples](#migration-examples)
 - [Upgrading from 0.0.66](#upgrading-from-0066)
+- [Upgrading from 0.1.z](#upgrading-from-01z)
+  - [Target compatibility filters on by default](#target-compatibility-filters-on-by-default)
 
 This document records configuration changes that may require action when upgrading between releases. Add newer release transitions as separate sections so upgrade guidance remains available without cluttering the current [configuration reference](configuration.md).
 
@@ -118,7 +120,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 | `max_in_flight` | — | yes |
 | `max_result_bytes` | — | yes |
 | `kubeconfig`, `cluster_provider_strategy` | — | no |
-| `cluster_auth_mode`, `denied_resources`, `read_only`, `disable_destructive`, `validation_enabled`, `experimental_enable_target_compatibility_tool_filters` | — | yes |
+| `cluster_auth_mode`, `denied_resources`, `read_only`, `disable_destructive`, `validation_enabled`, `enable_target_compatibility_tool_filters` | — | yes |
 | `toolsets`, `enabled_tools`, `opt_in_tools`, `disabled_tools`, `tool_overrides`, `prompts`, `confirmation_*` | — | yes |
 | `tls_cert`, `tls_key`, `require_tls` | — | no |
 | `tls_min_version` | `TLS_MIN_VERSION` | no (inbound) |
@@ -182,3 +184,20 @@ The legacy top-level `token_exchange_strategy` and `sts_*` settings were removed
 | `sts_federated_token_file` | `token_exchange.client_auth.token_file` |
 
 Map legacy `sts_auth_style` values as follows: `params` to `client_secret_post`, `header` to `client_secret_basic`, `assertion` to `private_key_jwt`, and `federated` to `jwt_file`. Configurations that omitted `token_exchange_strategy` used the built-in STS path and should use `client_secret_basic` to preserve HTTP Basic client authentication.
+
+## Upgrading from 0.1.z
+
+### Target compatibility filters on by default
+
+`experimental_enable_target_compatibility_tool_filters` is now `enable_target_compatibility_tool_filters`, and it defaults to `true`. Tools that need an API the target cluster does not have (for example `projects_list` outside OpenShift, or `pods_top` without the Metrics Server) are hidden unless you opt out with `enable_target_compatibility_tool_filters = false`. The Kiali toolset now also checks that Kiali is reachable before it registers its tools.
+
+The old key is deprecated. It is still read for a release or two and logs a warning:
+
+| Old key | New key | Result |
+|---------|---------|--------|
+| absent | absent | `true` (new default) |
+| `experimental_... = true` | absent | `true` (no change needed) |
+| `experimental_... = false` | absent | `false` (kept as an explicit opt-out) |
+| any value | set | the new key wins |
+
+Rename the key in your config to silence the warning.

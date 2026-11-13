@@ -35,7 +35,7 @@ func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContex
 		warnKialiValidationDisabledOnce.Do(func() {
 			klogutil.LogWarn(
 				klogutil.FromContext(ctx),
-				"experimental_enable_target_compatibility_tool_filters is disabled; Kiali URL reachability and in-cluster discovery are not validated",
+				"enable_target_compatibility_tool_filters is disabled; Kiali URL reachability and in-cluster discovery are not validated",
 			)
 		})
 	} else if !kialiAvailable(ctx, toolsetContext) {

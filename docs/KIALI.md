@@ -10,7 +10,6 @@ Config (TOML):
 
 ```toml
 toolsets = ["core", "kiali"]
-experimental_enable_target_compatibility_tool_filters = true
 
 [toolset_configs.kiali]
 url = "https://kiali.example" # Endpoint/route to reach Kiali console
@@ -19,7 +18,7 @@ url = "https://kiali.example" # Endpoint/route to reach Kiali console
 # When url is https and insecure is false, certificate_authority is required.
 ```
 
-Reachability checks and in-cluster URL discovery require `experimental_enable_target_compatibility_tool_filters = true` (default `false`). Without it, Kiali tools are always registered and no `/api/status` probe or CR-based discovery runs.
+Reachability checks and in-cluster URL discovery run when `enable_target_compatibility_tool_filters` is on, which is the default. With `enable_target_compatibility_tool_filters = false`, Kiali tools are always registered and no `/api/status` probe or CR-based discovery runs.
 
 When that flag is enabled:
 
@@ -95,7 +94,7 @@ curl -sk -X POST "${KIALI_URL}api/chat/mcp/list_clusters" \
 
 ### Troubleshooting
 
-- Kiali tools missing from `tools/list` → enable `experimental_enable_target_compatibility_tool_filters = true`, then set `[toolset_configs.kiali].url` or ensure a Kiali CR is installed so the in-cluster Service URL can be discovered.
+- Kiali tools missing from `tools/list` → set `[toolset_configs.kiali].url` or ensure a Kiali CR is installed so the in-cluster Service URL can be discovered.
 - Kiali tools missing with `require_tls = true` → discovery uses HTTPS only; set `[toolset_configs.kiali].url` to your HTTPS Kiali endpoint if in-cluster HTTP is all that is available.
 - Tools still missing with a Kiali CR installed → `GET {url}/api/status` is probably failing (often **401**). Bind the MCP ServiceAccount to **`kiali-viewer`** and re-test the curl probe above from the MCP pod.
 - Invalid or unreachable URL → ensure `[toolset_configs.kiali].url` is a valid `http(s)://host` URL and that `GET {url}/api/status` succeeds from the MCP server with the MCP server's bearer token.

@@ -156,6 +156,8 @@ type BaseMcpSuite struct {
 func (s *BaseMcpSuite) SetupTest() {
 	s.Cfg = config.BaseDefault()
 	s.Cfg.ListOutput.SetForTest("yaml")
+	// Target compatibility filtering is on by default; tests that need it set it explicitly.
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
 	s.Cfg.KubeConfig.SetForTest(test.EnvTestKubeconfigFile(s.T()))
 	test.ApplyEnvtestClientLimits(s.Cfg)
 }
