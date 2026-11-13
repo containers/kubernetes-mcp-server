@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -152,6 +153,21 @@ func (c *TelemetryConfig) IsEnabled() bool {
 		return false
 	}
 	return c.Endpoint.Get() != ""
+}
+
+// HTTPEndpointURL returns the OTLP/HTTP URL for one signal ("traces",
+// "metrics" or "logs"). An endpoint with no path is the collector base URL, as
+// OTEL_EXPORTER_OTLP_ENDPOINT defines it, so the signal path is appended:
+// http://collector:4318 becomes http://collector:4318/v1/traces. An endpoint
+// that already has a path is used as is.
+func (c *TelemetryConfig) HTTPEndpointURL(signal string) string {
+	endpoint := c.Endpoint.Get()
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" || (u.Path != "" && u.Path != "/") {
+		return endpoint
+	}
+	u.Path = "/v1/" + signal
+	return u.String()
 }
 
 // TokenExchangeClientAuth is nested under [token_exchange.client_auth].

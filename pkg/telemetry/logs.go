@@ -74,7 +74,7 @@ func createLogExporter(ctx context.Context, cfg *config.TelemetryConfig) (sdklog
 
 	switch protocol {
 	case "http/protobuf", "http":
-		return otlploghttp.New(ctx, otlploghttp.WithEndpointURL(endpoint))
+		return otlploghttp.New(ctx, otlploghttp.WithEndpointURL(cfg.HTTPEndpointURL("logs")))
 	default:
 		return otlploggrpc.New(ctx, otlploggrpc.WithEndpointURL(endpoint))
 	}

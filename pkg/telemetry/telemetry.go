@@ -170,7 +170,7 @@ func createExporterWithConfig(ctx context.Context, cfg *config.TelemetryConfig) 
 	switch protocol {
 	case "http/protobuf", "http":
 		logger.V(2).Info("Using HTTP/protobuf OTLP exporter", "telemetry.exporter.protocol", protocol)
-		return otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
+		return otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(cfg.HTTPEndpointURL("traces")))
 
 	case "grpc", "":
 		if protocol == "" {
