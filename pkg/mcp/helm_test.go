@@ -44,6 +44,7 @@ func (s *HelmSuite) SetupTest() {
 }
 
 func (s *HelmSuite) TearDownTest() {
+	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()))
 	s.BaseMcpSuite.TearDownTest()
 	s.klogState.Restore()
 }
@@ -431,13 +432,21 @@ func helmReleaseSecret(name string) *corev1.Secret {
 	}
 }
 
+// clearHelmReleases removes the release records the suite creates in default and
+// ns-1, and the chart objects installed into ns-1, so no test depends on another
+// test (or subtest) uninstalling what it installed.
 func clearHelmReleases(ctx context.Context, kc *kubernetes.Clientset) {
-	secrets, _ := kc.CoreV1().Secrets("default").List(ctx, metav1.ListOptions{})
-	for _, secret := range secrets.Items {
-		if strings.HasPrefix(secret.Name, "sh.helm.release.v1.") {
-			_ = kc.CoreV1().Secrets("default").Delete(ctx, secret.Name, metav1.DeleteOptions{})
+	for _, ns := range []string{"default", "ns-1"} {
+		secrets, _ := kc.CoreV1().Secrets(ns).List(ctx, metav1.ListOptions{})
+		for _, secret := range secrets.Items {
+			if strings.HasPrefix(secret.Name, "sh.helm.release.v1.") {
+				_ = kc.CoreV1().Secrets(ns).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+			}
 		}
 	}
+	_ = kc.CoreV1().Secrets("ns-1").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/managed-by=Helm",
+	})
 }
 
 func TestHelm(t *testing.T) {

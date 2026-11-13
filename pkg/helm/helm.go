@@ -159,7 +159,8 @@ func (h *Helm) newAction(ctx context.Context, namespace string, allNamespaces bo
 	// creates, waits for and deletes the chart's objects otherwise falls back to the
 	// kubeconfig's namespace for every object without metadata.namespace, so a chart
 	// installed with a namespace argument would land in another namespace than its
-	// release record. The Helm CLI sets the same field from --namespace.
+	// release record.
+	// This matches the Helm CLI's behaviour when --namespace is specified
 	if kc, ok := cfg.KubeClient.(*kube.Client); ok && applicableNamespace != "" {
 		kc.Namespace = applicableNamespace
 	}
