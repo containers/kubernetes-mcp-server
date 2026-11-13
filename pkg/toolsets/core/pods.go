@@ -433,6 +433,10 @@ func podsDelete(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod: %w", err)), nil
 	}
 	ret, err := kubernetes.NewCore(params).PodsDelete(params, ns, name)
+	var cleanupErr *kubernetes.PodCleanupError
+	if errors.As(err, &cleanupErr) {
+		return api.NewToolCallResult("", err), nil
+	}
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to delete pod %s in namespace %s: %w", name, ns, err)), nil
 	}
