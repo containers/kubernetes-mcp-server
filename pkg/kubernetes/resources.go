@@ -318,14 +318,18 @@ func (c *Core) effectiveNamespace(gvk *schema.GroupVersionKind, namespace string
 }
 
 func (c *Core) isNamespaced(gvk *schema.GroupVersionKind) (bool, error) {
+	// Match the resource the RESTMapper resolved, not the kind: it also resolves lowercase kinds
+	// ("deployment"), and two kinds can differ only in case ("Widget", "WIDGET").
+	gvr, err := c.resourceFor(gvk)
+	if err != nil {
+		return false, err
+	}
 	apiResourceList, err := c.DiscoveryClient().ServerResourcesForGroupVersion(gvk.GroupVersion().String())
 	if err != nil {
 		return false, err
 	}
-	// The RESTMapper also resolves lowercase kinds ("deployment"), so match case-insensitively;
-	// otherwise a namespaced resource would be treated as cluster-scoped and lose its namespace.
 	for _, apiResource := range apiResourceList.APIResources {
-		if strings.EqualFold(apiResource.Kind, gvk.Kind) {
+		if apiResource.Name == gvr.Resource {
 			return apiResource.Namespaced, nil
 		}
 	}

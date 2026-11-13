@@ -43,10 +43,25 @@ func (s *ResourcesTestSuite) SetupTest() {
 			Kind:       "CustomResourceDefinition",
 			Namespaced: false,
 		}},
+	}, metav1.APIResourceList{
+		// Two kinds that differ only in case, with opposite scopes.
+		GroupVersion: "example.com/v1",
+		APIResources: []metav1.APIResource{
+			{Name: "awidgets", SingularName: "awidget", Kind: "Widget", Namespaced: false},
+			{Name: "zwidgets", SingularName: "zwidget", Kind: "WIDGET", Namespaced: true},
+		},
 	}))
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/nodes") || strings.Contains(r.URL.Path, "/pods") || strings.Contains(r.URL.Path, "/customresourcedefinitions") {
+		if strings.Contains(r.URL.Path, "/nodes") || strings.Contains(r.URL.Path, "/pods") || strings.Contains(r.URL.Path, "/customresourcedefinitions") || strings.Contains(r.URL.Path, "widgets") {
 			s.paths = append(s.paths, r.URL.Path)
+		}
+		if strings.HasPrefix(r.URL.Path, "/apis/example.com/v1/") {
+			test.WriteObject(w, &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "example.com/v1",
+				"kind":       "WIDGET",
+				"metadata":   map[string]interface{}{"name": "target"},
+			}})
+			return
 		}
 
 		switch r.URL.Path {
@@ -190,6 +205,13 @@ func (s *ResourcesTestSuite) TestResourcesLowercaseKindRetainsNamespace() {
 		s.Require().NoError(err)
 		s.assertLastPath("/api/v1/nodes/test-node")
 	})
+}
+
+func (s *ResourcesTestSuite) TestResourcesCaseCollidingKindUsesResolvedResourceScope() {
+	widget := &schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "WIDGET"}
+	_, err := s.core.ResourcesGet(s.T().Context(), widget, "test-namespace", "target")
+	s.Require().NoError(err)
+	s.assertLastPath("/apis/example.com/v1/namespaces/test-namespace/zwidgets/target")
 }
 
 func (s *ResourcesTestSuite) TestResourcesCreateOrUpdateClusterScopedResourceIgnoresNamespace() {
