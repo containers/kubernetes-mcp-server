@@ -4,6 +4,8 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,26 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	defaultObsPrometheusURL   = "http://prometheus-k8s.monitoring.svc:9090"
+	defaultObsAlertmanagerURL = "http://alertmanager-main.monitoring.svc:9093"
+)
+
+func obsEnvOr(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return def
+}
+
+func obsPrometheusURL() string {
+	return obsEnvOr("OBS_PROMETHEUS_URL", defaultObsPrometheusURL)
+}
+
+func obsAlertmanagerURL() string {
+	return obsEnvOr("OBS_ALERTMANAGER_URL", defaultObsAlertmanagerURL)
+}
 
 // obsTracesRBACValues returns Helm values granting the server SA permission
 // to list Tempo CRDs (TempoStacks, TempoMonolithics) at cluster scope.
@@ -105,13 +127,13 @@ func obsLogsRBACValues() map[string]any {
 // obsMetricsConfig returns the TOML config for deploying the MCP server
 // with observability/metrics toolset pointing at the in-cluster Prometheus.
 func obsMetricsConfig() string {
-	return `
+	return fmt.Sprintf(`
 toolsets = ["observability/metrics"]
 
 [toolset_configs."observability/metrics"]
-prometheus_url = "http://prometheus-k8s.monitoring.svc:9090"
-alertmanager_url = "http://alertmanager-main.monitoring.svc:9093"
-`
+prometheus_url = %q
+alertmanager_url = %q
+`, obsPrometheusURL(), obsAlertmanagerURL())
 }
 
 // obsTracesConfig returns the TOML config for deploying the MCP server
@@ -141,13 +163,13 @@ toolsets = ["observability/otelcol"]
 // obsAllConfig returns the TOML config for deploying the MCP server
 // with all observability toolsets enabled.
 func obsAllConfig() string {
-	return `
+	return fmt.Sprintf(`
 toolsets = ["observability/metrics", "observability/traces", "observability/logs", "observability/otelcol"]
 
 [toolset_configs."observability/metrics"]
-prometheus_url = "http://prometheus-k8s.monitoring.svc:9090"
-alertmanager_url = "http://alertmanager-main.monitoring.svc:9093"
-`
+prometheus_url = %q
+alertmanager_url = %q
+`, obsPrometheusURL(), obsAlertmanagerURL())
 }
 
 // requireObsToolCallSuccess calls a tool and asserts it returns non-error structured content.

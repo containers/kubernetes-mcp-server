@@ -18,7 +18,7 @@ They run against a live cluster through the Makefile:
 # One-time: create cluster, build+load the image, install cert-manager/Keycloak/Kuadrant
 make e2e-full-setup
 
-# Run the whole suite
+# Run the suite (skips TestObs* by default; keeps TestObservability*)
 make e2e-test
 
 # Run a subset (forwarded to `go test -run`)
@@ -32,12 +32,29 @@ Lighter setups exist when you don't need every component:
 |--------|-----------|
 | `make e2e-setup` | cluster + image (enough for `TestSmoke`) |
 | `make e2e-full-setup` | `e2e-setup` + cert-manager + Keycloak + Kuadrant |
+| `make e2e-setup-obs` | `e2e-setup` + Prometheus + Tempo + Loki (obs toolsets) |
 | `make e2e-teardown` | delete the cluster |
 
 `e2e-test` sets `KUBECONFIG` to `_output/kubeconfig` and passes `KUBECTL_PATH`,
 `HELM_PATH`, and `MCP_SERVER_IMAGE` through to the tests. Overridable env vars:
 `MCP_SERVER_IMAGE`, `CHART_PATH`, `HELM_PATH`, `KUBECTL_PATH`, and (for Kuadrant)
 `GATEWAY_NAMESPACE`, `GATEWAY_SERVICE`, `GATEWAY_HOST`.
+
+`e2e-test` skips `TestObs*` via `E2E_OBS_SKIP` (override with `E2E_OBS_SKIP=`).
+
+### Obs toolset tests (`TestObs*`)
+
+Requires `e2e-setup-obs`. CI: `.github/workflows/e2e-obs.yaml`.
+
+```bash
+make e2e-setup-obs
+make e2e-test-obs
+```
+
+| Variable | Kind default |
+|----------|----------------|
+| `OBS_PROMETHEUS_URL` | `http://prometheus-k8s.monitoring.svc:9090` |
+| `OBS_ALERTMANAGER_URL` | `http://alertmanager-main.monitoring.svc:9093` |
 
 ### NetObserv tests
 
@@ -68,6 +85,8 @@ is missing, and `TestKuadrantGateway` skips without the gateway service.
 | `oauth_test.go` | OAuth toolkit: token/discovery/CA helpers, JWT minting, identity discriminator, `requireUnauthorized` |
 | `oauth_flows_test.go` | OAuth flow tests: rejection surface, server modes, forwarded identity, STS variants, groups→RBAC |
 | `smoke_test.go` | `TestSmoke` — baseline deploy + tool calls |
+| `obs_helpers_test.go`, `obs_*_test.go` | Obs toolset e2e (`TestObs*`); see [Obs toolset tests](#obs-toolset-tests-testobs) |
+| `observability_test.go` | `TestObservability*` — server `/metrics` and tracing self-tests (default e2e job) |
 | `prompts_test.go` | `TestPrompts` — built-in and configured prompts over MCP; shared prompt assertion helpers |
 | `keycloak_test.go` | `TestKeycloakOIDC` — OIDC + STS token-exchange chain |
 | `kuadrant_test.go` | `TestKuadrantGateway` — server behind the Kuadrant MCP Gateway (tools and prompts) |
