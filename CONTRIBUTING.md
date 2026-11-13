@@ -6,6 +6,20 @@ We'd love to have you join the community! Whether you're reporting issues, impro
 
 This project follows the [Containers Community Code of Conduct](https://github.com/containers/common/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
+## Contribution Expectations
+
+Maintainer time and attention are limited. Contributions should improve the project enough to justify the effort needed to review and maintain them. Maintainers may decline technically correct reports or changes when their benefit does not justify that effort.
+
+Before opening a series of related issues or pull requests, propose the scope in a single issue or discussion and wait for maintainer agreement. Focus on a small amount of work and follow it through discussion and resolution before expanding your activity. The same expectation applies to reviewing multiple PRs: prioritize actionable feedback and collaboration over volume.
+
+### AI Assistance and Communication
+
+AI tools may help you investigate problems, understand the codebase, write code, and run tests. You are responsible for checking their output and understanding the contributions you submit. Disclose AI assistance in your issue, PR, or review, including how it was used.
+
+Write issue reports, PR descriptions, review comments, and responses to feedback in your own words. Explain the problem, its practical impact, and your reasoning concisely. Code snippets, logs, and other diagnostic output can be included as supporting evidence. Do not have an agent open issues, post reviews, or conduct discussions on your behalf. We want to collaborate with the person making the contribution, rather than evaluate a stream of generated reports or responses.
+
+Maintainers are exempt from these AI-specific requirements because they have established trust within the project and demonstrated judgment in using these tools. They remain accountable for the quality of their contributions and their impact on other contributors and maintainers.
+
 ## Reporting Issues
 
 Before reporting an issue, check our backlog of [open issues](https://github.com/containers/kubernetes-mcp-server/issues) to see if someone else has already reported it. If so, feel free to add your scenario or additional information to the discussion. Please use a thumbs-up emoji on the original report rather than adding "+1" comments.
@@ -95,7 +109,13 @@ When introducing new modules, run `make tidy` so that `go.mod` and `go.sum` rema
 
 ## Pull Request Guidelines
 
-No Pull Request (PR) is too small! Typos, additional comments in the code, new test cases, bug fixes, new features, more documentation... it's all welcome!
+Small, focused pull requests (PRs) are welcome. Please consider their practical benefit and review cost, and follow the [contribution expectations](#contribution-expectations).
+
+### Concurrent Pull Request Limit
+
+Contributors without write access may have at most **two open PRs** in this repository at a time, including draft PRs. Follow existing PRs through review and resolution before opening more. Maintainers may approve exceptions for trusted contributors or coordinated work; ask before exceeding the limit.
+
+### Preparing a Pull Request
 
 All PRs should be submitted against the `main` branch. Maintainers will take care of backporting if needed.
 
@@ -187,6 +207,8 @@ If you set your `user.name` and `user.email` git configs, you can sign your comm
 
 Once a PR is submitted, a maintainer will review it. If nobody responds within two weeks, please ping a maintainer. Sometimes PRs are overlooked.
 
+Community reviews are welcome, especially concrete findings that help the author and maintainers assess correctness and practical impact. Avoid unsolicited approval-only summaries or repeated validation reports that add no actionable information. Community feedback does not replace approval from the designated maintainers. See the [contribution ladder](#contribution-ladder) for how reviewers develop an ongoing role in the project.
+
 Keep an eye on the CI results. If something fails, check the logs to see if it's related to your change. If you're unsure, ask in the PR comments.
 
 If changes are requested, amend them into the relevant commit rather than adding extra "fix" commits. Use `git commit --amend` and force-push to your branch. This keeps the git history clean.
@@ -194,7 +216,7 @@ If changes are requested, amend them into the relevant commit rather than adding
 ## Contribution Ladder
 
 We welcome all community members to become contributors and over time grow into larger roles within the project! The table describes the general
-responsiblities expected by indivudals in each role. A detailed description of the responsibilities and requirements for each role is provided
+responsibilities expected of individuals in each role. A detailed description of the responsibilities and requirements for each role is provided
 below the table.
 
 | **Role**           | **Responsibilities**                                                    |
@@ -205,10 +227,26 @@ below the table.
 | Core Reviewer      | Review PRs for the project as a whole                                   |
 | Core Maintainer    | Review and approve PRs and general direction for the project as a whole |
 
+### Building Trust and Taking Responsibility
+
+Roles recognize an established working relationship and demonstrated responsibility; they are not rewards for contribution counts or time served. Contributors provide useful work, reviewers become dependable technical collaborators, and maintainers are entrusted with acceptance decisions and ongoing responsibility. Maintainers hold the approver role within their area of responsibility.
+
+Build trust by working consistently in an area, participating in technical discussions, following contributions through review and resolution, and taking responsibility when problems are found. Coordinate with maintainers before expanding your activity.
+
+Useful contributions reduce the work needed to move the project forward. This includes identifying important problems, improving proposed solutions, helping contributors reach resolution, and recognizing when a change is unnecessary or outside the project's priorities.
+
+Review contributions are a valid path toward greater responsibility; authoring code is not a prerequisite. However, review volume, approval counts, and reports of testing do not establish trust by themselves.
+
+#### Endorsement and Progression
+
+An endorsing or nominating maintainer should have worked directly with the contributor over multiple contributions and discussions, and be able to describe examples of their judgment, reliability, and collaboration.
+
+The experience guidelines below, including the approximate three-month periods, are not promotion deadlines or activity quotas. Meeting a guideline does not automatically qualify someone for a role. Promotion requires maintainer agreement that the contributor is ready to take responsibility for the relevant area.
+
 ### Contributor
 
 This role describes people who have just started contributing, or who contribute but don't participate in project governance or
-have defined resposibilities.
+have defined responsibilities.
 
 A Contributor contributes directly to the project and adds value to it. Contributions need not be code.
 
@@ -227,21 +265,26 @@ This role describes people who review and give feedback and direction on a speci
 who have not yet met the criteria to be a Toolset Maintainer, or contributors to a newly added toolset who have not engaged with the community
 for long enough to be trusted as a Toolset Maintainer yet.
 
-It is worth noting that anyone can review PRs to a toolset (or to any other part of the project) without being a Toolset Reviwer. The Toolset
+It is worth noting that anyone can review PRs to a toolset (or to any other part of the project) without being a Toolset Reviewer. The Toolset
 Reviewer role is meant to denote people who are a technical authority in the area and who are willing to be pinged to provide reviews within
 that area.
 
 #### Requirements
 
 Toolset Reviewers should exhibit strong judgement within the area of the toolset that they are a reviewer for. To become a reviewer, one should:
-- Make multiple contributions to the toolset, through PR reviews and/or PRs
+- Provide consistently useful feedback or contributions within the toolset, demonstrating understanding of its behavior, surrounding code, and project conventions
+- Distinguish correctness defects and other blocking concerns from optional improvements, considering practical impact and project priorities
+- Participate constructively in technical discussions and follow work through revision and resolution
 - Receive endorsement from a Maintainer of the same toolset or from a core Maintainer
 
-#### Responsibilites and Privileges
+#### Responsibilities and Privileges
 
 Toolset Reviewers are expected to:
 - Demonstrate sound judgement
 - Ensure toolset quality via reviews
+- State uncertainties and the limits of their review
+- Revise or withdraw findings when further discussion shows they are mistaken
+- Help contributors resolve feedback and coordinate with maintainers on acceptance decisions
 
 ### Toolset Maintainer
 
@@ -251,9 +294,10 @@ to also take a holistic view on the overall quality and direction of the toolset
 #### Requirements
 
 Toolset Maintainers must exhibit sustained contributions and good judgement within the community. Generally speaking, contributors should aim
-to be a Toolset Reviewer first. A Toolset Maintainer must at a minimum:
-- Review other people's contributions to the toolset for about 3 months
-- Review and/or contribute to non-trivial PRs
+to be a Toolset Reviewer first. A Toolset Maintainer is expected to:
+- Build sustained experience reviewing other people's contributions to the toolset, typically over about 3 months
+- Demonstrate judgment on non-trivial contributions, including compatibility, scope, maintenance cost, and alignment with project priorities
+- Take responsibility for following up on regressions and helping other contributors
 - Be nominated by an existing maintainer of the same toolset, or a Core Maintainer, with no objections from other maintainers
 
 #### Responsibilities and Privileges
@@ -268,20 +312,25 @@ Toolset Maintainers are given the privilege of being able to merge PRs within th
 
 This role describes people who review and give feedback and direction across the project as a whole.
 
-It is worth noting that anyone can review PRs without being a Core Reviwer. The Core Reviewer role is meant to denote people who are a 
+It is worth noting that anyone can review PRs without being a Core Reviewer. The Core Reviewer role is meant to denote people who are a
 technical authority in the area and who are willing to be pinged to provide reviews within that area.
 
 #### Requirements
 
 Core Reviewers should exhibit technical prowess across the whole project. To become a reviewer, one should:
-- Make multiple contributions to the MCP server as a whole, through PR reviews and/or PRs
+- Provide consistently useful feedback or contributions across the project, demonstrating understanding of shared infrastructure and interactions between toolsets
+- Distinguish correctness defects and other blocking concerns from optional improvements, considering practical impact and project priorities
+- Work constructively with toolset owners and follow contributions through revision and resolution
 - Receive endorsement from a core Maintainer
 
-#### Responsibilites and Privileges
+#### Responsibilities and Privileges
 
 Core Reviewers are expected to:
 - Demonstrate sound judgement
 - Ensure project quality via reviews
+- State uncertainties and the limits of their review
+- Revise or withdraw findings when further discussion shows they are mistaken
+- Coordinate with domain owners and seek their input when a change needs expertise outside their own
 
 ### Core Maintainer
 
@@ -293,9 +342,10 @@ project.
 #### Requirements
 
 Core Maintainers must exhibit sustained contributions and good judgement within the community. Generally speaking, contributors should aim
-to be a Core Reviewer first. A Core Maintainer must at a minimum:
-- Review other people's contributions to the project for about 3 months (beyond a single toolset)
-- Review and/or contribute to non-trivial PRs (beyond a single toolset)
+to be a Core Reviewer first. A Core Maintainer is expected to:
+- Build sustained experience reviewing other people's contributions across the project, typically over about 3 months and beyond a single toolset
+- Demonstrate judgment on non-trivial contributions and project-wide consequences, including compatibility, scope, maintenance cost, and project priorities
+- Coordinate acceptance decisions with toolset maintainers and take responsibility for following up on regressions and cross-cutting problems
 - Be nominated by a Core Maintainer, with no objections from other maintainers
 
 #### Responsibilities and privileges
