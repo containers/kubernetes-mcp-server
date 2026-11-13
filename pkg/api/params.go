@@ -1,6 +1,9 @@
 package api
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // ErrInvalidInt64Type is returned when a value cannot be converted to int64.
 type ErrInvalidInt64Type struct {
@@ -11,12 +14,28 @@ func (e *ErrInvalidInt64Type) Error() string {
 	return fmt.Sprintf("expected integer, got %T", e.Value)
 }
 
+// ErrNonIntegralInt64 is returned when a JSON number cannot be represented
+// exactly as an int64 (it has a fractional part, is NaN/Inf, or is out of range).
+type ErrNonIntegralInt64 struct {
+	Value float64
+}
+
+func (e *ErrNonIntegralInt64) Error() string {
+	return fmt.Sprintf("expected integer, got %v", e.Value)
+}
+
 // ParseInt64 converts an interface{} value (typically from JSON-decoded tool arguments)
 // to int64. Handles float64 (JSON numbers), int, and int64 types.
 // Returns the converted value and nil error on success, or 0 and an ErrInvalidInt64Type if the type is unsupported.
+// A float64 that is not a whole number within the int64 range (e.g. 0.5, NaN, +Inf) returns 0 and an
+// ErrNonIntegralInt64 instead of being silently truncated.
 func ParseInt64(value interface{}) (int64, error) {
 	switch v := value.(type) {
 	case float64:
+		// -2^63 is exactly representable as float64; 2^63 is the first value above math.MaxInt64.
+		if v != math.Trunc(v) || v < math.MinInt64 || v >= -math.MinInt64 {
+			return 0, &ErrNonIntegralInt64{Value: v}
+		}
 		return int64(v), nil
 	case int:
 		return int64(v), nil

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -21,10 +22,38 @@ func (s *ParamsSuite) TestParseInt64() {
 		s.Equal(int64(42), result)
 	})
 
-	s.Run("float64 with decimal truncates to int64", func() {
+	s.Run("float64 with decimal returns error", func() {
 		result, err := ParseInt64(float64(42.9))
+		s.Error(err)
+		s.Equal(int64(0), result)
+		s.Contains(err.Error(), "42.9")
+	})
+
+	s.Run("float64 between zero and one returns error", func() {
+		result, err := ParseInt64(float64(0.5))
+		s.Error(err)
+		s.Equal(int64(0), result)
+	})
+
+	s.Run("NaN returns error", func() {
+		_, err := ParseInt64(math.NaN())
+		s.Error(err)
+	})
+
+	s.Run("infinity returns error", func() {
+		_, err := ParseInt64(math.Inf(1))
+		s.Error(err)
+	})
+
+	s.Run("float64 above int64 range returns error", func() {
+		_, err := ParseInt64(float64(1 << 63))
+		s.Error(err)
+	})
+
+	s.Run("float64 at int64 minimum is converted", func() {
+		result, err := ParseInt64(float64(math.MinInt64))
 		s.NoError(err)
-		s.Equal(int64(42), result)
+		s.Equal(int64(math.MinInt64), result)
 	})
 
 	s.Run("int value is converted to int64", func() {
