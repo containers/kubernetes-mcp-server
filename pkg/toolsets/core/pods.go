@@ -329,7 +329,7 @@ func initPods(inspector api.ClusterInspector) []api.ServerTool {
 					},
 					"port": {
 						Type:        "number",
-						Description: "TCP/IP port to expose from the Pod container, 1-65535 (Optional, no port exposed if not provided)",
+						Description: "TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)",
 					},
 				},
 				Required: []string{"image"},
