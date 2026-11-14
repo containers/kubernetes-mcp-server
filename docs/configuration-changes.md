@@ -12,6 +12,7 @@
 - [Upgrading from 0.0.66](#upgrading-from-0066)
 - [Upgrading from 0.1.z](#upgrading-from-01z)
   - [Target compatibility filters on by default](#target-compatibility-filters-on-by-default)
+  - [Helm releases installed with a namespace argument](#helm-releases-installed-with-a-namespace-argument)
 
 This document records configuration changes that may require action when upgrading between releases. Add newer release transitions as separate sections so upgrade guidance remains available without cluttering the current [configuration reference](configuration.md).
 
@@ -201,3 +202,24 @@ The old key is deprecated. It is still read for a release or two and logs a warn
 | any value | set | the new key wins |
 
 Rename the key in your config to silence the warning.
+
+### Helm releases installed with a namespace argument
+
+Up to 0.1.3, `helm_install` with a `namespace` argument stored the release record in that namespace but created the chart's namespaced objects that do not set `metadata.namespace` in the namespace of the kubeconfig context (`default` if the context sets none, or the server's own namespace when it runs in-cluster). `helm_install` now creates those objects in the `namespace` argument, matching `helm install --namespace`, and `helm_uninstall` deletes them from the release's namespace.
+
+This affects releases installed by 0.1.3 or earlier with a `namespace` argument that differs from the kubeconfig namespace. Their objects are still in the kubeconfig namespace. After upgrading, `helm_uninstall` looks for them in the release's namespace, removes the release history and reports success, but leaves the objects behind.
+
+To avoid this, uninstall affected releases before upgrading, while the old version still deletes from the kubeconfig namespace.
+
+To find objects that were left behind, list the Helm-managed objects in the kubeconfig namespace and compare the `meta.helm.sh/release-namespace` annotation, which records the namespace the release was installed into:
+
+```shell
+kubectl get all,configmaps,secrets,serviceaccounts,roles,rolebindings,ingresses,persistentvolumeclaims \
+  --namespace <kubeconfig-namespace> \
+  --selector app.kubernetes.io/managed-by=Helm \
+  --output custom-columns='KIND:.kind,NAME:.metadata.name,RELEASE:.metadata.annotations.meta\.helm\.sh/release-name,RELEASE_NAMESPACE:.metadata.annotations.meta\.helm\.sh/release-namespace'
+```
+
+Rows whose `RELEASE_NAMESPACE` is not `<kubeconfig-namespace>` belong to a release installed with a `namespace` argument. If that release has already been uninstalled, delete the objects with `kubectl delete <kind> <name> --namespace <kubeconfig-namespace>`. If the release is still installed, run `helm get manifest <release> --namespace <release-namespace>` before `helm_uninstall`: it lists every object the release created, including kinds the command above does not cover. Delete those objects from `<kubeconfig-namespace>`, then uninstall the release.
+
+Cluster-scoped objects, and objects whose templates set `metadata.namespace`, are not affected.
