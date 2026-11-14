@@ -54,6 +54,9 @@ func pipelineRunTools(_ context.Context, inspector api.ClusterInspector) []api.S
 				},
 			),
 			Handler: pipelineRunLifecycle,
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				hasTektonKinds(inspector, pipelineRunKind),
+			},
 		},
 		{
 			Tool: api.Tool{
@@ -114,6 +117,9 @@ func pipelineRunTools(_ context.Context, inspector api.ClusterInspector) []api.S
 				},
 			),
 			Handler: getPipelineRunLogs,
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				hasTektonKinds(inspector, pipelineRunKind, taskRunKind),
+			},
 		},
 		pipelineRunDiagnoseTool(inspector),
 	}
@@ -178,8 +184,8 @@ func restartPipelineRun(ctx context.Context, dynamicClient dynamic.Interface, na
 
 	newPR := &tektonv1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "tekton.dev/v1",
-			Kind:       "PipelineRun",
+			APIVersion: tektonv1.SchemeGroupVersion.String(),
+			Kind:       pipelineRunKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    namespace,

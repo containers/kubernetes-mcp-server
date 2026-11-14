@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"k8s.io/client-go/discovery"
+
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
 )
@@ -45,20 +47,31 @@ func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Prov
 }
 
 func (p *kubeConfigClusterProvider) reset(ctx context.Context) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.resetLocked(ctx)
-}
-
-func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 	if err := p.ErrClosed(); err != nil {
 		return err
 	}
+	p.mu.Lock()
+	oldManagers := p.managers
+	primary, cluster, err := p.resetLocked(ctx)
+	p.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	// Discovery polling takes the provider lock; stop watchers without holding it.
+	err = p.Replace(primary, cluster)
+	for _, old := range oldManagers {
+		if old != nil {
+			old.Close()
+		}
+	}
+	return err
+}
 
+func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) (watcher.Watcher, watcher.Watcher, error) {
 	m, err := NewKubeconfigManager(ctx, p.cfg, "")
 	if err != nil {
 		if errors.Is(err, ErrorKubeconfigInClusterNotAllowed) {
-			return fmt.Errorf( //nolint:ST1005 // user-facing error with actionable multi-line guidance
+			return nil, nil, fmt.Errorf( //nolint:ST1005 // user-facing error with actionable multi-line guidance
 				"kubeconfig ClusterProviderStrategy is invalid for in-cluster deployments: %w\n\n"+
 					"If you intend to connect to a different cluster from within a pod, set in your TOML config:\n"+
 					"  kubeconfig = \"/path/to/kubeconfig\"\n\n"+
@@ -67,13 +80,13 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 				err,
 			)
 		}
-		return err
+		return nil, nil, err
 	}
 
 	rawConfig, err := m.kubernetes.clientCmdConfig.RawConfig()
 	if err != nil {
 		m.Close()
-		return err
+		return nil, nil, err
 	}
 
 	// Determine the effective default context.
@@ -86,11 +99,6 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 		}
 	}
 
-	for _, old := range p.managers {
-		if old != nil {
-			old.Close()
-		}
-	}
 	p.managers = map[string]*Manager{
 		defaultContext: m,
 	}
@@ -103,10 +111,26 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 	}
 
 	p.defaultContext = defaultContext
-	return p.Replace(
-		watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get()),
-		watcher.NewClusterState(ctx, m.kubernetes.DiscoveryClient(), p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
-	)
+	return watcher.NewKubeconfig(ctx, m.kubernetes.clientCmdConfig, p.cfg.KubeconfigDebounceWindow.Get()),
+		watcher.NewClusterStateForTargets(ctx, p.discoveryClients, p.cfg.ClusterStatePollInterval.Get(), p.cfg.ClusterStateDebounceWindow.Get()),
+		nil
+}
+
+func (p *kubeConfigClusterProvider) discoveryClients(ctx context.Context) map[string]discovery.CachedDiscoveryInterface {
+	targets, err := p.GetTargets(ctx)
+	if err != nil {
+		return nil
+	}
+	clients := make(map[string]discovery.CachedDiscoveryInterface, len(targets))
+	for _, target := range targets {
+		manager, err := p.managerForContext(ctx, target, false)
+		if err != nil {
+			clients[target] = nil
+			continue
+		}
+		clients[target] = manager.DiscoveryClient()
+	}
+	return clients
 }
 
 // managerForWorkspace returns or creates a Manager for the specified kubeContext.
