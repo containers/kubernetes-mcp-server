@@ -39,6 +39,7 @@ Living documentation for implemented and planned features:
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
 | **[Config Option Framework](specs/config.md)** | Unified `Option[T]` config: vectors, precedence, provenance | Implemented |
 | **[Memory bounds](specs/memory-bounds.md)** | Caps on Kubernetes responses, tool results, and in-flight calls | Implemented |
+| **[HTTP client rate limit](specs/client-rate-limit.md)** | Per-client token bucket on `/mcp` in HTTP mode | Proposed |
 | **[MCP Apps](mcp-apps.md)** | Interactive UI resources associated with MCP tools | Implemented |
 
 ## Advanced Topics
