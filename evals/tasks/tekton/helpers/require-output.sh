@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Shared verify helper: fails unless $AGENT_OUTPUT contains the given string (case-insensitive, literal).
+# Shared verify helper: fails unless $AGENT_OUTPUT contains the given string (case-insensitive, literal, whole-word).
 
 require() {
-  if ! grep -qiF -- "$1" <<<"$AGENT_OUTPUT"; then
+  if ! grep -qiwF -- "$1" <<<"$AGENT_OUTPUT"; then
     echo "response is missing required evidence: $1" >&2
     exit 1
   fi
