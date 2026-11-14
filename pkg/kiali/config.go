@@ -11,13 +11,20 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
+
+const defaultURLDiscoveryNamespace = "istio-system"
 
 // Config holds Kiali toolset configuration
 type Config struct {
 	Url                  string `toml:"url"`
 	Insecure             bool   `toml:"insecure,omitempty"`
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	// AllowedNamespaces limits in-cluster URL autodiscovery (Kiali CR list and
+	// well-known Service DNS fallbacks) to these namespaces. Defaults to
+	// istio-system when unset.
+	AllowedNamespaces []string `toml:"allowed_namespaces,omitempty"`
 }
 
 var (
@@ -37,7 +44,7 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
 			}
 		}
-		return nil
+		return c.validateAllowedNamespaces()
 	}
 	if u, err := url.Parse(c.Url); err != nil || u.Scheme == "" || u.Host == "" {
 		return errors.New("url must be a valid URL")
@@ -52,7 +59,43 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
 		}
 	}
+	return c.validateAllowedNamespaces()
+}
+
+func (c *Config) validateAllowedNamespaces() error {
+	for _, ns := range c.AllowedNamespaces {
+		ns = strings.TrimSpace(ns)
+		if ns == "" {
+			return errors.New("allowed_namespaces entries must not be empty")
+		}
+		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
+			return fmt.Errorf("allowed_namespaces entry %q is not a valid namespace name: %s", ns, strings.Join(errs, ", "))
+		}
+	}
 	return nil
+}
+
+// URLDiscoveryNamespaces returns namespaces searched for Kiali CRs and
+// well-known in-cluster Service URLs when url is empty.
+func (c *Config) URLDiscoveryNamespaces() []string {
+	if c == nil || len(c.AllowedNamespaces) == 0 {
+		return []string{defaultURLDiscoveryNamespace}
+	}
+	out := make([]string, 0, len(c.AllowedNamespaces))
+	seen := make(map[string]struct{}, len(c.AllowedNamespaces))
+	for _, ns := range c.AllowedNamespaces {
+		if trimmed := strings.TrimSpace(ns); trimmed != "" {
+			if _, dup := seen[trimmed]; dup {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return []string{defaultURLDiscoveryNamespace}
+	}
+	return out
 }
 
 func (c *Config) ValidateRequireTLS(requireTLS bool) error {

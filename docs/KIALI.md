@@ -13,6 +13,7 @@ toolsets = ["core", "kiali"]
 
 [toolset_configs.kiali]
 url = "https://kiali.example" # Endpoint/route to reach Kiali console
+# allowed_namespaces = ["istio-system"]  # optional: namespaces for in-cluster URL autodiscovery when url is empty (default istio-system)
 # insecure = true  # optional: allow insecure TLS (not recommended in production)
 # certificate_authority = "/path/to/ca.crt"  # File path to CA certificate
 # When url is https and insecure is false, certificate_authority is required.
@@ -23,7 +24,7 @@ Reachability checks and in-cluster URL discovery run when `enable_target_compati
 When that flag is enabled:
 
 - If `url` is set, the server probes `GET {url}/api/status` and only exposes Kiali tools if that call succeeds.
-- If `url` is unset and a Kiali CR is present, the server tries to discover the in-cluster Service URL (`http://<instance>.<namespace>.svc:<port>[/web_root]`), probes `/api/status`, and injects a working URL into the live config.
+- If `url` is unset and a Kiali CR is present, the server tries to discover the in-cluster Service URL (`http://<instance>.<namespace>.svc:<port>[/web_root]`), probes `/api/status`, and injects a working URL into the live config. Discovery lists Kiali CRs and probes well-known Service DNS names only in `allowed_namespaces` (default `istio-system`).
 
 When the `kiali` toolset is enabled with an explicit HTTPS URL and `insecure = false`, `certificate_authority` is still required at config load time.
 
