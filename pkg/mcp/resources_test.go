@@ -1479,3 +1479,67 @@ func findAPIResourceByKind(resources []apiResourceEntry, kind string) *apiResour
 func TestResources(t *testing.T) {
 	suite.Run(t, new(ResourcesSuite))
 }
+
+func (s *ResourcesSuite) TestResourcesCreateOrUpdateDocumentSeparators() {
+	s.InitMcpClient()
+	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	cm := func(name string) string {
+		return "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: " + name + "\n  namespace: default\n"
+	}
+	exists := func(name string) bool {
+		_, err := client.CoreV1().ConfigMaps("default").Get(s.T().Context(), name, metav1.GetOptions{})
+		return err == nil
+	}
+	s.Run("separator followed by a space applies every document", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-space-1") + "--- \n" + cm("sep-space-2") + "---\n" + cm("sep-space-3"),
+		})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.True(exists("sep-space-2"), "second document must be applied")
+		s.True(exists("sep-space-3"), "third document must be applied")
+	})
+	s.Run("separator followed by a comment applies every document", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-comment-1") + "--- # second\n" + cm("sep-comment-2"),
+		})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.True(exists("sep-comment-2"), "second document must be applied")
+	})
+	s.Run("trailing separator followed by a newline succeeds", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-trailing-1") + "---\n",
+		})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.True(exists("sep-trailing-1"))
+	})
+	s.Run("comment-only document is skipped", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-commentdoc-1") + "---\n# only a comment\n---\n" + cm("sep-commentdoc-2"),
+		})
+		s.Require().NoError(err)
+		s.Falsef(result.IsError, "call tool failed: %v", result.Content)
+		s.True(exists("sep-commentdoc-2"))
+	})
+	s.Run("explicit empty object fails before anything is written", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-emptyobj-1") + "---\n{}\n---\n" + cm("sep-emptyobj-2"),
+		})
+		s.Require().NoError(err)
+		s.True(result.IsError, "a {} document must fail the call")
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "document 2: apiVersion and kind are required")
+		s.False(exists("sep-emptyobj-1"), "no document may be applied when one is an empty object")
+		s.False(exists("sep-emptyobj-2"), "no document may be applied when one is an empty object")
+	})
+	s.Run("document without kind fails before anything is written", func() {
+		result, err := s.CallTool("resources_create_or_update", map[string]interface{}{
+			"resource": cm("sep-nokind-1") + "---\napiVersion: v1\nmetadata:\n  name: sep-nokind-2\n",
+		})
+		s.Require().NoError(err)
+		s.True(result.IsError)
+		s.Contains(result.Content[0].(*mcp.TextContent).Text, "document 2: apiVersion and kind are required")
+		s.False(exists("sep-nokind-1"), "no document may be applied when one cannot be decoded")
+	})
+}
