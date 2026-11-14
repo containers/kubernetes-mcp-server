@@ -4,6 +4,8 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,39 @@ import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	defaultObsPrometheusURL   = "http://prometheus-k8s.monitoring.svc:9090"
+	defaultObsAlertmanagerURL = "http://alertmanager-main.monitoring.svc:9093"
+)
+
+func obsEnvOr(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return def
+}
+
+func obsPrometheusURL() string {
+	return obsEnvOr("OBS_PROMETHEUS_URL", defaultObsPrometheusURL)
+}
+
+func obsAlertmanagerURL() string {
+	return obsEnvOr("OBS_ALERTMANAGER_URL", defaultObsAlertmanagerURL)
+}
+
+// obsMcpClientOptions returns MCP client options for obs e2e.
+// When PROMETHEUS_K8S_TOKEN is set (e.g. OpenShift CI), forward it as Authorization
+// so metrics toolset auth_mode=header (default) can reach monitoring backends.
+func obsMcpClientOptions(endpoint string) []test.McpClientOption {
+	opts := []test.McpClientOption{test.WithEndpoint(endpoint)}
+	if token := strings.TrimSpace(os.Getenv("PROMETHEUS_K8S_TOKEN")); token != "" {
+		opts = append(opts, test.WithHTTPHeaders(map[string]string{
+			"Authorization": "Bearer " + token,
+		}))
+	}
+	return opts
+}
 
 // obsTracesRBACValues returns Helm values granting the server SA permission
 // to list Tempo CRDs (TempoStacks, TempoMonolithics) at cluster scope.
@@ -105,13 +140,13 @@ func obsLogsRBACValues() map[string]any {
 // obsMetricsConfig returns the TOML config for deploying the MCP server
 // with observability/metrics toolset pointing at the in-cluster Prometheus.
 func obsMetricsConfig() string {
-	return `
+	return fmt.Sprintf(`
 toolsets = ["observability/metrics"]
 
 [toolset_configs."observability/metrics"]
-prometheus_url = "http://prometheus-k8s.monitoring.svc:9090"
-alertmanager_url = "http://alertmanager-main.monitoring.svc:9093"
-`
+prometheus_url = %q
+alertmanager_url = %q
+`, obsPrometheusURL(), obsAlertmanagerURL())
 }
 
 // obsTracesConfig returns the TOML config for deploying the MCP server
@@ -141,13 +176,13 @@ toolsets = ["observability/otelcol"]
 // obsAllConfig returns the TOML config for deploying the MCP server
 // with all observability toolsets enabled.
 func obsAllConfig() string {
-	return `
+	return fmt.Sprintf(`
 toolsets = ["observability/metrics", "observability/traces", "observability/logs", "observability/otelcol"]
 
 [toolset_configs."observability/metrics"]
-prometheus_url = "http://prometheus-k8s.monitoring.svc:9090"
-alertmanager_url = "http://alertmanager-main.monitoring.svc:9093"
-`
+prometheus_url = %q
+alertmanager_url = %q
+`, obsPrometheusURL(), obsAlertmanagerURL())
 }
 
 // requireObsToolCallSuccess calls a tool and asserts it returns non-error structured content.

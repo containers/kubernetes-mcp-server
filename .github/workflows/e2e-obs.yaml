@@ -38,8 +38,7 @@ jobs:
         run: make e2e-setup-obs
 
       - name: Run e2e tests
-        # Match TestObsMetricsTools / TestObsLogsTools / … but not TestObservability*
-        run: make e2e-test E2E_ARGS="-run '^TestObs[A-Z]'"
+        run: make e2e-test-obs
 
       - name: Collect diagnostics on failure
         if: failure()
