@@ -2,8 +2,10 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -531,7 +533,34 @@ func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	} else if ret == "" {
 		ret = fmt.Sprintf("The pod %s in namespace %s has not logged any message yet", name, ns)
 	}
+	if limitErr := podsLogResultLimitError(params.Context, ns, name, ret); limitErr != nil {
+		return api.NewToolCallResult("", limitErr), nil
+	}
 	return api.NewToolCallResult(ret, err), nil
+}
+
+// podsLogResultLimitError reports a log that exceeds max_result_bytes as a
+// tool error that names a tail which fits. The result check would otherwise
+// reject the log with a protocol error that only states the sizes, and a
+// client has to guess the next tail: log lines vary from a few bytes to
+// several KiB, so the line count alone says nothing about the size.
+func podsLogResultLimitError(ctx context.Context, namespace, name, log string) error {
+	limit := api.ResultLimit(ctx)
+	size := int64(len(log))
+	if limit <= 0 || size <= limit+int64(len(api.ResultTruncationNotice)) {
+		return nil
+	}
+	lines := int64(strings.Count(log, "\n"))
+	if !strings.HasSuffix(log, "\n") {
+		lines++
+	}
+	// Leave 10% headroom because line lengths vary across the log.
+	fitting := lines * limit / size * 9 / 10
+	if fitting < 1 {
+		fitting = 1
+	}
+	return fmt.Errorf("pod %s log in namespace %s has %d bytes in %d lines, more than max_result_bytes (%d): retry with tail %d or less",
+		name, namespace, size, lines, limit, fitting)
 }
 
 func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
