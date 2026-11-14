@@ -25,7 +25,7 @@
     },
     "annotations": {
       "destructiveHint": true,
-      "idempotentHint": true,
+      "idempotentHint": false,
       "openWorldHint": false,
       "readOnlyHint": false,
       "title": "Virtual Machine: Clone"
