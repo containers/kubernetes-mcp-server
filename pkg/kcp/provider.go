@@ -102,20 +102,41 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create base manager: %w", err)
 	}
+	// NewKubeconfigManager starts the base manager's background CA refresher
+	// on construction, so an early return below would leave that goroutine
+	// and its HTTP transport running behind a failed reset.
+	baseManagerCommitted := false
+	defer func() {
+		if !baseManagerCommitted {
+			baseManager.Close()
+		}
+	}()
+
+	// The base manager may have resolved the cluster CA from the caURL
+	// kubeconfig extension. Propagate that trust anchor to the provider's
+	// REST config so workspace discovery and per-workspace managers verify
+	// the API server against the same CA; without this, caURL clusters
+	// would make workspace TLS verification fail with the kubeconfig CA.
+	baseRESTConfig := baseManager.RESTConfig()
+	if baseRESTConfig.CAFile != "" {
+		restConfig.CAFile = baseRESTConfig.CAFile
+		restConfig.CAData = nil
+	} else if len(baseRESTConfig.CAData) > 0 {
+		restConfig.CAData = baseRESTConfig.CAData
+		restConfig.CAFile = ""
+	}
 
 	workspaceList, err := DiscoverAllWorkspaces(ctx, restConfig, defaultWorkspace)
 	if err != nil {
 		klogutil.LogWarn(klogutil.FromContext(ctx), "Failed to discover workspaces via API, falling back to kubeconfig", klogutil.Err(err))
 		workspaceList, err = workspacesFromKubeconfig(ctx, clientCmdConfig)
 		if err != nil {
-			baseManager.Close()
 			return fmt.Errorf("failed to discover workspaces: %w", err)
 		}
 	}
 
 	k8s, err := baseManager.Derived(ctx)
 	if err != nil {
-		baseManager.Close()
 		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
@@ -140,7 +161,11 @@ func (p *kcpClusterProvider) resetLocked(ctx context.Context) error {
 			old.Close()
 		}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	baseManagerCommitted = true
+	return nil
 }
 
 // workspacesFromKubeconfig extracts workspace names from kubeconfig cluster URLs as a fallback.
@@ -329,5 +354,42 @@ func (p *kcpClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
 		if m != nil {
 			m.SetConfig(cfg)
 		}
+	}
+}
+
+// Close stops the watchers (through the embedded WatcherGroup) and releases
+// every manager's HTTP transport and background CA refresh loop, so shutdown
+// (and tests that only call Close) leave nothing running behind.
+func (p *kcpClusterProvider) Close() {
+	p.WatcherGroup.Close()
+	closeManagers(p.managers)
+}
+
+// closeManagers stops every non-nil manager in the map, releasing their
+// HTTP transports and background CA refreshers.
+func closeManagers(managers map[string]*kubernetes.Manager) {
+	for _, m := range managers {
+		if m != nil {
+			m.Close()
+		}
+	}
+}
+
+// RefreshCAs re-fetches every live workspace manager's cluster CA now, so
+// a rotated CA is picked up on SIGHUP without waiting out
+// ca_refresh_interval. The snapshot keeps the fetch (bounded by
+// caFetchMaxDuration) outside the lock so a reset triggered meanwhile is
+// not blocked on the network.
+func (p *kcpClusterProvider) RefreshCAs() {
+	p.mu.RLock()
+	managers := make([]*kubernetes.Manager, 0, len(p.managers))
+	for _, m := range p.managers {
+		if m != nil {
+			managers = append(managers, m)
+		}
+	}
+	p.mu.RUnlock()
+	for _, m := range managers {
+		m.RefreshCAs()
 	}
 }

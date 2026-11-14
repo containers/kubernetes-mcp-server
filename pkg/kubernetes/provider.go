@@ -74,6 +74,12 @@ type Provider interface {
 	// PublishKubernetesConfig pushes cfg into existing managers so the
 	// access-control round tripper and RequireOAuth checks observe it.
 	PublishKubernetesConfig(cfg *config.Config)
+	// RefreshCAs re-fetches every held manager's cluster CA now, so a
+	// rotated cluster CA is picked up on SIGHUP config reload without
+	// waiting out ca_refresh_interval. It lives on the interface rather
+	// than as an optional capability so no provider can silently miss the
+	// refresh.
+	RefreshCAs()
 	Close()
 }
 

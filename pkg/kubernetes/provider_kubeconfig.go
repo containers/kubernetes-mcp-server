@@ -86,11 +86,16 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 		}
 	}
 
+	// Release the previous managers (with their background CA refreshers)
+	// before the fresh state below replaces them. The watchers are swapped
+	// by Replace at the end of this function. The new manager m is installed
+	// after this point, so it is untouched by this loop.
 	for _, old := range p.managers {
 		if old != nil {
 			old.Close()
 		}
 	}
+
 	p.managers = map[string]*Manager{
 		defaultContext: m,
 	}
@@ -213,5 +218,39 @@ func (p *kubeConfigClusterProvider) PublishKubernetesConfig(cfg *config.Config) 
 		if m != nil {
 			m.SetConfig(cfg)
 		}
+	}
+}
+
+// Close stops the watchers (through the embedded WatcherGroup) and releases
+// every manager's HTTP transport and background CA refresh loop, so shutdown
+// (and tests that only call Close) leave nothing running behind. reset()
+// releases replaced managers explicitly and installs the new ones through
+// Replace, so a reset never closes a manager it just installed.
+func (p *kubeConfigClusterProvider) Close() {
+	p.WatcherGroup.Close()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.Close()
+		}
+	}
+}
+
+// RefreshCAs re-fetches every live manager's cluster CA now, so a rotated
+// CA is picked up on SIGHUP without waiting out ca_refresh_interval. The
+// snapshot keeps the fetch (bounded by caFetchMaxDuration) outside the
+// lock so a reset triggered meanwhile is not blocked on the network.
+func (p *kubeConfigClusterProvider) RefreshCAs() {
+	p.mu.RLock()
+	managers := make([]*Manager, 0, len(p.managers))
+	for _, m := range p.managers {
+		if m != nil {
+			managers = append(managers, m)
+		}
+	}
+	p.mu.RUnlock()
+	for _, m := range managers {
+		m.RefreshCAs()
 	}
 }
