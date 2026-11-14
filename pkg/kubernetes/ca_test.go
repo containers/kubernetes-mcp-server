@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,7 +27,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime"
+	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -61,6 +62,9 @@ func (s *ClusterCACASuite) TestWriteCAFileRejectsUnsafeCacheDirs() {
 	base := caCacheRoot // per-test temp dir, owned by us
 
 	s.Run("world-writable pre-existing cache dir is rejected", func() {
+		if runtime.GOOS == "windows" {
+			s.T().Skip("chmod does not expose unix permission bits on windows")
+		}
 		dir := filepath.Join(base, "world-writable")
 		s.Require().NoError(os.MkdirAll(dir, 0o700))
 		s.Require().NoError(os.Chmod(dir, 0o777))
@@ -70,6 +74,9 @@ func (s *ClusterCACASuite) TestWriteCAFileRejectsUnsafeCacheDirs() {
 	})
 
 	s.Run("symlinked cache dir is rejected", func() {
+		if runtime.GOOS == "windows" {
+			s.T().Skip("creating a symlink on windows needs privileges the test runner does not have")
+		}
 		target := filepath.Join(base, "elsewhere")
 		s.Require().NoError(os.MkdirAll(target, 0o700))
 		dir := filepath.Join(base, "symlinked")
@@ -90,6 +97,9 @@ func (s *ClusterCACASuite) TestWriteCAFileRejectsUnsafeCacheDirs() {
 	})
 
 	s.Run("final file symlink is replaced, not followed", func() {
+		if runtime.GOOS == "windows" {
+			s.T().Skip("creating a symlink on windows needs privileges the test runner does not have")
+		}
 		dir := filepath.Join(base, "final-symlink")
 		s.Require().NoError(os.MkdirAll(dir, 0o700))
 		victimPath := filepath.Join(dir, "victim.crt")
@@ -133,7 +143,7 @@ func kubeconfigWithCAURL(t *testing.T, caURL string) string {
 	kc := clientcmdapi.NewConfig()
 	kc.Clusters["fake"] = &clientcmdapi.Cluster{
 		Server: "https://127.0.0.1:1", // never dialed at manager creation
-		Extensions: map[string]runtime.Object{
+		Extensions: map[string]apiruntime.Object{
 			caExtensionName: extensionObject(caURL),
 		},
 	}
@@ -143,15 +153,15 @@ func kubeconfigWithCAURL(t *testing.T, caURL string) string {
 	return test.KubeconfigFile(t, kc)
 }
 
-func extensionObject(caURL string) runtime.Object {
+func extensionObject(caURL string) apiruntime.Object {
 	raw, _ := json.Marshal(map[string]string{"caURL": caURL})
-	return &runtime.Unknown{Raw: raw}
+	return &apiruntime.Unknown{Raw: raw}
 }
 
 func (s *ClusterCACASuite) TestCAURLFromClusterExtensions() {
 	s.Run("reads caURL from the kubernetes-mcp-server extension", func() {
 		cluster := &clientcmdapi.Cluster{
-			Extensions: map[string]runtime.Object{
+			Extensions: map[string]apiruntime.Object{
 				caExtensionName: extensionObject("https://ca.example.com/"),
 			},
 		}
@@ -162,15 +172,15 @@ func (s *ClusterCACASuite) TestCAURLFromClusterExtensions() {
 	})
 	s.Run("returns empty when the extension is not an object", func() {
 		cluster := &clientcmdapi.Cluster{
-			Extensions: map[string]runtime.Object{
-				caExtensionName: &runtime.Unknown{Raw: []byte(`"just-a-string"`)},
+			Extensions: map[string]apiruntime.Object{
+				caExtensionName: &apiruntime.Unknown{Raw: []byte(`"just-a-string"`)},
 			},
 		}
 		s.Empty(caURLFromClusterExtensions(cluster))
 	})
 	s.Run("survives a write/load round-trip of a real kubeconfig file", func() {
 		// The kubeconfig path exercises the actual clientcmd decode of
-		// extensions (runtime.Unknown payloads).
+		// extensions (apiruntime.Unknown payloads).
 		path := kubeconfigWithCAURL(s.T(), "https://ca.example.com/")
 		cfg := config.New()
 		cfg.KubeConfig.SetForTest(path)
@@ -317,6 +327,7 @@ func (s *ClusterCACASuite) TestRefreshOnceSkipsUnchangedCA() {
 		s.Require().NoError(os.Chtimes(cacheFile, old, old))
 
 		r := newCARefresher(context.Background(), cacheFile, srv.URL, &http.Client{}, time.Minute, klogutil.FromContext(context.Background()))
+		defer r.Close()
 		r.refreshOnce()
 
 		info, err := os.Stat(cacheFile)
@@ -327,6 +338,110 @@ func (s *ClusterCACASuite) TestRefreshOnceSkipsUnchangedCA() {
 		matches, _ := filepath.Glob(filepath.Join(cacheDir, ".ca-*.tmp"))
 		s.Empty(matches)
 	})
+}
+
+// TestRefreshOnceSerializesConcurrentRefreshes guards the fetch+compare+write
+// sequence against a background tick racing an on-demand refresh
+// (Manager.RefreshCAs on SIGHUP). Without serialization a slow fetch that
+// started earlier could write the CA it fetched on top of a newer CA a faster
+// fetch already wrote.
+func (s *ClusterCACASuite) TestRefreshOnceSerializesConcurrentRefreshes() {
+	const refreshes = 8
+	servedCAs := make([][]byte, refreshes)
+	for i := range servedCAs {
+		servedCAs[i] = selfSignedPEM()
+	}
+	var (
+		mu          sync.Mutex
+		inFlight    int
+		maxInFlight int
+		served      int
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		inFlight++
+		if inFlight > maxInFlight {
+			maxInFlight = inFlight
+		}
+		served++
+		idx := served
+		mu.Unlock()
+		// Hold the response so an overlapping fetch would be observed.
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		if idx > len(servedCAs) {
+			idx = len(servedCAs)
+		}
+		_, _ = w.Write(servedCAs[idx-1])
+	}))
+	defer srv.Close()
+
+	cacheFile := filepath.Join(s.T().TempDir(), "ca.crt")
+	r := newCARefresher(context.Background(), cacheFile, srv.URL, &http.Client{}, time.Minute, klogutil.FromContext(context.Background()))
+	defer r.Close()
+
+	var wg sync.WaitGroup
+	for i := 0; i < refreshes; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r.refreshOnce()
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	gotMaxInFlight, gotServed := maxInFlight, served
+	mu.Unlock()
+	s.Equal(1, gotMaxInFlight, "concurrent refreshes must not overlap")
+	s.Equal(refreshes, gotServed)
+	got, err := os.ReadFile(cacheFile)
+	s.Require().NoError(err)
+	s.Equal(servedCAs[refreshes-1], got, "the cache must hold the CA from the latest fetch")
+}
+
+// TestCloseCancelsInFlightFetch verifies shutdown aborts a fetch that is hung
+// on an unresponsive CA endpoint instead of waiting out caFetchMaxDuration.
+func (s *ClusterCACASuite) TestCloseCancelsInFlightFetch() {
+	entered := make(chan struct{}, 1)
+	fetchCancelled := make(chan struct{})
+	var cancelOnce sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+		cancelOnce.Do(func() { close(fetchCancelled) })
+	}))
+	defer srv.Close()
+
+	cacheFile := filepath.Join(s.T().TempDir(), "ca.crt")
+	r := newCARefresher(context.Background(), cacheFile, srv.URL, &http.Client{}, time.Millisecond, klogutil.FromContext(context.Background()))
+	r.start()
+	defer r.Close()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		s.FailNow("the fetch never reached the CA server")
+	}
+
+	start := time.Now()
+	r.Close()
+	s.Less(time.Since(start), 5*time.Second,
+		"Close must cancel the in-flight fetch instead of waiting for its own deadline")
+
+	select {
+	case <-fetchCancelled:
+	case <-time.After(5 * time.Second):
+		s.Fail("the in-flight request must observe the cancellation")
+	}
+
+	_, err := os.Stat(cacheFile)
+	s.ErrorIs(err, os.ErrNotExist, "a cancelled fetch must not write the cache file")
 }
 
 func (s *ClusterCACASuite) TestApplyClusterCAURL() {
@@ -443,7 +558,7 @@ func (s *ClusterCACASuite) TestApplyClusterCAURL() {
 		kc.Clusters["fake"] = &clientcmdapi.Cluster{
 			Server:                "https://127.0.0.1:1",
 			InsecureSkipTLSVerify: true,
-			Extensions: map[string]runtime.Object{
+			Extensions: map[string]apiruntime.Object{
 				caExtensionName: extensionObject("https://ca.example.com/"),
 			},
 		}

@@ -360,18 +360,32 @@ func (p *kcpClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
 // Close stops the watchers (through the embedded WatcherGroup) and releases
 // every manager's HTTP transport and background CA refresh loop, so shutdown
 // (and tests that only call Close) leave nothing running behind.
+//
+// The managers are snapshotted under p.mu because reset() replaces the map
+// while holding it, then closed after the lock is released: Manager.Close
+// waits for the CA refresh loop, and holding p.mu across that wait would
+// stall shutdown behind unrelated callers. WatcherGroup.Close runs first and
+// outside p.mu so a concurrent reset() fails on ErrClosed rather than
+// installing a manager the snapshot missed. closeManagers re-takes no lock, so
+// this cannot deadlock.
 func (p *kcpClusterProvider) Close() {
 	p.WatcherGroup.Close()
-	closeManagers(p.managers)
+	p.mu.RLock()
+	managers := make([]*kubernetes.Manager, 0, len(p.managers))
+	for _, m := range p.managers {
+		if m != nil {
+			managers = append(managers, m)
+		}
+	}
+	p.mu.RUnlock()
+	closeManagers(managers)
 }
 
-// closeManagers stops every non-nil manager in the map, releasing their
-// HTTP transports and background CA refreshers.
-func closeManagers(managers map[string]*kubernetes.Manager) {
+// closeManagers stops every manager in the slice, releasing their HTTP
+// transports and background CA refreshers.
+func closeManagers(managers []*kubernetes.Manager) {
 	for _, m := range managers {
-		if m != nil {
-			m.Close()
-		}
+		m.Close()
 	}
 }
 

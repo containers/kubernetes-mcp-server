@@ -127,3 +127,50 @@ func (s *KcpProviderSuite) TestResetKeepsDefaultWorkspaceCARefresherAlive() {
 		return err == nil && bytes.Equal(got, caB)
 	}, 5*time.Second, 50*time.Millisecond, "the cache file should follow the served CA rotation")
 }
+
+// kcpTestKubeconfig returns a kubeconfig path whose current cluster is the
+// kcp base URL. The API server port is closed, so workspace discovery fails
+// fast and falls back to the kubeconfig entries; nothing is dialed.
+func kcpTestKubeconfig(t *testing.T) string {
+	t.Helper()
+	kc := clientcmdapi.NewConfig()
+	kc.Clusters["fake"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:1/clusters/root"}
+	kc.Contexts["fake"] = &clientcmdapi.Context{Cluster: "fake", AuthInfo: "fake"}
+	kc.AuthInfos["fake"] = &clientcmdapi.AuthInfo{Token: "test-token"}
+	kc.CurrentContext = "fake"
+	return test.KubeconfigFile(t, kc)
+}
+
+// TestCloseRacesReset exercises Close concurrently with reset(), which
+// replaces p.managers while holding p.mu. Close snapshots the managers under
+// p.mu and closes them after releasing it: it must not deadlock against
+// reset's p.mu -> WatcherGroup lock order, and repeated Close calls must stay
+// safe.
+func (s *KcpProviderSuite) TestCloseRacesReset() {
+	for i := 0; i < 5; i++ {
+		cfg := config.New()
+		cfg.KubeConfig.SetForTest(kcpTestKubeconfig(s.T()))
+		provider, err := newKcpClusterProvider(s.T().Context(), cfg)
+		s.Require().NoError(err)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// A reset that loses the race returns errProviderClosed.
+			_ = provider.(*kcpClusterProvider).reset(s.T().Context())
+		}()
+		// Several closers run the shutdown path concurrently with the reset
+		// that is installing replacement managers.
+		for j := 0; j < 8; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				provider.Close()
+			}()
+		}
+		wg.Wait()
+		// Close stays idempotent after the race.
+		provider.Close()
+	}
+}

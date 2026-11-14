@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"k8s.io/client-go/rest"
@@ -291,8 +290,9 @@ func fetchCAOnce(ctx context.Context, client *http.Client, caURL string) (data [
 // so a predictable path beneath the shared system temp dir must be
 // checked rather than trusted: another local user could otherwise
 // pre-create it writable or as a symlink and substitute their own
-// certificate. Fails closed on symlinks, group/world writable
-// directories, and foreign ownership. World-readable is tolerated: the
+// certificate. Fails closed on symlinks, and (through checkDirOwner) on
+// group/world writable directories and foreign ownership where the
+// platform exposes unix permissions. World-readable is tolerated: the
 // CA files themselves are 0600, and read access cannot swap a trust
 // anchor.
 func ensurePrivateCacheDir(dir string) error {
@@ -306,13 +306,9 @@ func ensurePrivateCacheDir(dir string) error {
 	if fi.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("CA cache directory %s must not be a symlink", dir)
 	}
-	if perm := fi.Mode().Perm(); perm&0o022 != 0 {
-		return fmt.Errorf("CA cache directory %s is group or world writable (mode %#o)", dir, perm)
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Uid != uint32(os.Geteuid()) {
-		return fmt.Errorf("CA cache directory %s is owned by uid %d, not the current user", dir, st.Uid)
-	}
-	return nil
+	// The ownership and mode checks are platform specific: see
+	// checkDirOwner in ca_owner_unix.go and ca_owner_other.go.
+	return checkDirOwner(fi, dir)
 }
 
 // writeCAFile atomically writes data to path so readers (client-go's
@@ -352,12 +348,22 @@ func writeCAFile(path string, data []byte) error {
 // after the cluster is re-provisioned) lands in the cache file client-go is
 // pointed at; client-go then swaps to the new CA within its own refresh cycle.
 type caRefresher struct {
+	// ctx carries the construction-time log/trace values and is detached
+	// from the parent's cancellation, so a manager's cancellation does not
+	// abort refreshes. Close cancels it, which aborts an in-flight fetch.
 	ctx       context.Context
+	cancel    context.CancelFunc
 	cacheFile string
 	caURL     string
 	client    *http.Client
 	interval  time.Duration
 	logger    klog.Logger
+
+	// refreshMu serializes the fetch+compare+write sequence. A background
+	// tick and an on-demand refresh (Manager.RefreshCAs on SIGHUP) can run
+	// concurrently; without the lock a slow fetch could write the CA it
+	// fetched before a newer fetch wrote a fresher one.
+	refreshMu sync.Mutex
 
 	// started records whether the refresh loop was launched so Close can
 	// skip waiting on a loop that never ran (a refresher may be discarded
@@ -369,14 +375,18 @@ type caRefresher struct {
 }
 
 func newCARefresher(
-	ctx context.Context,
+	parentCtx context.Context,
 	cacheFile, caURL string,
 	client *http.Client,
 	interval time.Duration,
 	logger klog.Logger,
 ) *caRefresher {
+	// WithoutCancel keeps the parent's log/trace values without letting the
+	// parent's cancellation abort a refresh; Close owns cancellation here.
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
 	return &caRefresher{
 		ctx:       ctx,
+		cancel:    cancel,
 		cacheFile: cacheFile,
 		caURL:     caURL,
 		client:    client,
@@ -411,18 +421,30 @@ func (r *caRefresher) loop() {
 			r.refreshOnce()
 		case <-r.stopCh:
 			return
+		case <-r.ctx.Done():
+			return
 		}
 	}
 }
 
 func (r *caRefresher) refreshOnce() {
-	// WithoutCancel keeps the caller's log/trace values without letting a
-	// shutdown cancel the fetch; caFetchMaxDuration below still bounds a
-	// fetch-with-retries.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), caFetchMaxDuration)
+	// One fetch+compare+write at a time: a background tick must not race an
+	// on-demand refresh (Manager.RefreshCAs on SIGHUP) and overwrite a newer
+	// CA with the older one its own slower fetch returned.
+	r.refreshMu.Lock()
+	defer r.refreshMu.Unlock()
+
+	// caFetchMaxDuration bounds a fetch-with-retries; r.ctx is cancelled by
+	// Close, which aborts an in-flight fetch promptly on shutdown.
+	ctx, cancel := context.WithTimeout(r.ctx, caFetchMaxDuration)
 	defer cancel()
 	data, err := fetchCA(ctx, r.client, r.caURL)
 	if err != nil {
+		// Shutdown cancelled the fetch; that is not a refresh failure and
+		// must not be logged as one.
+		if r.ctx.Err() != nil {
+			return
+		}
 		// Keep the previous CA; it worked until now and a bad transient
 		// refresh must not break a healthy client.
 		r.logger.Error(err, "failed to refresh cached CA, keeping previous CA", "ca_url", r.caURL, "ca_file", r.cacheFile)
@@ -438,13 +460,17 @@ func (r *caRefresher) refreshOnce() {
 	}
 }
 
-// Close stops the refresh loop and blocks until it has exited. Safe to call
-// multiple times.
+// Close stops the refresh loop, cancels any in-flight fetch and blocks until
+// the loop has exited. Safe to call multiple times.
 func (r *caRefresher) Close() {
 	if r == nil {
 		return
 	}
 	r.closeOnce.Do(func() {
+		// Cancel first so a fetch that is blocked on the network returns
+		// immediately instead of waiting out its own deadline. This also
+		// releases the context of a refresher whose loop never started.
+		r.cancel()
 		if !r.started.Load() {
 			return
 		}

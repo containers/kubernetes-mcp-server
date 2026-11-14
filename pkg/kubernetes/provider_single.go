@@ -143,10 +143,22 @@ func (p *singleClusterProvider) GetTargetParameterName() string {
 // and background CA refresh loop. reset() closes the previous manager
 // explicitly and swaps the watchers through Replace, so it never closes the
 // manager it just installed.
+//
+// The manager is read under p.mu because reset() installs a replacement while
+// holding it. It is closed after the read lock is released: Manager.Close
+// waits for the CA refresh loop, and blocking every p.mu holder on that wait
+// would stall shutdown behind unrelated callers. Nothing re-takes p.mu, so
+// this cannot deadlock.
 func (p *singleClusterProvider) Close() {
+	// WatcherGroup.Close first (and outside p.mu) so a concurrent reset()
+	// fails on ErrClosed instead of installing a manager after the snapshot
+	// below is taken.
 	p.WatcherGroup.Close()
-	if p.manager != nil {
-		p.manager.Close()
+	p.mu.RLock()
+	manager := p.manager
+	p.mu.RUnlock()
+	if manager != nil {
+		manager.Close()
 	}
 }
 

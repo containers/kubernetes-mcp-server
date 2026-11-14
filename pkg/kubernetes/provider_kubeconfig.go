@@ -226,14 +226,25 @@ func (p *kubeConfigClusterProvider) PublishKubernetesConfig(cfg *config.Config) 
 // (and tests that only call Close) leave nothing running behind. reset()
 // releases replaced managers explicitly and installs the new ones through
 // Replace, so a reset never closes a manager it just installed.
+//
+// The managers are snapshotted under p.mu because reset() replaces the map
+// while holding it, then closed after the lock is released: Manager.Close
+// waits for the CA refresh loop, and holding p.mu across that wait would
+// stall shutdown behind unrelated callers. WatcherGroup.Close runs first and
+// outside p.mu so a concurrent reset() fails on ErrClosed rather than
+// installing a manager the snapshot missed.
 func (p *kubeConfigClusterProvider) Close() {
 	p.WatcherGroup.Close()
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	managers := make([]*Manager, 0, len(p.managers))
 	for _, m := range p.managers {
 		if m != nil {
-			m.Close()
+			managers = append(managers, m)
 		}
+	}
+	p.mu.RUnlock()
+	for _, m := range managers {
+		m.Close()
 	}
 }
 
