@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -111,6 +113,29 @@ func (s *ClusterCACASuite) TestWriteCAFileRejectsUnsafeCacheDirs() {
 		s.Require().NoError(err)
 		s.Equal("victim", string(got), "rename must replace the symlink, not write through it")
 	})
+}
+
+// TestCACacheFileIsPerUser guards the cache directory name: on unix the
+// effective uid is part of it, so two users running the server on one host
+// neither share a directory nor block each other by pre-creating it.
+func (s *ClusterCACASuite) TestCACacheFileIsPerUser() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("os.Geteuid returns -1 on windows and the temp dir is already per-user")
+	}
+	euid := os.Geteuid()
+	s.Require().GreaterOrEqual(euid, 0)
+
+	first := caCacheFilePath("https://ca.example.com/")
+	second := caCacheFilePath("https://ca.example.com/other.pem")
+
+	dir := filepath.Dir(first)
+	s.Equal(caCacheDirName(), filepath.Base(dir))
+	s.Equal(fmt.Sprintf("%s-%d", caCacheSubdir, euid), filepath.Base(dir))
+	s.Contains(filepath.Base(dir), strconv.Itoa(euid))
+
+	// Distinct caURLs still map to distinct files in the one directory.
+	s.Equal(dir, filepath.Dir(second))
+	s.NotEqual(first, second)
 }
 
 // selfSignedPEM returns a fresh self-signed CA certificate in PEM form, so

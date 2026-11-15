@@ -601,7 +601,7 @@ Notes:
 - The response must be a PEM CA certificate; other content fails fast with a clear error.
 - client-go re-checks the cached file roughly every 5 minutes (the `ClientsAllowCARotation` feature, beta and enabled by default in client-go 1.36+), so a rotation converges once the refresher writes the new CA; setting `ca_refresh_interval` below that cadence does not speed it up. With that feature disabled (e.g. `KUBE_FEATURE_ClientsAllowCARotation=false`), the client no longer re-reads the file, so a changed CA is only picked up when a manager is rebuilt.
 - Sending SIGHUP to reload configuration also triggers an immediate CA re-fetch, so a rotated CA can be picked up without waiting out `ca_refresh_interval` or restarting.
-- The cache directory (a subdirectory of the system temp dir, which honors `$TMPDIR`) must be writable. With a read-only root filesystem, mount an emptyDir at `/tmp` or set `$TMPDIR` to writable storage.
+- The cache directory (a subdirectory of the system temp dir, which honors `$TMPDIR`) must be writable. With a read-only root filesystem, mount an emptyDir at `/tmp` or set `$TMPDIR` to writable storage. The cache directory is per user (its name includes the user's uid on unix), so different users on one host do not collide.
 - The initial fetch happens at manager creation; if it fails (unreachable endpoint, non-PEM response), manager creation fails rather than silently using an empty trust store. For the default context that is startup; lazily-created contexts (other targets) surface the error on first use.
 - Applies to every cluster provider strategy backed by a kubeconfig (`kubeconfig` and `kcp`).
 

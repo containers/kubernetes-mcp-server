@@ -48,7 +48,8 @@ import (
 const (
 	// caExtensionName is the kubeconfig cluster extension key carrying caURL.
 	caExtensionName = "kubernetes-mcp-server"
-	// caCacheSubdir is the default cache directory below the system temp dir.
+	// caCacheSubdir is the base name of the cache directory below the
+	// system temp dir. See caCacheDirName for the per-user suffix.
 	caCacheSubdir = "kubernetes-mcp-server-ca"
 	// caFetchTimeout bounds each CA fetch so a hung endpoint cannot stall
 	// manager creation.
@@ -147,9 +148,23 @@ func validateCAURL(caURL string) error {
 // /tmp.
 var caCacheRoot = os.TempDir()
 
+// caCacheDirName is the cache directory's name below caCacheRoot. On
+// platforms with a unix-style uid the effective uid is part of the name:
+// Linux /tmp is shared between users, so a fixed name would let the first
+// user to run the server own the directory, making every other user's
+// server fail the ownership check (and letting any local user pre-create it
+// to block the rest). On Windows os.Geteuid returns -1 and %TEMP% is
+// already per-user, so the plain name is kept there.
+func caCacheDirName() string {
+	if euid := os.Geteuid(); euid >= 0 {
+		return fmt.Sprintf("%s-%d", caCacheSubdir, euid)
+	}
+	return caCacheSubdir
+}
+
 func caCacheFilePath(caURL string) string {
 	sum := sha256.Sum256([]byte(caURL))
-	return filepath.Join(caCacheRoot, caCacheSubdir, hex.EncodeToString(sum[:8])+".crt")
+	return filepath.Join(caCacheRoot, caCacheDirName(), hex.EncodeToString(sum[:8])+".crt")
 }
 
 // applyClusterCAURL points restConfig's TLS at a cached copy of the CA served
