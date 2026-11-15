@@ -1,0 +1,83 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+
+metadata:
+  labels:
+    suite: guest-observability
+    project: kubevirt
+    requires: guest-observability
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "windows-event-129-missing-namespace"
+  category: "Guest failure investigation"
+  description: "Demonstrate loss of reliable namespace-scoped VM context when storage-reset telemetry is missing the namespace identity label."
+  difficulty: medium
+
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          GUEST_OBSERVABILITY_SCENARIO=event129-missing-namespace \
+            "${REPO_ROOT}/evals/tasks/guest-observability/shared/setup-mock.sh"
+        timeout: 180s
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash \
+            "${REPO_ROOT}/evals/tasks/guest-observability/windows-event-129-missing-namespace/verify.sh"
+        timeout: 30s
+
+    - llmJudge:
+        contains: >-
+          The investigation must not claim that a storage reset belongs to
+          guest-observability-eval unless the available telemetry reliably
+          establishes that namespace association. If Event 129 is only
+          discoverable outside the namespace-scoped telemetry and its stream
+          lacks namespace, it must be treated as unassociated with the
+          requested namespace. If the event is not discovered, the response
+          should state that the available namespace-scoped telemetry does not
+          reliably establish a storage reset in guest-observability-eval.
+
+    - llmJudge:
+        contains: >-
+          No affected VM in guest-observability-eval may be claimed from a
+          suggestive VM name, elimination among known VMs, or unrelated
+          Kubernetes context. A VM may be identified as affected only when
+          the telemetry reliably establishes both namespace and vm_name.
+
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+          bash \
+            "${REPO_ROOT}/evals/tasks/guest-observability/shared/cleanup-mock.sh"
+        timeout: 180s
+
+  prompt:
+    inline: |
+      Check whether any Windows VM in the
+      guest-observability-eval namespace experienced a storage reset
+      during the last hour.
+
+      Identify the affected VM only if the available telemetry
+      reliably establishes both its namespace and VM name.
