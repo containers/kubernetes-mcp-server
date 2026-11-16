@@ -1,8 +1,10 @@
 package watcher
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,7 +50,7 @@ func (s *ClusterStateTestSuite) waitForWatcherInitialState(watcher *ClusterState
 	s.Eventually(func() bool {
 		watcher.mu.Lock()
 		defer watcher.mu.Unlock()
-		return len(watcher.lastKnownState.apiGroups) > 0
+		return len(watcher.lastKnownState.apiResources) > 0
 	}, watcherStateTimeout, eventuallyTick, "timeout waiting for watcher to capture initial state")
 }
 
@@ -70,8 +72,7 @@ func (s *ClusterStateTestSuite) TestNewClusterState() {
 			s.NotNil(watcher.stoppedCh)
 		})
 		s.Run("stores discovery client", func() {
-			s.NotNil(watcher.discoveryClient)
-			s.Equal(discoveryClient, watcher.discoveryClient)
+			s.NotNil(watcher.discoveryClients)
 		})
 	})
 
@@ -167,9 +168,8 @@ func (s *ClusterStateTestSuite) TestWatch() {
 
 		s.waitForWatcherInitialState(watcher)
 
-		s.Run("captures API groups", func() {
-			s.NotEmpty(watcher.lastKnownState.apiGroups, "should capture at least one API group (apps)")
-			s.Contains(watcher.lastKnownState.apiGroups, "apps")
+		s.Run("captures API resources", func() {
+			s.NotEmpty(watcher.lastKnownState.apiResources)
 		})
 		s.Run("detects non-OpenShift cluster", func() {
 			s.False(watcher.lastKnownState.isOpenShift)
@@ -238,9 +238,81 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		s.Run("detects OpenShift via API groups", func() {
 			s.True(watcher.lastKnownState.isOpenShift)
 		})
-		s.Run("captures OpenShift API groups", func() {
-			s.Contains(watcher.lastKnownState.apiGroups, "project.openshift.io")
+		s.Run("captures OpenShift API resources", func() {
+			s.Contains(watcher.lastKnownState.apiResources, "\x00project.openshift.io/v1\x00projects\x00Project")
 		})
+	})
+
+	s.Run("detects kind changes within an existing group", func() {
+		s.mockServer.ResetHandlers()
+		handler := test.NewDiscoveryClientHandler(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{{Name: "pipelineruns", Kind: "PipelineRun"}},
+		})
+		s.mockServer.Handle(handler)
+		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
+		watcher := NewClusterState(s.T().Context(), discoveryClient, 50*time.Millisecond, 20*time.Millisecond)
+
+		var callCount atomic.Int32
+		watcher.Watch(s.T().Context(), func() error {
+			callCount.Add(1)
+			return nil
+		})
+		s.T().Cleanup(watcher.Close)
+		s.waitForWatcherInitialState(watcher)
+
+		handler.SetAPIResourceList(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{
+				{Name: "pipelineruns", Kind: "PipelineRun"},
+				{Name: "taskruns", Kind: "TaskRun"},
+			},
+		})
+
+		s.Eventually(func() bool {
+			return callCount.Load() >= 1
+		}, watcherPollTimeout, eventuallyTick, "timeout waiting for same-group resource change")
+	})
+
+	s.Run("detects resource changes on a secondary target", func() {
+		first := test.NewMockServer()
+		defer first.Close()
+		first.Handle(test.NewDiscoveryClientHandler())
+		second := test.NewMockServer()
+		defer second.Close()
+		secondHandler := test.NewDiscoveryClientHandler(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{{Name: "pipelineruns", Kind: "PipelineRun"}},
+		})
+		second.Handle(secondHandler)
+		firstClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(first.Config()))
+		secondClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(second.Config()))
+		watcher := NewClusterStateForTargets(s.T().Context(), func(context.Context) map[string]discovery.CachedDiscoveryInterface {
+			return map[string]discovery.CachedDiscoveryInterface{
+				"first":  firstClient,
+				"second": secondClient,
+			}
+		}, 50*time.Millisecond, 20*time.Millisecond)
+
+		var callCount atomic.Int32
+		watcher.Watch(s.T().Context(), func() error {
+			callCount.Add(1)
+			return nil
+		})
+		s.T().Cleanup(watcher.Close)
+		s.waitForWatcherInitialState(watcher)
+
+		secondHandler.SetAPIResourceList(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{
+				{Name: "pipelineruns", Kind: "PipelineRun"},
+				{Name: "taskruns", Kind: "TaskRun"},
+			},
+		})
+
+		s.Eventually(func() bool {
+			return callCount.Load() >= 1
+		}, watcherPollTimeout, eventuallyTick, "timeout waiting for secondary-target resource change")
 	})
 
 	s.Run("handles onChange callback errors gracefully", func() {
@@ -396,93 +468,68 @@ func (s *ClusterStateTestSuite) TestClose() {
 }
 
 func (s *ClusterStateTestSuite) TestCaptureState() {
-	s.Run("captures API groups sorted alphabetically", func() {
-		handler := test.NewDiscoveryClientHandler(
-			metav1.APIResourceList{GroupVersion: "zebra.example.com/v1"},
-			metav1.APIResourceList{GroupVersion: "alpha.example.com/v1"},
-		)
+	s.Run("captures sorted target resources", func() {
+		handler := test.NewDiscoveryClientHandler(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{
+				{Name: "taskruns", Kind: "TaskRun"},
+				{Name: "pipelineruns", Kind: "PipelineRun"},
+			},
+		})
 		s.mockServer.Handle(handler)
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
+		watcher := NewClusterStateForTargets(s.T().Context(), func(context.Context) map[string]discovery.CachedDiscoveryInterface {
+			return map[string]discovery.CachedDiscoveryInterface{"secondary": discoveryClient}
+		}, 0, 0)
 
-		watcher := NewClusterState(s.T().Context(), discoveryClient, 0, 0)
-		state := watcher.captureState()
+		state := watcher.captureState(s.T().Context(), false)
 
-		s.Run("sorts groups alphabetically", func() {
-			// Should have alpha, apps (from default handler), and zebra
-			s.GreaterOrEqual(len(state.apiGroups), 3)
-			// Find our custom groups
-			alphaIdx := -1
-			zebraIdx := -1
-			for i, group := range state.apiGroups {
-				if group == "alpha.example.com" {
-					alphaIdx = i
-				}
-				if group == "zebra.example.com" {
-					zebraIdx = i
-				}
-			}
-			s.NotEqual(-1, alphaIdx, "should contain alpha.example.com")
-			s.NotEqual(-1, zebraIdx, "should contain zebra.example.com")
-			s.Less(alphaIdx, zebraIdx, "alpha should come before zebra")
-		})
+		s.Contains(state.apiResources, "secondary\x00tekton.dev/v1\x00pipelineruns\x00PipelineRun")
+		s.Contains(state.apiResources, "secondary\x00tekton.dev/v1\x00taskruns\x00TaskRun")
+		s.True(slices.IsSorted(state.apiResources))
 	})
 
-	s.Run("handles discovery client errors gracefully", func() {
-		// Create a mock server that returns 500 errors
+	s.Run("represents discovery errors as partial state", func() {
 		mockServer := test.NewMockServer()
 		defer mockServer.Close()
-
-		// Handler that returns 500 for all requests
-		errorHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		})
-		mockServer.Handle(errorHandler)
-
+		}))
 		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(mockServer.Config()))
-		watcher := &ClusterState{
-			discoveryClient: discoveryClient,
-		}
+		watcher := NewClusterState(s.T().Context(), discoveryClient, 0, 0)
 
-		state := watcher.captureState()
+		state := watcher.captureState(s.T().Context(), false)
 
-		s.Run("returns empty API groups on error", func() {
-			s.Empty(state.apiGroups)
-		})
-		s.Run("still checks OpenShift status", func() {
-			s.False(state.isOpenShift)
-		})
+		s.Contains(state.apiResources, "\x00<partial>")
+		s.False(state.isOpenShift)
 	})
 
-	s.Run("detects cluster state differences", func() {
-		// Create first mock server with standard groups
-		mockServer1 := test.NewMockServer()
-		defer mockServer1.Close()
-		handler1 := test.NewDiscoveryClientHandler()
-		mockServer1.Handle(handler1)
-		discoveryClient1 := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(mockServer1.Config()))
+	s.Run("keeps secondary targets distinct", func() {
+		first := test.NewMockServer()
+		defer first.Close()
+		first.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{{Name: "pipelineruns", Kind: "PipelineRun"}},
+		}))
+		second := test.NewMockServer()
+		defer second.Close()
+		second.Handle(test.NewDiscoveryClientHandler(metav1.APIResourceList{
+			GroupVersion: "tekton.dev/v1",
+			APIResources: []metav1.APIResource{{Name: "taskruns", Kind: "TaskRun"}},
+		}))
+		firstClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(first.Config()))
+		secondClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(second.Config()))
+		watcher := NewClusterStateForTargets(s.T().Context(), func(context.Context) map[string]discovery.CachedDiscoveryInterface {
+			return map[string]discovery.CachedDiscoveryInterface{
+				"first":  firstClient,
+				"second": secondClient,
+			}
+		}, 0, 0)
 
-		watcher := &ClusterState{discoveryClient: discoveryClient1}
-		state1 := watcher.captureState()
+		state := watcher.captureState(s.T().Context(), false)
 
-		// Create second mock server with additional groups
-		mockServer2 := test.NewMockServer()
-		defer mockServer2.Close()
-		handler2 := test.NewDiscoveryClientHandler(
-			metav1.APIResourceList{GroupVersion: "new.group/v1"},
-		)
-		mockServer2.Handle(handler2)
-		discoveryClient2 := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(mockServer2.Config()))
-
-		watcher.discoveryClient = discoveryClient2
-		state2 := watcher.captureState()
-
-		s.Run("detects different API group count", func() {
-			s.NotEqual(len(state1.apiGroups), len(state2.apiGroups), "API group counts should differ")
-		})
-		s.Run("detects new API groups", func() {
-			s.Contains(state2.apiGroups, "new.group")
-			s.NotContains(state1.apiGroups, "new.group")
-		})
+		s.Contains(state.apiResources, "first\x00tekton.dev/v1\x00pipelineruns\x00PipelineRun")
+		s.Contains(state.apiResources, "second\x00tekton.dev/v1\x00taskruns\x00TaskRun")
 	})
 }
 

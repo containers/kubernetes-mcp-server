@@ -66,7 +66,13 @@ func (s *ProviderWatchTargetsTestSuite) TestClusterStateChanges() {
 			callback, waitForCallback := CallbackWaiter()
 			provider.WatchTargets(s.T().Context(), McpReloaderFromCallback(callback))
 			s.Run("Reloads provider on cluster changes", func() {
-				s.discoveryClientHandler.AddAPIResourceList(metav1.APIResourceList{GroupVersion: "alex.example.com/v1"})
+				s.discoveryClientHandler.SetAPIResourceList(metav1.APIResourceList{
+					GroupVersion: "apps/v1",
+					APIResources: []metav1.APIResource{
+						{Name: "deployments", Kind: "Deployment"},
+						{Name: fmt.Sprintf("dynamic-%d", time.Now().UnixNano()), Kind: "Dynamic"},
+					},
+				})
 
 				s.Require().NoError(waitForCallback(5 * time.Second))
 				// Provider-wise the watcher.ClusterState which triggers the callback has no effect.

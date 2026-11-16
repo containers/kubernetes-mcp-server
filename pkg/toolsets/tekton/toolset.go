@@ -23,10 +23,10 @@ func (t *Toolset) GetDescription() string {
 
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
-		pipelineTools(),
+		pipelineTools(ctx, toolsetContext.Inspector),
 		pipelineRunTools(ctx, toolsetContext.Inspector),
-		taskTools(),
-		taskRunTools(),
+		taskTools(ctx, toolsetContext.Inspector),
+		taskRunTools(ctx, toolsetContext.Inspector),
 	)
 }
 
