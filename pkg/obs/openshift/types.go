@@ -10,11 +10,6 @@ const (
 	ThanosQuerierRouteName = "thanos-querier"
 	PrometheusRouteName    = "prometheus-k8s"
 	AlertmanagerRouteName  = "alertmanager-main"
-
-	// OpenShiftTenantModePrefix is the prefix for LokiStack/Tempo tenants mode strings
-	// that indicate OpenShift-managed multi-tenancy (e.g., "openshift-network").
-	// When present, HTTPS and the /api/logs/v1 gateway path prefix are required.
-	OpenShiftTenantModePrefix = "openshift-"
 )
 
 var RouteGVR = schema.GroupVersionResource{

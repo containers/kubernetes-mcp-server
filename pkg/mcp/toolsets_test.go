@@ -17,6 +17,7 @@ import (
 	configuration "github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/alertmanagement"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
@@ -403,6 +404,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	}))
 	s.handlePersesList(http.StatusOK, persesListWithInstance)
 	testCases := []api.Toolset{
+		&alertmanagement.Toolset{},
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
@@ -680,4 +682,24 @@ func (s *ToolsetsSuite) assertJsonSnapshot(snapshotFile string, actual any) {
 
 func TestToolsets(t *testing.T) {
 	suite.Run(t, new(ToolsetsSuite))
+}
+
+func (s *ToolsetsSuite) TestAlertManagementUsesConfiguredEndpoint() {
+	toolsets.Clear()
+	toolsets.Register(&alertmanagement.Toolset{})
+	kubeconfig := s.Kubeconfig()
+	kubeconfig.Contexts["another-cluster"] = clientcmdapi.NewContext()
+	s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+	s.Cfg.Toolsets.SetForTest([]string{alertmanagement.ToolsetName})
+	s.InitMcpClient()
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.Require().Len(tools.Tools, 6)
+	for _, tool := range tools.Tools {
+		schema, ok := tool.InputSchema.(map[string]any)
+		s.Require().True(ok)
+		properties, ok := schema["properties"].(map[string]any)
+		s.Require().True(ok)
+		s.NotContains(properties, "context", "%s must use its configured endpoint rather than select a Kubernetes target", tool.Name)
+	}
 }

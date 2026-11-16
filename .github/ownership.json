@@ -55,6 +55,27 @@
       "approvers": ["@ksimon1", "@lyarwood"]
     },
     {
+      "toolset": "observability/alert-management",
+      "paths": [
+        "/pkg/toolsets/alertmanagement/",
+        "/docs/alert-management.md",
+        "/evals/tasks/obs/list-alert-rules/",
+        "/evals/tasks/obs/list-alerts/",
+        "/evals/tasks/obs/preview-alert-rule/",
+        "/pkg/obs/auth/",
+        "/pkg/obs/instrumentation/",
+        "/pkg/obs/tools/",
+        "/pkg/obs/toolcfg/"
+      ],
+      "reviewers": [],
+      "approvers": [
+        "@andreasgerstmayr",
+        "@iNecas",
+        "@saswatamcode",
+        "@slashpai"
+      ]
+    },
+    {
       "toolset": "observability/logs",
       "paths": [
         "/pkg/toolsets/logs/",
