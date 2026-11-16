@@ -1,0 +1,218 @@
+package kubernetes
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"slices"
+	"sort"
+	"strings"
+
+	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
+)
+
+// KubeConfigProviderConfig holds per-target token exchange configuration for
+// the kubeconfig cluster provider. It is registered under
+// cluster_provider_configs and keyed by kubeconfig context name:
+//
+//	[cluster_provider_configs.kubeconfig]
+//	token_exchange_strategy = "rfc8693"
+//
+//	[cluster_provider_configs.kubeconfig.targets."spoke-context"]
+//	token_url = "https://idp.example.com/token"
+//	audience = "spoke-cluster"
+//	scopes = ["mcp:spoke"]
+//
+// Every target carries a complete, self-contained token exchange
+// configuration: nothing is inherited from the global [token_exchange] block,
+// so different contexts can exchange against different identity providers.
+// A context without a target entry uses the global [token_exchange]
+// configuration (if any) unchanged.
+type KubeConfigProviderConfig struct {
+	// TokenExchangeStrategy selects the token exchange implementation used
+	// for every target (e.g. rfc8693). Required when any target is
+	// configured; unused otherwise.
+	TokenExchangeStrategy string `toml:"token_exchange_strategy,omitempty"`
+	// Targets holds per-context token exchange configuration, keyed by
+	// kubeconfig context name.
+	Targets map[string]KubeConfigTargetConfig `toml:"targets,omitempty"`
+}
+
+// KubeConfigTargetConfig is a complete token exchange configuration for one
+// kubeconfig context. TokenURL is required; the remaining fields are
+// optional and default to the strategy's own defaults.
+type KubeConfigTargetConfig struct {
+	// TokenURL is the token-exchange endpoint for this target. Required.
+	TokenURL string `toml:"token_url,omitempty"`
+	// Audience is the audience requested during token exchange.
+	Audience string `toml:"audience,omitempty"`
+	// Scopes are the scopes requested during token exchange.
+	Scopes []string `toml:"scopes,omitempty"`
+	// SubjectTokenType is an RFC 8693 subject_token_type override.
+	SubjectTokenType string `toml:"subject_token_type,omitempty"`
+	// RequestedTokenType is an RFC 8693 requested_token_type override.
+	RequestedTokenType string `toml:"requested_token_type,omitempty"`
+	// SubjectIssuer is the Keycloak subject_issuer for cross-realm exchange.
+	SubjectIssuer string `toml:"subject_issuer,omitempty"`
+	// CertificateAuthority is a CA bundle for the target's token endpoint.
+	// Falls back to the top-level certificate_authority when unset.
+	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	// ClientAuth authenticates the MCP server to the target's token
+	// endpoint. Same fields and rules as the global
+	// [token_exchange.client_auth] block.
+	ClientAuth KubeConfigTargetClientAuth `toml:"client_auth,omitempty"`
+}
+
+// KubeConfigTargetClientAuth mirrors [token_exchange.client_auth].
+type KubeConfigTargetClientAuth struct {
+	Method          string `toml:"method,omitempty"`
+	ClientID        string `toml:"client_id,omitempty"`
+	ClientSecret    string `toml:"client_secret,omitempty"`
+	CertificateFile string `toml:"certificate_file,omitempty"`
+	PrivateKeyFile  string `toml:"private_key_file,omitempty"`
+	TokenFile       string `toml:"token_file,omitempty"`
+}
+
+var _ config.ExtendedConfig = (*KubeConfigProviderConfig)(nil)
+var _ config.ClusterAuthValidator = (*KubeConfigProviderConfig)(nil)
+
+// ValidateClusterAuth applies the cluster auth rules the global
+// [token_exchange] block follows to per-target exchange: it depends on
+// OAuth-validated tokens, and in kubeconfig cluster_auth_mode the exchanged
+// token would be unused. It runs wherever config validation runs — at
+// startup and on reload — mirroring the rules in
+// config.Config.ValidateClusterAuthMode.
+func (c *KubeConfigProviderConfig) ValidateClusterAuth(requireOAuth bool, clusterAuthMode string) error {
+	if c == nil || len(c.Targets) == 0 {
+		return nil
+	}
+	var errs []error
+	if clusterAuthMode == config.ClusterAuthKubeconfig {
+		errs = append(errs, fmt.Errorf("per-target token exchange is incompatible with cluster_auth_mode %q (exchanged token would be unused)", clusterAuthMode))
+	}
+	if !requireOAuth {
+		errs = append(errs, fmt.Errorf("per-target token exchange requires require_oauth=true (token exchange depends on OAuth-validated tokens)"))
+	}
+	return errors.Join(errs...)
+}
+
+func (c *KubeConfigProviderConfig) Validate() error {
+	if c == nil {
+		return fmt.Errorf("kubeconfig provider config is nil")
+	}
+	var errs []error
+	if c.TokenExchangeStrategy != "" {
+		strategies := tokenexchange.GetRegisteredStrategies()
+		if !slices.Contains(strategies, c.TokenExchangeStrategy) {
+			errs = append(errs, fmt.Errorf("invalid token_exchange_strategy %q: valid values are: %s", c.TokenExchangeStrategy, strings.Join(strategies, ", ")))
+		}
+	}
+	if len(c.Targets) == 0 {
+		if c.TokenExchangeStrategy != "" {
+			errs = append(errs, fmt.Errorf("token_exchange_strategy is set but no targets are configured"))
+		}
+		return errors.Join(errs...)
+	}
+	if c.TokenExchangeStrategy == "" {
+		errs = append(errs, fmt.Errorf("token_exchange_strategy is required when targets are configured"))
+	}
+
+	names := make([]string, 0, len(c.Targets))
+	for name := range c.Targets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		if err := c.Targets[name].validate(); err != nil {
+			errs = append(errs, fmt.Errorf("target %q: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (t KubeConfigTargetConfig) validate() error {
+	var errs []error
+	if t.TokenURL == "" {
+		errs = append(errs, fmt.Errorf("token_url is required"))
+	} else {
+		u, err := url.Parse(t.TokenURL)
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("invalid token_url: %w", err))
+		case u.Scheme != "https" && u.Scheme != "http":
+			errs = append(errs, fmt.Errorf("token_url must use the http or https scheme, got %q", u.Scheme))
+		case u.Host == "":
+			errs = append(errs, fmt.Errorf("token_url must include a host"))
+		}
+	}
+	if err := t.ClientAuth.validate(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// isSet reports whether any client_auth field was configured for the target.
+func (a KubeConfigTargetClientAuth) isSet() bool {
+	return a.Method != "" || a.ClientID != "" || a.ClientSecret != "" ||
+		a.CertificateFile != "" || a.PrivateKeyFile != "" || a.TokenFile != ""
+}
+
+// validate applies the same rules as the global token_exchange.client_auth block.
+func (a KubeConfigTargetClientAuth) validate() error {
+	if !a.isSet() {
+		return nil
+	}
+	if a.Method == "" {
+		// A bare client_id is a public client and needs no method.
+		if a.ClientID != "" && a.ClientSecret == "" && a.CertificateFile == "" && a.PrivateKeyFile == "" && a.TokenFile == "" {
+			return nil
+		}
+		return fmt.Errorf("client_auth.method is required when client authentication fields are configured")
+	}
+	var errs []error
+	if a.ClientID == "" {
+		errs = append(errs, fmt.Errorf("client_auth.client_id is required when method is %q", a.Method))
+	}
+	switch config.TokenExchangeClientAuthMethod(a.Method) {
+	case config.TokenExchangeClientAuthMethodSecretBasic, config.TokenExchangeClientAuthMethodSecretPost:
+		if a.ClientSecret == "" {
+			errs = append(errs, fmt.Errorf("client_auth.client_secret is required when method is %q", a.Method))
+		}
+	case config.TokenExchangeClientAuthMethodPrivateKey:
+		errs = append(errs, requireClientAuthFile("certificate_file", a.CertificateFile), requireClientAuthFile("private_key_file", a.PrivateKeyFile))
+	case config.TokenExchangeClientAuthMethodJWTFile:
+		errs = append(errs, requireClientAuthFile("token_file", a.TokenFile))
+	default:
+		errs = append(errs, fmt.Errorf("invalid client_auth.method %q: must be %s, %s, %s, or %s", a.Method,
+			config.TokenExchangeClientAuthMethodSecretBasic, config.TokenExchangeClientAuthMethodSecretPost,
+			config.TokenExchangeClientAuthMethodPrivateKey, config.TokenExchangeClientAuthMethodJWTFile))
+	}
+	return errors.Join(errs...)
+}
+
+func requireClientAuthFile(name, path string) error {
+	if path == "" {
+		return fmt.Errorf("client_auth.%s is required", name)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("client_auth.%s %q: %w", name, path, err)
+	}
+	return nil
+}
+
+func kubeconfigProviderConfigParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (config.ExtendedConfig, error) {
+	var cfg KubeConfigProviderConfig
+	if err := md.PrimitiveDecode(primitive, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func init() {
+	config.RegisterProviderConfig(config.ClusterProviderKubeConfig, kubeconfigProviderConfigParser)
+}

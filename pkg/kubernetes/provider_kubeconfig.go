@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes/watcher"
+	"github.com/containers/kubernetes-mcp-server/pkg/tokenexchange"
 )
 
 // KubeConfigTargetParameterName is the parameter name used to specify
@@ -23,9 +27,24 @@ type kubeConfigClusterProvider struct {
 	defaultContext string
 	managers       map[string]*Manager
 	WatcherGroup
+
+	targetConfigsMu sync.Mutex
+	// targetConfigs caches resolved per-target token exchanges, keyed by
+	// context name, so the memoized HTTP client in each config is reused.
+	// Entries are rebuilt when the resolved values change; cleared wholesale
+	// on reset() and Close().
+	targetConfigs map[string]*cachedTargetConfig
 }
 
-var _ Provider = &kubeConfigClusterProvider{}
+type cachedTargetConfig struct {
+	key    tokenExchangeConfigCacheKey
+	config *tokenexchange.TargetTokenExchangeConfig
+}
+
+var (
+	_ Provider              = &kubeConfigClusterProvider{}
+	_ TokenExchangeProvider = &kubeConfigClusterProvider{}
+)
 
 func init() {
 	RegisterProvider(config.ClusterProviderKubeConfig, newKubeConfigClusterProvider)
@@ -39,6 +58,15 @@ func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Prov
 	ret := &kubeConfigClusterProvider{cfg: cfg}
 	ret.SetReset(ret.reset)
 	if err := ret.reset(ctx); err != nil {
+		return nil, err
+	}
+	contexts, err := ret.GetTargets(ctx)
+	if err != nil {
+		ret.Close()
+		return nil, err
+	}
+	if err := validateTargetTokenExchanges(cfg, ret.providerConfig(cfg), contexts); err != nil {
+		ret.Close()
 		return nil, err
 	}
 	return ret, nil
@@ -85,6 +113,13 @@ func (p *kubeConfigClusterProvider) resetLocked(ctx context.Context) error {
 			defaultContext = name
 		}
 	}
+
+	p.targetConfigsMu.Lock()
+	for _, cached := range p.targetConfigs {
+		cached.config.CloseIdleConnections()
+	}
+	p.targetConfigs = nil
+	p.targetConfigsMu.Unlock()
 
 	for _, old := range p.managers {
 		if old != nil {
@@ -213,5 +248,171 @@ func (p *kubeConfigClusterProvider) PublishKubernetesConfig(cfg *config.Config) 
 		if m != nil {
 			m.SetConfig(cfg)
 		}
+	}
+}
+
+// Close stops the watchers via the embedded WatcherGroup and releases the
+// cached per-target token exchanges.
+func (p *kubeConfigClusterProvider) Close() {
+	p.WatcherGroup.Close()
+
+	p.targetConfigsMu.Lock()
+	for _, cached := range p.targetConfigs {
+		cached.config.CloseIdleConnections()
+	}
+	p.targetConfigs = nil
+	p.targetConfigsMu.Unlock()
+}
+
+func (p *kubeConfigClusterProvider) providerConfig(base *config.Config) *KubeConfigProviderConfig {
+	extCfg, ok := base.GetProviderConfig(config.ClusterProviderKubeConfig)
+	if !ok {
+		return nil
+	}
+	kcCfg, ok := extCfg.(*KubeConfigProviderConfig)
+	if !ok {
+		return nil
+	}
+	return kcCfg
+}
+
+// GetTokenExchangeConfig returns the token exchange configuration for the
+// specified target. Returns nil if no per-target exchange is configured.
+// The empty target resolves to the default context, matching the ACM hub
+// provider's contract.
+func (p *kubeConfigClusterProvider) GetTokenExchangeConfig(target string) *tokenexchange.TargetTokenExchangeConfig {
+	if target == "" {
+		target = p.GetDefaultTarget()
+	}
+	p.mu.RLock()
+	base, pc := p.cfg, p.providerConfig(p.cfg)
+	p.mu.RUnlock()
+	if pc == nil {
+		return nil
+	}
+	t, ok := pc.Targets[target]
+	if !ok {
+		return nil
+	}
+
+	resolved := resolveTargetConfig(base, t)
+	key := targetTokenExchangeCacheKey(resolved)
+
+	p.targetConfigsMu.Lock()
+	defer p.targetConfigsMu.Unlock()
+
+	if cached, ok := p.targetConfigs[target]; ok {
+		if cached.key == key {
+			return cached.config
+		}
+		// Resolved values changed (e.g. SIGHUP rotated the trusted CA): drop
+		// idle connections so they are not reused with stale settings.
+		cached.config.CloseIdleConnections()
+	}
+	if p.targetConfigs == nil {
+		p.targetConfigs = make(map[string]*cachedTargetConfig)
+	}
+	p.targetConfigs[target] = &cachedTargetConfig{key: key, config: resolved}
+	return resolved
+}
+
+// GetTokenExchangeStrategy returns the token exchange strategy to use
+// (e.g. "keycloak-v1" or "rfc8693") for configured targets. The strategy is
+// shared by all targets and required whenever any target is configured
+// (enforced at config load).
+func (p *kubeConfigClusterProvider) GetTokenExchangeStrategy() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	pc := p.providerConfig(p.cfg)
+	if pc == nil {
+		return ""
+	}
+	return pc.TokenExchangeStrategy
+}
+
+// resolveTargetConfig maps a target's TOML configuration onto the
+// exchanger's configuration. The exchange semantics are fully specified by
+// the target itself; transport settings (CA, TLS versions and cipher
+// suites) come from the live server config so a SIGHUP applies without a
+// restart, and the per-target cache key covers them so a rotation rebuilds
+// the memoized HTTP client.
+func resolveTargetConfig(base *config.Config, t KubeConfigTargetConfig) *tokenexchange.TargetTokenExchangeConfig {
+	caFile := t.CertificateAuthority
+	if caFile == "" {
+		caFile = base.CertificateAuthority.Get()
+	}
+	cfg := &tokenexchange.TargetTokenExchangeConfig{
+		TokenURL:           t.TokenURL,
+		Audience:           t.Audience,
+		SubjectTokenType:   t.SubjectTokenType,
+		RequestedTokenType: t.RequestedTokenType,
+		SubjectIssuer:      t.SubjectIssuer,
+		Scopes:             append([]string(nil), t.Scopes...),
+		CAFile:             caFile,
+		TLSMinVersion:      base.TLSMinVersion.Get(),
+		TLSCipherSuites:    append([]string(nil), base.TLSCipherSuites.Get()...),
+	}
+	if t.ClientAuth.isSet() {
+		a := t.ClientAuth
+		setClientAuth(cfg, a.Method, a.ClientID, a.ClientSecret, a.CertificateFile, a.PrivateKeyFile, a.TokenFile)
+	}
+	return cfg
+}
+
+// validateTargetTokenExchanges fails provider construction when a configured
+// target cannot resolve to a usable exchange. contexts are the context names
+// found in the kubeconfig: every configured target must match one, so a
+// mistyped context name fails loudly instead of silently skipping the
+// exchange it was meant to configure. Field syntax (including the required
+// token_url and token_exchange_strategy) is validated at config load, and
+// the require_oauth and cluster_auth_mode rules run with config validation
+// (Config.ValidateClusterAuthMode, via ClusterAuthValidator), so they are
+// enforced at startup and on reload alike.
+func validateTargetTokenExchanges(base *config.Config, pc *KubeConfigProviderConfig, contexts []string) error {
+	if pc == nil || len(pc.Targets) == 0 {
+		return nil
+	}
+
+	sortedContexts := slices.Sorted(slices.Values(contexts))
+	names := make([]string, 0, len(pc.Targets))
+	for name := range pc.Targets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var errs []error
+	for _, name := range names {
+		if !slices.Contains(sortedContexts, name) {
+			errs = append(errs, fmt.Errorf("target %q: no matching context in the kubeconfig (available contexts: %s)", name, strings.Join(sortedContexts, ", ")))
+		}
+		if err := resolveTargetConfig(base, pc.Targets[name]).Validate(); err != nil {
+			errs = append(errs, fmt.Errorf("target %q: %w", name, err))
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("cluster_provider_configs.kubeconfig: %w", errors.Join(errs...))
+}
+
+// targetTokenExchangeCacheKey derives the cache key from the resolved values,
+// so the key changes exactly when the exchange that would be performed does.
+func targetTokenExchangeCacheKey(c *tokenexchange.TargetTokenExchangeConfig) tokenExchangeConfigCacheKey {
+	return tokenExchangeConfigCacheKey{
+		TokenURL:           c.TokenURL,
+		ClientID:           c.ClientID,
+		ClientSecret:       c.ClientSecret,
+		Audience:           c.Audience,
+		SubjectTokenType:   c.SubjectTokenType,
+		RequestedTokenType: c.RequestedTokenType,
+		Scopes:             strings.Join(c.Scopes, "\x00"),
+		AuthStyle:          c.AuthStyle,
+		ClientCertFile:     c.ClientCertFile,
+		ClientKeyFile:      c.ClientKeyFile,
+		FederatedTokenFile: c.FederatedTokenFile,
+		CAFile:             c.CAFile,
+		TLSMinVersion:      c.TLSMinVersion,
+		TLSCipherSuites:    strings.Join(c.TLSCipherSuites, "\x00"),
+		SubjectIssuer:      c.SubjectIssuer,
 	}
 }
