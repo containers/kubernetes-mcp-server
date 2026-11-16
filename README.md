@@ -266,7 +266,7 @@ and only needed for the project-specific scenarios noted.
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
 | [Korrel8r](https://korrel8r.github.io/korrel8r/) | `korrel8r` | 1 |
-| [Kubernetes](https://kubernetes.io) | - | 33 |
+| [Kubernetes](https://kubernetes.io) | - | 35 |
 | [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |

@@ -1,0 +1,46 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: core-apps-pods
+  difficulty: easy
+  labels:
+    suite: core-apps
+    project: kubernetes
+  annotations:
+    project-name: Kubernetes
+    project-url: https://kubernetes.io
+spec:
+  setup:
+    - script:
+        file: ../helpers/setup.sh
+        timeout: 5m
+        env:
+          APPS_NAMESPACE: mcp-apps-pods
+          APPS_FIXTURE: pod
+  cleanup:
+    - script:
+        file: ../helpers/cleanup.sh
+        timeout: 3m
+        env:
+          APPS_NAMESPACE: mcp-apps-pods
+  prompt:
+    inline: >-
+      Use pods_get to inspect app-demo in namespace mcp-apps-pods.
+      Return only one JSON object with exactly the string fields name, namespace,
+      phase, and image for that Pod, using its container image for image.
+      Do not include Markdown, prose, or additional keys.
+  verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          set -eu
+          printf '%s\n' "$AGENT_OUTPUT" | jq -e -s '
+            . == [{"name": "app-demo", "namespace": "mcp-apps-pods",
+                   "phase": "Running", "image": "registry.k8s.io/pause:3.10"}]
+          ' > /dev/null
+  assertions:
+    requirePresent: true
+    apps:
+      - server: kubernetes
+        tool: pods_get
