@@ -14,7 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-const defaultURLDiscoveryNamespace = "istio-system"
+const (
+	defaultURLDiscoveryNamespace = "istio-system"
+	// DiscoveryAllNamespacesWildcard enables cluster-wide Kiali CR listing.
+	DiscoveryAllNamespacesWildcard = "**"
+)
 
 // Config holds Kiali toolset configuration
 type Config struct {
@@ -22,8 +26,8 @@ type Config struct {
 	Insecure             bool   `toml:"insecure,omitempty"`
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
 	// AllowedNamespaces limits in-cluster URL autodiscovery (Kiali CR list and
-	// well-known Service DNS fallbacks) to these namespaces. Defaults to
-	// istio-system when unset.
+	// well-known kiali.<namespace>.svc DNS probes) to these namespaces. Defaults
+	// to istio-system when unset. Use "**" alone for cluster-wide discovery.
 	AllowedNamespaces []string `toml:"allowed_namespaces,omitempty"`
 }
 
@@ -63,14 +67,25 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) validateAllowedNamespaces() error {
+	seen := make(map[string]struct{})
+	wildcard := false
 	for _, ns := range c.AllowedNamespaces {
 		ns = strings.TrimSpace(ns)
 		if ns == "" {
 			return errors.New("allowed_namespaces entries must not be empty")
 		}
+		if ns == DiscoveryAllNamespacesWildcard {
+			wildcard = true
+			seen[ns] = struct{}{}
+			continue
+		}
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
 			return fmt.Errorf("allowed_namespaces entry %q is not a valid namespace name: %s", ns, strings.Join(errs, ", "))
 		}
+		seen[ns] = struct{}{}
+	}
+	if wildcard && len(seen) != 1 {
+		return fmt.Errorf("allowed_namespaces must be only %q when enabling cluster-wide discovery", DiscoveryAllNamespacesWildcard)
 	}
 	return nil
 }
@@ -85,6 +100,9 @@ func (c *Config) URLDiscoveryNamespaces() []string {
 	seen := make(map[string]struct{}, len(c.AllowedNamespaces))
 	for _, ns := range c.AllowedNamespaces {
 		if trimmed := strings.TrimSpace(ns); trimmed != "" {
+			if trimmed == DiscoveryAllNamespacesWildcard {
+				return []string{DiscoveryAllNamespacesWildcard}
+			}
 			if _, dup := seen[trimmed]; dup {
 				continue
 			}
@@ -96,6 +114,11 @@ func (c *Config) URLDiscoveryNamespaces() []string {
 		return []string{defaultURLDiscoveryNamespace}
 	}
 	return out
+}
+
+// DiscoverAllNamespaces reports whether discovery should list Kiali CRs cluster-wide.
+func DiscoverAllNamespaces(namespaces []string) bool {
+	return len(namespaces) == 1 && namespaces[0] == DiscoveryAllNamespacesWildcard
 }
 
 func (c *Config) ValidateRequireTLS(requireTLS bool) error {

@@ -78,7 +78,8 @@ func discoverInjectAndProbe(ctx context.Context, serverCfg *config.Config, kiali
 	url, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
 	if !ok {
 		requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
-		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(urlDiscoveryNamespaces(kialiCfg), requireTLS), kialiCfg, serverCfg, token)
+		configured := urlDiscoveryNamespaces(kialiCfg)
+		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(namespacesForServiceDNSProbe(ctx, inspector, configured), requireTLS), kialiCfg, serverCfg, token)
 	}
 	if !ok {
 		setDiscoveredURL("")

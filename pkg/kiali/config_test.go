@@ -196,6 +196,17 @@ func (s *ConfigSuite) TestValidate() {
 		s.NoError(cfg.Validate())
 		s.Equal([]string{"mesh", "openshift-operators"}, cfg.URLDiscoveryNamespaces())
 	})
+	s.Run("allowed_namespaces wildcard enables cluster-wide discovery", func() {
+		cfg := &Config{AllowedNamespaces: []string{"**"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"**"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("allowed_namespaces wildcard cannot be combined with namespace names", func() {
+		cfg := &Config{AllowedNamespaces: []string{"istio-system", "**"}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "**")
+	})
 	s.Run("invalid URL returns error", func() {
 		cfg := &Config{Url: "://bad-url"}
 		err := cfg.Validate()

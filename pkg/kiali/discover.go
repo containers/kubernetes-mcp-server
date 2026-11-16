@@ -112,6 +112,9 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespace
 		return nil
 	}
 	out := make([]*KialiCR, 0)
+	if DiscoverAllNamespaces(namespaces) {
+		return listKialiCRsClusterWide(ctx, unstructuredAPI, out)
+	}
 	for _, ns := range namespaces {
 		list, err := unstructuredAPI.Resource(KialiGVR).Namespace(ns).List(ctx, metav1.ListOptions{}).Default()
 		if err != nil {
@@ -129,6 +132,29 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespace
 			}
 			out = append(out, cr)
 		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func listKialiCRsClusterWide(ctx context.Context, unstructuredAPI api.AggregateUnstructured, out []*KialiCR) []*KialiCR {
+	list, err := unstructuredAPI.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
+	if err != nil {
+		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs cluster-wide", "error", err)
+		return nil
+	}
+	if list == nil || len(list.Items) == 0 {
+		return nil
+	}
+	for i := range list.Items {
+		cr, err := kialiFromUnstructured(&list.Items[i])
+		if err != nil {
+			klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
+			continue
+		}
+		out = append(out, cr)
 	}
 	if len(out) == 0 {
 		return nil
@@ -157,4 +183,46 @@ func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterIn
 	}
 	klogutil.FromContext(ctx).V(1).Info("Kiali CR(s) found but no reachable in-cluster URL")
 	return "", false
+}
+
+// namespacesForServiceDNSProbe returns the namespace list used for kiali.<ns>.svc
+// fallbacks after CR-based discovery. It matches allowed_namespaces (or the default).
+// With "**", namespaces come from cluster-wide Kiali CRs (same scope as CR discovery),
+// not from a cluster Namespace list.
+func namespacesForServiceDNSProbe(ctx context.Context, inspector api.ClusterInspector, configured []string) []string {
+	if !DiscoverAllNamespaces(configured) {
+		return configured
+	}
+	crs := listKialiCRs(ctx, inspector, configured)
+	if len(crs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(crs))
+	out := make([]string, 0, len(crs))
+	for _, cr := range crs {
+		ns := deploymentNamespaceFromCR(cr)
+		if ns == "" {
+			continue
+		}
+		if _, dup := seen[ns]; dup {
+			continue
+		}
+		seen[ns] = struct{}{}
+		out = append(out, ns)
+	}
+	return out
+}
+
+func deploymentNamespaceFromCR(cr *KialiCR) string {
+	if cr == nil {
+		return ""
+	}
+	ns := cr.Status.Deployment.Namespace
+	if ns == "" {
+		ns = cr.Spec.Deployment.Namespace
+	}
+	if ns == "" {
+		ns = cr.GetNamespace()
+	}
+	return ns
 }

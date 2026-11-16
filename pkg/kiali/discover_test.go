@@ -33,7 +33,7 @@ func (m *namespaceFilteringNamespacedResource) Namespace(ns string) api.Aggregat
 
 func (m *namespaceFilteringNamespacedResource) List(ctx context.Context, _ metav1.ListOptions) api.Results[*unstructured.UnstructuredList] {
 	return api.NewResults(ctx, m.tp, func(context.Context, string) (*unstructured.UnstructuredList, error) {
-		if m.namespace != "istio-system" {
+		if m.namespace != "istio-system" && m.namespace != metav1.NamespaceAll {
 			return &unstructured.UnstructuredList{}, nil
 		}
 		cr := unstructured.Unstructured{Object: map[string]any{
@@ -73,6 +73,30 @@ func TestListKialiCRs_RespectsAllowedNamespaces(t *testing.T) {
 		crs := listKialiCRs(context.Background(), inspector, []string{"other-ns"})
 		if len(crs) != 0 {
 			t.Fatalf("expected no CRs outside allowed namespaces, got %d", len(crs))
+		}
+	})
+
+	t.Run("wildcard lists CRs cluster-wide", func(t *testing.T) {
+		crs := listKialiCRs(context.Background(), inspector, []string{DiscoveryAllNamespacesWildcard})
+		if len(crs) != 1 {
+			t.Fatalf("expected 1 CR with cluster-wide list, got %d", len(crs))
+		}
+	})
+}
+
+func TestNamespacesForServiceDNSProbe(t *testing.T) {
+	t.Run("uses configured namespaces", func(t *testing.T) {
+		got := namespacesForServiceDNSProbe(context.Background(), nil, []string{"mesh", "istio-system"})
+		if len(got) != 2 || got[0] != "mesh" {
+			t.Fatalf("expected configured list, got %v", got)
+		}
+	})
+
+	t.Run("wildcard derives probe namespaces from cluster-wide Kiali CRs", func(t *testing.T) {
+		inspector := &namespaceFilteringInspector{mockKialiInspector: mockKialiInspector{available: true}}
+		got := namespacesForServiceDNSProbe(context.Background(), inspector, []string{DiscoveryAllNamespacesWildcard})
+		if len(got) != 1 || got[0] != "istio-system" {
+			t.Fatalf("expected [istio-system] from CR, got %v", got)
 		}
 	})
 }
