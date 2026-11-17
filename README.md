@@ -1119,6 +1119,8 @@ WHEN TO USE:
 
 INVESTIGATION TIP: Alert labels often contain the exact identifiers (pod names, namespaces, job names) needed for targeted queries with prometheus tools.
 
+RUNBOOKS: Each alert may include runbook_url, summary, and description (promoted from annotations). When runbook_url is set, share the link with the user; use summary and description for inline context. This tool does not retrieve the linked page.
+
 FILTERING:
 - Use 'active' to filter for only active alerts (not resolved)
 - Use 'silenced' to filter for silenced alerts

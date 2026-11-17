@@ -1,0 +1,26 @@
+# Synthetic firing alert for observability/metrics get_alerts runbook e2e.
+# Requires the kube-prometheus stack in the monitoring namespace (make e2e-setup-obs).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mcp-e2e-runbook-alert
+  namespace: monitoring
+  labels:
+    # kube-prometheus Prometheus selects rules with these labels (hack/e2e/obs).
+    prometheus: k8s
+    role: alert-rules
+    test-type: mcp-e2e-runbook
+spec:
+  groups:
+    - name: mcp-e2e-runbook
+      interval: 30s
+      rules:
+        - alert: MCPRunbookE2E
+          expr: vector(1)
+          for: 10s
+          labels:
+            severity: warning
+          annotations:
+            summary: MCP e2e runbook promotion test
+            description: Always-firing alert used to verify get_alerts runbook_url
+            runbook_url: https://kubernetes-mcp-server.test/runbook-e2e

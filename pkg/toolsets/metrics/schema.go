@@ -74,6 +74,9 @@ type AlertsOutput struct {
 type Alert struct {
 	Labels      map[string]string `json:"labels" jsonschema:"Labels of the alert"`
 	Annotations map[string]string `json:"annotations" jsonschema:"Annotations of the alert"`
+	RunbookURL  string            `json:"runbook_url,omitempty" jsonschema:"Runbook URL from alert annotations (runbook_url)"`
+	Summary     string            `json:"summary,omitempty" jsonschema:"Summary from alert annotations"`
+	Description string            `json:"description,omitempty" jsonschema:"Description from alert annotations"`
 	StartsAt    string            `json:"startsAt" jsonschema:"Start time of the alert"`
 	EndsAt      string            `json:"endsAt,omitempty" jsonschema:"End time of the alert (if resolved)"`
 	Status      AlertStatus       `json:"status" jsonschema:"Current status of the alert"`
