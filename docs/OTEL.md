@@ -127,6 +127,7 @@ OpenTelemetry can be configured via **TOML config file** or **environment variab
 | TOML Field | Environment Variable | Description |
 |------------|---------------------|-------------|
 | `enabled` | - | Explicit enable/disable (overrides all) |
+| `service_name` | `OTEL_SERVICE_NAME` | Trace service name (defaults to the built-in server name) |
 | `endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint URL |
 | `protocol` | `OTEL_EXPORTER_OTLP_PROTOCOL` | Protocol: `grpc` or `http/protobuf` |
 | `traces_sampler` | `OTEL_TRACES_SAMPLER` | Sampling strategy |
@@ -200,6 +201,9 @@ export OTEL_SERVICE_VERSION=1.0.0
 # Additional resource attributes (useful for multi-environment deployments)
 export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production,team=platform"
 ```
+
+For traces, `OTEL_SERVICE_NAME` overrides `service_name` in the `[telemetry]`
+configuration. If neither is set, the built-in service name is used.
 
 #### Endpoint Protocols
 
@@ -435,7 +439,7 @@ This endpoint returns metrics in OpenMetrics/Prometheus text format, suitable fo
 | `k8s_mcp_tool_calls_total` | Counter | Total MCP tool calls (labeled by `tool_name`) |
 | `k8s_mcp_tool_errors_total` | Counter | Total MCP tool errors (labeled by `tool_name`) |
 | `k8s_mcp_tool_duration_seconds` | Histogram | Tool call duration in seconds |
-| `k8s_mcp_http_requests_total` | Counter | HTTP requests (labeled by `http_request_method`, `url_path`, `http_response_status_class`) |
+| `k8s_mcp_http_requests_total` | Counter | HTTP requests (labeled by `http_request_method`, `url_path`, `http_response_status_class`). `url_path` is the request path when it is exactly `/mcp`, `/healthz`, `/stats` or `/metrics`, `/.well-known/*` for any path under `/.well-known/` (served or not), and `other` for anything else (including `/mcp/`), and non-standard methods are reported as `_OTHER`, so arbitrary requests can't add series |
 | `k8s_mcp_requests_in_flight` | Gauge | MCP requests currently being handled (labeled by `mcp_method_name`); useful as a horizontal autoscaling signal, e.g. with KEDA. The `subscriptions/listen` long-poll is not counted, since it stays open for the whole client session. Very short requests (`initialize`, notifications, `ping`) are counted, so filter on the method when autoscaling, e.g. `sum(k8s_mcp_requests_in_flight{mcp_method_name="tools/call"})` |
 | `k8s_mcp_server_info` | Gauge | Server info (labeled by `version`, `go_version`) |
 

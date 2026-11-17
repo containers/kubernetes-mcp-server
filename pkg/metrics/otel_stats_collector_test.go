@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
@@ -113,6 +114,38 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 
 		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(1), stats.HTTPRequestsByStatus["other"])
+	})
+
+	s.Run("sanitizes invalid UTF-8 request paths", func() {
+		ctx := context.Background()
+		collector, err := NewOtelStatsCollector("test-meter-http-invalid-utf8")
+		s.Require().NoError(err)
+
+		// Simulates a path traversal scanner probe: net/http percent-decodes
+		// "/%c0%ae%c0%ae/windows/win.ini" into an overlong UTF-8 encoding of
+		// ".." which is not valid UTF-8.
+		collector.RecordHTTPRequest(ctx, "GET", "/\xc0\xae\xc0\xae/windows/win.ini", 404, 10*time.Millisecond)
+
+		stats := collector.GetStats(s.T().Context())
+		s.Equal(int64(1), stats.TotalHTTPRequests, "Should have 1 total HTTP request")
+		for path := range stats.HTTPRequestsByPath {
+			s.True(utf8.ValidString(path), "Recorded path should be valid UTF-8")
+		}
+	})
+
+	s.Run("prometheus handler keeps serving metrics after invalid UTF-8 paths", func() {
+		ctx := context.Background()
+		collector, err := NewOtelStatsCollector("test-meter-http-prom-utf8")
+		s.Require().NoError(err)
+
+		collector.RecordHTTPRequest(ctx, "GET", "/\xc0\xae\xc0\xae/windows/win.ini", 404, 10*time.Millisecond)
+		collector.RecordHTTPRequest(ctx, "GET", "/\x80../\x80../winnt/win.ini", 404, 10*time.Millisecond)
+
+		rec := httptest.NewRecorder()
+		collector.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		s.Equal(http.StatusOK, rec.Code, "/metrics should not fail with HTTP 500")
+		s.NotContains(rec.Body.String(), "An error has occurred while serving metrics")
+		s.Contains(rec.Body.String(), "k8s_mcp_http_requests_total")
 	})
 }
 

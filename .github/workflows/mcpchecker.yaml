@@ -6,7 +6,9 @@ on:
     - cron: '0 9 * * 1'
 
   # PR evaluation trigger via review comments (chained from mcpchecker-trigger.yaml)
-  workflow_run:
+  # Intentional privileged gate: independently checks API-fetched maintainer
+  # permission and current PR head against immutable review.commit_id below.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["mcpchecker MCP Evaluation - Trigger"]
     types: [completed]
 
@@ -14,12 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, netobserv, argocd, obs, or all)'
+        description: 'Which task suite to run (core, core-readonly, helm, kubevirt, kiali, tekton, netobserv, argocd, obs, or all)'
         required: false
         default: 'core'
         type: choice
         options:
           - core
+          - core-readonly
           - helm
           - kubevirt
           - kiali
@@ -182,7 +185,7 @@ jobs:
 
               // Parse suite from the review body (trusted — fetched from API).
               const suiteMatch = triggerReview.body.match(
-                /\/run-mcpchecker\s+(core|helm|kubevirt|kiali|tekton|netobserv|argocd|obs|all)/i,
+                /\/run-mcpchecker\s+(core-readonly|core|helm|kubevirt|kiali|tekton|netobserv|argocd|obs|all)/i,
               );
               const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
@@ -219,11 +222,12 @@ jobs:
 
           # Build a JSON matrix consumed by run-evaluation via fromJSON().
           # Each entry carries suite name, eval config path, and required toolsets.
+          # read_only defaults to false unless a suite requires read-only mode.
           EVAL_DIR="evals/core-eval-testing/builtin-openai"
 
-          # Helper: emit a single-entry matrix for the given suite/config/toolsets.
+          # Helper: emit a single-entry matrix for the given suite/config/toolsets/read-only mode.
           single_matrix() {
-            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s"}]}' "$1" "$2" "$3"
+            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s","read_only":%s}]}' "$1" "$2" "$3" "${4:-false}"
           }
 
           kiali_multicluster_entry='{
@@ -258,6 +262,7 @@ jobs:
               MATRIX=$(cat <<'EOFM'
           {"include":[
             {"suite":"core","eval-config":"evals/core-eval-testing/builtin-openai/eval-core.yaml","toolsets":"core,config"},
+            {"suite":"core-readonly","eval-config":"evals/core-eval-testing/builtin-openai/eval-core-readonly.yaml","toolsets":"core,config","read_only":true},
             {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
             {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
             {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
@@ -270,6 +275,9 @@ jobs:
           ]}
           EOFM
           )
+              ;;
+            core-readonly)
+              MATRIX=$(single_matrix core-readonly "${EVAL_DIR}/eval-core-readonly.yaml" "core,config" true)
               ;;
             helm)
               MATRIX=$(single_matrix helm "${EVAL_DIR}/eval-helm.yaml" "core,config,helm")
@@ -305,7 +313,9 @@ jobs:
 
   # Run mcpchecker evaluation with Minikube cluster
   run-evaluation:
-    name: ${{ matrix.job-display-name || format('Run MCP Evaluation ({0})', matrix.suite) }}
+    # The default-branch workflow assigns this API-visible authorization binding.
+    # PR code can forge artifacts, but cannot change the job's name via artifacts.
+    name: ${{ matrix.job-display-name || format('Run MCP Evaluation ({0})', matrix.suite) }} [PR ${{ needs.check-trigger.outputs.pr-number }} @ ${{ needs.check-trigger.outputs.pr-sha }}]
     needs: check-trigger
     if: needs.check-trigger.outputs.should-run == 'true'
     runs-on: ubuntu-latest
@@ -316,7 +326,7 @@ jobs:
       MINIKUBE_DRIVER: ${{ contains(matrix.toolsets, 'kubevirt') && 'docker' || 'podman' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # For PRs: review.commit_id — the server-assigned SHA from the
           # maintainer's review (immutable, not derived from forgeable metadata).
@@ -328,9 +338,11 @@ jobs:
           # the ref is pinned to the immutable, permission-verified
           # review.commit_id — not to forgeable workflow_run metadata.
           allow-unsafe-pr-checkout: true
+          # Baseline fetches use the public repository; PR code needs no Git credentials.
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -346,7 +358,7 @@ jobs:
 
       - name: Setup Node
         if: matrix.suite == 'kiali-multicluster'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
 
@@ -395,12 +407,13 @@ jobs:
         run: make run-server
         env:
           TOOLSETS: ${{ matrix.toolsets }}
+          READ_ONLY: ${{ matrix.read_only || false }}
           MCP_CONFIG_DIR: ${{ matrix.mcp-config-dir || 'dev/config/mcp-configs' }}
           MCP_EVAL_KUBECONFIG: ${{ matrix.suite == 'config-multicluster' && '_output/kubeconfig-multicluster' || '' }}
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.22
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@5c8147f67729a4547c01d5e49bee0d6c7023e929 # v0.0.22
         with:
           eval-config: ${{ matrix.eval-config }}
           mcpchecker-version: 'latest'
@@ -431,11 +444,13 @@ jobs:
 
       - name: Cleanup
         if: always()
+        env:
+          SUITE: ${{ matrix.suite }}
         run: |
           make stop-server || true
-          if [[ "${{ matrix.suite }}" == "kiali-multicluster" ]]; then
+          if [[ "$SUITE" == "kiali-multicluster" ]]; then
             make kind-delete-multicluster || true
-          elif [[ "${{ matrix.suite }}" == "config-multicluster" ]]; then
+          elif [[ "$SUITE" == "config-multicluster" ]]; then
             make config-multicluster-cleanup || true
           else
             make stop-obs || true
@@ -483,7 +498,7 @@ jobs:
       - name: Run mcpchecker diff
         id: mcpchecker-diff
         if: needs.check-trigger.outputs.is-pr == 'true' && steps.diff-check.outputs.has-diff == 'true'
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.22
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@5c8147f67729a4547c01d5e49bee0d6c7023e929 # v0.0.22
         with:
           base-results: /tmp/baseline-results.json
           current-results: ${{ steps.diff-check.outputs.results-file }}
@@ -505,29 +520,22 @@ jobs:
           HAS_DIFF: ${{ steps.diff-check.outputs.has-diff || 'false' }}
         run: |
           mkdir -p eval-context
-          cat > eval-context/context.json << EOF
-          {
-            "pr_number": "${PR_NUMBER}",
-            "pr_sha": "${PR_SHA}",
-            "tasks_passed": "${TASKS_PASSED}",
-            "tasks_total": "${TASKS_TOTAL}",
-            "task_pass_rate": "${TASK_PASS_RATE}",
-            "assertions_passed": "${ASSERTIONS_PASSED}",
-            "assertions_total": "${ASSERTIONS_TOTAL}",
-            "passed": "${PASSED}",
-            "has_diff": "${HAS_DIFF}"
-          }
-          EOF
+          jq -n --arg pr_number "$PR_NUMBER" --arg pr_sha "$PR_SHA" \
+            --arg tasks_passed "$TASKS_PASSED" --arg tasks_total "$TASKS_TOTAL" \
+            --arg task_pass_rate "$TASK_PASS_RATE" \
+            --arg assertions_passed "$ASSERTIONS_PASSED" --arg assertions_total "$ASSERTIONS_TOTAL" \
+            --arg passed "$PASSED" --arg has_diff "$HAS_DIFF" \
+            '$ARGS.named' > eval-context/context.json
           if [ -n "$DIFF_OUTPUT" ]; then
             echo "$DIFF_OUTPUT" > eval-context/diff-output.txt
           fi
 
       - name: Upload PR context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # Keep this outside the eval-context-* namespace: the regular report
-          # downloads that pattern with merge-multiple enabled.
+          # Keep this outside the eval-context-* namespace: the multicluster
+          # report downloads it separately from the regular suite contexts.
           name: ${{ matrix.suite == 'kiali-multicluster' && 'kiali-multicluster-eval-context' || format('eval-context-{0}', matrix.suite) }}
           path: eval-context/
           retention-days: 1
@@ -545,12 +553,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          # The scheduled results job pushes its update branch back to this repository.
+          persist-credentials: true
 
       - name: Download mcpchecker results
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mcpchecker-results-*
           path: mcpchecker-results/

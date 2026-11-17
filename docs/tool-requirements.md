@@ -22,8 +22,8 @@ resource instance is found in a configured cluster. Installing the CRD alone
 is not sufficient.
 
 This check applies regardless of
-`experimental_enable_target_compatibility_tool_filters`.
-See the [configuration reference](configuration.md) for that setting.
+`enable_target_compatibility_tool_filters`.
+See [Target compatibility](configuration.md#target-compatibility) in the configuration reference.
 
 #### Permissions
 

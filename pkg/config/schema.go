@@ -40,6 +40,24 @@ type GroupVersionKind struct {
 	Kind    string `json:"kind,omitempty" toml:"kind,omitempty"`
 }
 
+// IsDeniedResource reports whether an API resource identified by apiVersion
+// and kind is denied. An empty denied kind denies the entire API group/version.
+func IsDeniedResource(apiVersion, kind string, denied []GroupVersionKind) bool {
+	for _, deniedResource := range denied {
+		groupVersion := deniedResource.Version
+		if deniedResource.Group != "" {
+			groupVersion = deniedResource.Group + "/" + deniedResource.Version
+		}
+		if apiVersion != groupVersion {
+			continue
+		}
+		if deniedResource.Kind == "" || deniedResource.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
 type TokenExchangeClientAuthMethod string
 
 const (

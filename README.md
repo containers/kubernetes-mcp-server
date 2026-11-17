@@ -213,7 +213,7 @@ log_level = 2
 read_only = true
 toolsets = ["core", "config", "helm", "kubevirt"]
 
-# Deny access to sensitive resources
+# Reject Secret requests made by this server's Kubernetes client
 [[denied_resources]]
 group = ""
 version = "v1"
@@ -223,12 +223,14 @@ kind = "Secret"
 endpoint = "http://localhost:4317"
 ```
 
+`read_only` and `denied_resources` are best-effort guardrails. Kubernetes RBAC on the identity this server authenticates as is the access control to rely on. See [Cluster authorization](docs/configuration.md#cluster-authorization).
+
 For comprehensive TOML configuration documentation, including:
 
 - All configuration options and their defaults
 - Drop-in configuration files for modular settings
 - Dynamic configuration reload via SIGHUP
-- Denied resources for restricting access to sensitive resource types
+- [Cluster authorization](docs/configuration.md#cluster-authorization) for `read_only`, `denied_resources`, and the other guardrails
 - Server instructions for MCP Tool Search
 - [Custom MCP prompts](docs/prompts.md)
 - OAuth/OIDC authentication for HTTP mode ([Keycloak](docs/KEYCLOAK_OIDC_SETUP.md), [Microsoft Entra ID](docs/ENTRA_ID_SETUP.md))
@@ -263,7 +265,7 @@ and only needed for the project-specific scenarios noted.
 | [Helm](https://helm.sh) | `helm` | 3 |
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
-| [Kubernetes](https://kubernetes.io) | - | 32 |
+| [Kubernetes](https://kubernetes.io) | - | 33 |
 | [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
 | [Tekton](https://tekton.dev) | `tekton` | 9 |
@@ -276,20 +278,21 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset               | Description                                                                                                                                                                                                                             | Default |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config                | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
-| core                  | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
-| helm                  | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
-| kcp                   | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
-| kiali                 | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
-| kubevirt              | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
-| netobserv             | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
-| observability/logs    | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
-| observability/metrics | Toolset for querying Prometheus and Alertmanager endpoints in efficient ways.                                                                                                                                                           |         |
-| observability/otelcol | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
-| observability/traces  | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
-| tekton                | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
+| Toolset                        | Description                                                                                                                                                                                                                             | Default |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config                         | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core                           | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| helm                           | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp                            | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali                          | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt                       | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv                      | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| observability/alert-management | Toolset for listing OpenShift alerts and managing alert rules via the monitoring-plugin management API.                                                                                                                                 |         |
+| observability/logs             | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
+| observability/metrics          | Toolset for querying Prometheus and Alertmanager, including listing, creating, updating, and deleting silences.                                                                                                                         |         |
+| observability/otelcol          | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
+| observability/traces           | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
+| tekton                         | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -412,7 +415,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 
 - **resources_create_or_update** - Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
-  - `resource` (`string`) **(required)** - Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec.
+  - `resource` (`string`) **(required)** - Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used
 
 - **resources_delete** - Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name
 (common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress, route.openshift.io/v1 Route)
@@ -429,6 +432,9 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
 
+- **api_resources_list** - Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.
+  - `kind` (`string`) **(required)** - Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.
+
 </details>
 
 <details>
@@ -444,7 +450,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 - **helm_list** - List all the Helm releases in the current or provided namespace (or in all namespaces if specified). Use limit and offset to page the releases returned to you. Helm loads release secrets before applying that page, so a secret list that exceeds max_backend_response_bytes can still fail.
   - `all_namespaces` (`boolean`) - If true, lists all Helm releases in all namespaces ignoring the namespace argument (Optional)
   - `limit` (`integer`) - Maximum number of releases to return. Omit or set to 0 to return every release Helm loaded. A full page tells you the next offset.
-  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, all namespaces if not provided)
+  - `namespace` (`string`) - Namespace to list Helm releases from (Optional, current namespace if not provided)
   - `offset` (`integer`) - Number of releases to skip. Send the next offset from a full page, with the same limit.
 
 - **helm_uninstall** - Uninstall a Helm release in the current or provided namespace
@@ -798,6 +804,152 @@ Examples:
 
 <details>
 
+<summary>observability/alert-management</summary>
+
+- **list_alerts** - List OpenShift alert instances from the monitoring-plugin management API (GET /api/v1/alerting/alerts).
+
+Returns firing, pending, and/or silenced instances with labels, state, and rule_id when the API attached a stable id.
+This is alert instances, not rule definitions (use list_alert_rules for expr and management_status).
+Prefer this over get_alerts when you need a rule_id for update_alert_rule or delete_alert_rules.
+Surface warnings from the response.
+
+Optional filters: namespace, severity, state (pending, firing, silenced), source, the exact cluster label, and extra label equality filters. matchers and cluster_labels are not supported by this endpoint.
+  - `cluster` (`string`) - Exact cluster label filter (query parameter cluster); does not select a remote cluster.
+  - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
+  - `labels` (`object`) - Additional label equality filters forwarded as query parameters.
+  - `namespace` (`string`) - Filter by namespace label (Thanos tenancy for user-workload rules).
+  - `severity` (`string`) - Alert severity: critical, warning, info, or none.
+  - `source` (`string`) - Filter by openshift_io_alert_source: platform or user.
+  - `state` (`string`) - Filter by state. Omit for all states.
+
+- **list_alert_rules** - List managed OpenShift alert rules from the monitoring-plugin management API.
+
+Returns each rule's stable ID, PromQL expression, severity, namespace, source (platform or user), and management_status (user-created, gitops, or operator).
+This is rule definitions, not firing instances (use list_alerts for those). Use this before create (to detect the same expr) and before update/delete (to resolve names to ids).
+Alert name is not unique: if several rows share a name, present them to the user and wait; do not pick one or change all of them.
+If id is empty, do not invent an id. Surface warnings from the response.
+GitOps-managed rules cannot be created into, updated, dropped, or deleted through this API. Operator-managed user-defined rules cannot be updated, dropped, or deleted; silence or create a replacement. Operator-managed platform rules may still support drop/restore and ARC label/classification updates; they cannot be deleted.
+
+Optional filters: namespace, severity, state (inactive, pending, firing), source, the exact cluster label, matchers, and extra label equality filters. cluster_labels is not supported by the management API.
+  - `cluster` (`string`) - Exact cluster label filter (query parameter cluster); does not select a remote cluster.
+  - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
+  - `labels` (`object`) - Additional label equality filters forwarded as query parameters.
+  - `matchers` (`array`) - Prometheus-style match[] selectors (for example severity="critical").
+  - `namespace` (`string`) - Filter by namespace label (Thanos tenancy for user-workload rules).
+  - `severity` (`string`) - Alert severity: critical, warning, info, or none.
+  - `source` (`string`) - Filter by openshift_io_alert_source: platform or user.
+  - `state` (`string`) - Filter by state. Omit for all states.
+
+- **preview_alert_rule** - Dry-run a create or update without persisting cluster changes via POST /api/v1/alerting/rules/preview.
+
+Requires a monitoring-plugin build containing the preview API (PR #1331). If the endpoint is missing, stop; do not bypass preview.
+Create preview: set alert and expr. Include prometheus_rule_name and namespace for a user-defined rule; omit prometheus_rule_name for a platform rule. Do not invent a PrometheusRule name.
+Update preview: set rule_id plus labels, severity, classification, or alerting_rule_enabled. PATCH/preview cannot send expr, alert name, for, or annotation changes (platform cannot change those at all; user-created needs a replacement create).
+Do not pass cluster or cluster_labels on this operation.
+
+Required before create_alert_rule or update_alert_rule. After preview, explain the plan (writable, managedBy, resources, desiredRule) and wait for the user to agree.
+If create_alert_rule or update_alert_rule is not in the tool list, do not call it. Tell the user writes are disabled (--read-only=false standalone, or read_only = false and disable_destructive = false in openshift-mcp-server). Do not claim the change was applied.
+If writable is false, do not call create_alert_rule or update_alert_rule.
+writable reports ownership restrictions, not write permission; applying the plan can still return HTTP 403.
+If managedBy is gitops, present each resources[] kind/namespace/name, changes, and full desiredObject YAML. Follow gitApplyHint.
+If managedBy is operator and source is user, the rule cannot be edited. Offer create_silence, or creating a new user-defined rule in a PrometheusRule the user names.
+  - `alert` (`string`) - Alert name for create preview.
+  - `alerting_rule_enabled` (`boolean`) - When false, drop a platform alert rule via AlertRelabelConfig. When true, restore a previously dropped rule. Cannot be combined with labels or classification.
+  - `annotations` (`object`) - Annotations for create preview.
+  - `classification_component` (``) - Set openshift_io_alert_rule_component. Empty or null clears the override.
+  - `classification_component_from` (``) - Set openshift_io_alert_rule_component_from. Empty or null clears the override.
+  - `classification_layer` (``) - Set openshift_io_alert_rule_layer. Empty or null clears the override.
+  - `classification_layer_from` (``) - Set openshift_io_alert_rule_layer_from. Empty or null clears the override.
+  - `cluster` (`string`) - Not supported on this operation; omit this field.
+  - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
+  - `expr` (`string`) - PromQL expression for create preview.
+  - `for` (`string`) - Pending duration for create preview (for example 5m).
+  - `group_name` (`string`) - Optional rule group name for user-defined create preview.
+  - `labels` (`object`) - Label key/value pairs to set.
+  - `labels_to_remove` (`array`) - Label keys to remove (sent as null values on the management API).
+  - `namespace` (`string`) - PrometheusRule namespace for user-defined create preview.
+  - `prometheus_rule_name` (`string`) - PrometheusRule name for user-defined create preview. Omit for platform rules.
+  - `rule_id` (`string`) - Single stable alert rule ID.
+  - `severity` (`string`) - Alert severity: critical, warning, info, or none.
+
+- **create_alert_rule** - Create an OpenShift alert rule via POST /api/v1/alerting/rules.
+
+Set prometheus_rule_name and namespace for a user-defined rule in that PrometheusRule. Omit prometheus_rule_name to create a platform alerting rule (AlertingRule platform-alert-rules). Do not invent a PrometheusRule name; if the target is unclear, ask before calling.
+Cannot add a user-defined rule to a platform-managed PrometheusRule.
+Do not put secrets in labels or annotations.
+Do not pass cluster or cluster_labels on this operation.
+
+Before calling this tool:
+1. list_alert_rules and check whether any rule already has the same PromQL expression. If one does, ask the user whether to update that rule instead of creating a duplicate.
+2. If observability/metrics is enabled, verify expr metric names with list_metrics.
+3. preview_alert_rule for the create payload.
+4. Explain the planned create (user-defined vs platform) and wait for the user to agree.
+
+Do not retry a 409/405 GitOps or operator-managed conflict. If the target PrometheusRule is GitOps-managed, present the preview desiredObject YAML. Do not retry 400, 404, or 413.
+  - `alert` (`string`) **(required)** - Alert name (PrometheusRule alert field).
+  - `annotations` (`object`) - Annotations to attach to alerts produced by the rule.
+  - `cluster` (`string`) - Not supported on this operation; omit this field.
+  - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
+  - `expr` (`string`) **(required)** - PromQL expression to evaluate.
+  - `for` (`string`) - Duration the condition must be true before firing (for example 5m).
+  - `group_name` (`string`) - Optional rule group name within the PrometheusRule.
+  - `labels` (`object`) - Labels to attach to the rule. severity is merged from the severity parameter when set.
+  - `namespace` (`string`) - PrometheusRule namespace for user-defined rules. Required with prometheus_rule_name. Otherwise stored as a namespace label on a platform rule.
+  - `prometheus_rule_name` (`string`) - PrometheusRule resource name for a user-defined rule. Omit to create a platform rule.
+  - `severity` (`string`) - Alert severity: critical, warning, info, or none.
+
+- **update_alert_rule** - Update via PATCH /api/v1/alerting/rules: labels, severity, classification, or drop/restore (alerting_rule_enabled).
+
+Labels/classification: user-created labels and severity yes. The HTTP API does not accept expr, alert name, for, or annotations (create a replacement then delete the old id). Platform: labels via ARC or AlertingRule (cannot drop severity; alertname and rule-id labels are ignored). Classification is platform-only via ARC.
+Disable/enable: alerting_rule_enabled false/true is platform only. Operator-managed platform is allowed. GitOps and user-defined: 405.
+GitOps: do not call this tool. Operator user-defined: cannot be edited.
+Provide rule_id or rule_ids (1-100) of rules the user has confirmed. At least one mutation field is required.
+alerting_rule_enabled cannot be combined with labels, severity, or classification in the same request.
+Do not use this tool to silence an alert; use create_silence.
+Do not pass cluster or cluster_labels on this operation.
+
+Never resolve an alert name to every matching id. If list_alert_rules returns more than one rule with that name, ask which id to use. Do not update all matches unless the user explicitly asks for that and confirms.
+Call preview_alert_rule, explain the change, and wait for agreement before this call.
+Read each per-rule statusCode. After a label update, use the returned id; it may differ from the id you sent. Classification runs before labels and is not rolled back if the label update fails; inspect the result before retrying.
+
+management_status gitops: do not call this tool; present preview desiredObject YAML.
+source=user and (management_status operator or preview writable=false): do not retry. That rule cannot be edited. Offer create_silence, or a new user-defined rule in a PrometheusRule the user names.
+Do not retry 400, 404, or 413.
+  - `alerting_rule_enabled` (`boolean`) - When false, drop a platform alert rule via AlertRelabelConfig. When true, restore a previously dropped rule. Cannot be combined with labels or classification.
+  - `classification_component` (``) - Set openshift_io_alert_rule_component. Empty or null clears the override.
+  - `classification_component_from` (``) - Set openshift_io_alert_rule_component_from. Empty or null clears the override.
+  - `classification_layer` (``) - Set openshift_io_alert_rule_layer. Empty or null clears the override.
+  - `classification_layer_from` (``) - Set openshift_io_alert_rule_layer_from. Empty or null clears the override.
+  - `cluster` (`string`) - Not supported on this operation; omit this field.
+  - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
+  - `labels` (`object`) - Label key/value pairs to set.
+  - `labels_to_remove` (`array`) - Label keys to remove (sent as null values on the management API).
+  - `rule_id` (`string`) - Single stable alert rule ID.
+  - `rule_ids` (`array`) - Stable alert rule IDs (at most 100 combined with rule_id).
+  - `severity` (`string`) - Alert severity: critical, warning, info, or none.
+
+- **delete_alert_rules** - Delete alert rules by stable ID via DELETE /api/v1/alerting/rules.
+
+User-created in a user-owned PrometheusRule: yes. GitOps/operator user-defined: no.
+Platform rules in a writable AlertingRule (created via this API): yes. CMO/operator-managed platform: no — drop with alerting_rule_enabled=false instead of delete.
+GitOps: never delete through this API.
+Do not use this to mute notifications (create_silence) or to hide a CMO platform rule (drop).
+Provide rule_id or rule_ids (1-100) the user has confirmed. The response always includes per-rule statusCode and optional message so partial success is visible; report each failure.
+Do not pass cluster or cluster_labels on this operation.
+
+If the user asked by name and several rules share that name, ask which id to delete. Do not delete all matches unless the user explicitly asks for that and confirms.
+If management_status is gitops, present the preview desiredObject (remove or revert in Git).
+If source=user and management_status is operator, the rule cannot be deleted here; they can silence it or create a replacement user-defined rule in a PrometheusRule they own.
+Do not retry 400, 404, or 413.
+  - `cluster` (`string`) - Not supported on this operation; omit this field.
+  - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
+  - `rule_id` (`string`) - Single stable alert rule ID to delete.
+  - `rule_ids` (`array`) - Stable alert rule IDs to delete (at most 100 combined with rule_id).
+
+</details>
+
+<details>
+
 <summary>observability/logs</summary>
 
 - **loki_list_instances** - List LokiStack instances available in the Kubernetes cluster.
@@ -993,7 +1145,59 @@ FILTERING:
 - Use 'filter' to apply label matchers to find specific silences
 
 Silences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.
+To create, change, or expire a silence, use create_silence, update_silence, or delete_silence.
   - `filter` (`string`) - Label matchers to filter silences (e.g., 'alertname=HighCPU', optional)
+
+- **create_silence** - Create an Alertmanager silence that mutes matching alerts.
+
+WHEN TO USE:
+- The user asks to silence or mute an alert or set of alerts
+- Operator-managed or GitOps-managed rules cannot be edited; mute notifications with a silence instead
+
+BEFORE CALLING:
+- Call get_alerts (and get_silences) so matchers are specific. Prefer alertname plus namespace and other labels from the firing alert.
+- Tell the user which label matchers will apply and for how long. Wait for explicit agreement.
+- alertname alone silences every instance of that alert name.
+
+PARAMETERS:
+- comment is required.
+- Provide labels (equality map) and/or matchers. At least one matcher is required after combining them.
+- duration defaults to 2h when endsAt is omitted. Do not set both duration and endsAt.
+- createdBy defaults to obs-mcp if omitted.
+  - `comment` (`string`) **(required)** - Reason for the silence. Required on create; optional on update (keeps the existing comment).
+  - `createdBy` (`string`) - Who created the silence. Defaults to obs-mcp if omitted.
+  - `duration` (`string`) - How long the silence lasts from startsAt (for example 2h). Default 2h when endsAt is omitted. Do not set together with endsAt.
+  - `endsAt` (`string`) - Silence end time. Do not set together with duration.
+  - `labels` (`object`) - Equality matchers as a label map (for example alertname=Watchdog, namespace=app). Combined with matchers.
+  - `matchers` (`array`) - Alertmanager matchers. Use with or instead of labels. alertname alone mutes every instance of that alert.
+  - `startsAt` (`string`) - Silence start time (RFC3339, Unix, NOW, or NOW±duration). Defaults to now.
+
+- **update_silence** - Update an existing Alertmanager silence (POST /api/v2/silences with silence_id).
+
+WHEN TO USE:
+- Extend, shorten, or retarget a silence returned by get_silences
+- silence_id is required (UUID)
+
+Omitted comment, createdBy, matchers/labels, and times keep the existing silence values.
+duration replaces endsAt relative to startsAt.
+Explain the change and wait for the user to agree before calling.
+  - `comment` (`string`) - Reason for the silence. Required on create; optional on update (keeps the existing comment).
+  - `createdBy` (`string`) - Who created the silence. Omitted on update keeps the existing createdBy.
+  - `duration` (`string`) - How long the silence lasts from startsAt (for example 2h). Omitted on update keeps the existing endsAt unless duration or endsAt is set. Do not set together with endsAt.
+  - `endsAt` (`string`) - Silence end time. Do not set together with duration. Omitted on update keeps the existing endsAt unless duration is set.
+  - `labels` (`object`) - Equality matchers as a label map (for example alertname=Watchdog, namespace=app). Combined with matchers.
+  - `matchers` (`array`) - Alertmanager matchers. Use with or instead of labels. alertname alone mutes every instance of that alert.
+  - `silence_id` (`string`) **(required)** - Alertmanager silence UUID from get_silences or create_silence.
+  - `startsAt` (`string`) - Silence start time (RFC3339, Unix, NOW, or NOW±duration). Omitted on update keeps the existing startsAt.
+
+- **delete_silence** - Expire (delete) an Alertmanager silence by UUID.
+
+WHEN TO USE:
+- The user asks to un-silence, expire, or remove a silence
+- silence_id is required (from get_silences)
+
+Explain which silence will be removed and wait for the user to agree. This calls DELETE /api/v2/silence/{id}.
+  - `silence_id` (`string`) **(required)** - Alertmanager silence UUID to expire (delete).
 
 </details>
 

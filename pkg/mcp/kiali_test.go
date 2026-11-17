@@ -36,6 +36,7 @@ func (s *KialiSuite) SetupTest() {
 	readOnly := s.Cfg.ReadOnly.Get()
 	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host)))
@@ -686,7 +687,7 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		kubeConfig := s.Cfg.KubeConfig.Get()
 		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
+			enable_target_compatibility_tool_filters = true
 			read_only = false
 			disable_destructive = false
 			[toolset_configs.kiali]
@@ -714,7 +715,7 @@ func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
 		kubeConfig := s.Cfg.KubeConfig.Get()
 		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
+			enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
 			url = "http://127.0.0.1:1"
 			insecure = true
@@ -749,6 +750,113 @@ func (s *KialiSuite) kialiToolNames() []string {
 		s.toolsetName + "_manage_istio_config",
 		s.toolsetName + "_manage_istio_config_read",
 	}
+}
+
+func (s *KialiSuite) applyDeniedVirtualServiceConfig() {
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
+	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
+		read_only = false
+		disable_destructive = false
+		[[denied_resources]]
+		group = "networking.istio.io"
+		version = "v1"
+		kind = "VirtualService"
+		[toolset_configs.kiali]
+		url = "%s"
+	`, s.toolsetName, s.mockServer.Config().Host)))
+	s.Require().NoError(err, "failed to parse kiali denied_resources config")
+	s.Cfg = cfg
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
+}
+
+func (s *KialiSuite) TestDeniedResourcesEnforcedOnIstioConfigTools() {
+	var (
+		mu         sync.Mutex
+		kialiCalls int
+	)
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		kialiCalls++
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"cluster":"home","namespaces":{"cve-lab":{"networking.istio.io/v1/VirtualService":{"valid":["routing-proof"],"invalid":[]},"networking.istio.io/v1/DestinationRule":{"valid":["details"],"invalid":[]}}}}`))
+	}))
+	s.applyDeniedVirtualServiceConfig()
+	s.InitMcpClient()
+
+	s.Run("get denied VirtualService is rejected before Kiali", func() {
+		mu.Lock()
+		before := kialiCalls
+		mu.Unlock()
+		toolResult, err := s.CallTool(s.toolsetName+"_manage_istio_config_read", map[string]interface{}{
+			"action":    "get",
+			"namespace": "cve-lab",
+			"group":     "networking.istio.io",
+			"version":   "v1",
+			"kind":      "VirtualService",
+			"object":    "routing-proof",
+		})
+		s.Require().NoError(err)
+		s.Require().True(toolResult.IsError)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "resource not allowed")
+		mu.Lock()
+		after := kialiCalls
+		mu.Unlock()
+		s.Equal(before, after, "denied get must not call Kiali")
+	})
+
+	s.Run("patch denied VirtualService is rejected before Kiali", func() {
+		mu.Lock()
+		before := kialiCalls
+		mu.Unlock()
+		toolResult, err := s.CallTool(s.toolsetName+"_manage_istio_config", map[string]interface{}{
+			"action":    "patch",
+			"namespace": "cve-lab",
+			"group":     "networking.istio.io",
+			"version":   "v1",
+			"kind":      "VirtualService",
+			"object":    "routing-proof",
+			"data":      `{"metadata":{"annotations":{"x":"y"}}}`,
+		})
+		s.Require().NoError(err)
+		s.Require().True(toolResult.IsError)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "resource not allowed")
+		mu.Lock()
+		after := kialiCalls
+		mu.Unlock()
+		s.Equal(before, after, "denied patch must not call Kiali")
+	})
+
+	s.Run("list filters denied VirtualService names", func() {
+		toolResult, err := s.CallTool(s.toolsetName+"_manage_istio_config_read", map[string]interface{}{
+			"action":    "list",
+			"namespace": "cve-lab",
+		})
+		s.Require().NoError(err)
+		s.Require().False(toolResult.IsError)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.NotContains(text, "routing-proof")
+		s.NotContains(text, "VirtualService")
+		s.Contains(text, "details")
+		s.Contains(text, "DestinationRule")
+	})
+
+	s.Run("list-istio-config prompt filters denied VirtualService", func() {
+		result, err := s.GetPrompt("list-istio-config", map[string]string{
+			"namespace": "cve-lab",
+		})
+		s.Require().NoError(err)
+		s.Require().NotEmpty(result.Messages)
+		textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
+		s.Require().True(ok, "expected TextContent")
+		s.NotContains(textContent.Text, "routing-proof")
+		s.Contains(textContent.Text, "DestinationRule")
+	})
 }
 
 func TestKiali(t *testing.T) {

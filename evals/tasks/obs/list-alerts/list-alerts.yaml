@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "list-alerts"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: alerts
+    suite: obs
+    requires: alert-management
+    toolType: alert-management
+  description: |
+    Tests if the agent can discover and use list_alerts to retrieve
+    OpenShift alert instances (not rule definitions). Requires
+    --toolsets to include observability/alert-management and a reachable
+    monitoring-plugin management API.
+spec:
+  verify:
+    - llmJudge:
+        contains: "alert"
+  prompt:
+    inline: |
+      List currently firing OpenShift alerts. Use list_alerts, not get_alerts
+      and not list_alert_rules. Summarize a few alert names you found.

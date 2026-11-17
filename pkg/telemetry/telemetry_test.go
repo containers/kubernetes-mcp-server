@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
 type TelemetrySuite struct {
@@ -278,6 +280,59 @@ func (s *TelemetrySuite) TestInitTracerWithConfig() {
 		s.True(isSDKProvider)
 		s.NotEqual(initialProvider, currentProvider)
 	})
+}
+
+func (s *TelemetrySuite) TestInitTracerResource() {
+	for _, tc := range []struct {
+		name            string
+		serviceName     string
+		wantServiceName string
+	}{
+		{
+			name:            "keeps the provided service name when config is empty",
+			wantServiceName: "test-service",
+		},
+		{
+			name:            "uses the resolved service name from config",
+			serviceName:     "custom-kubernetes-mcp",
+			wantServiceName: "custom-kubernetes-mcp",
+		},
+	} {
+		s.Run(tc.name, func() {
+			// Environment overrides must already be resolved onto the config.
+			s.T().Setenv("OTEL_SERVICE_NAME", "ignored-at-init")
+			initialProvider := otel.GetTracerProvider()
+			s.T().Cleanup(func() { otel.SetTracerProvider(initialProvider) })
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			cfg := configtest.Telemetry(server.URL, "http/protobuf")
+			cfg.ServiceName.SetForTest(tc.serviceName)
+			cfg.TracesSampler.SetForTest("always_on")
+			cleanup, err := InitTracerWithConfig(s.T().Context(), cfg, "test-service", "1.0.0")
+			s.Require().NoError(err)
+			defer cleanup()
+
+			tp, ok := otel.GetTracerProvider().(*trace.TracerProvider)
+			s.Require().True(ok)
+			recorder := tracetest.NewSpanRecorder()
+			tp.RegisterSpanProcessor(recorder)
+
+			_, span := otel.Tracer("test").Start(s.T().Context(), "test-span")
+			span.End()
+
+			spans := recorder.Ended()
+			s.Require().Len(spans, 1)
+			attrs := spans[0].Resource().Set()
+			serviceName, _ := attrs.Value(semconv.ServiceNameKey)
+			s.Equal(tc.wantServiceName, serviceName.AsString())
+			serviceVersion, _ := attrs.Value(semconv.ServiceVersionKey)
+			s.Equal("1.0.0", serviceVersion.AsString())
+		})
+	}
 }
 
 func (s *TelemetrySuite) TestCreateExporter() {

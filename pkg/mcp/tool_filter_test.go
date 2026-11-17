@@ -107,6 +107,12 @@ func (s *ToolFilterSuite) TestShouldIncludeConfigurationViewTool() {
 
 func (s *ToolFilterSuite) TestTargetCompatible() {
 	cfg := &Configuration{Config: config.New()}
+	// Establish the starting conditions explicitly instead of relying on
+	// option defaults: read_only and disable_destructive each reject tools
+	// before the target-compatibility filters run, so a config that defaults
+	// either one on would change what this test covers.
+	cfg.ReadOnly.SetForTest(false)
+	cfg.DisableDestructive.SetForTest(false)
 	cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
 	applicable := cfg.isToolApplicable(s.T().Context())
 

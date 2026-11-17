@@ -71,7 +71,7 @@ func (c *Core) NodesStatsSummary(ctx context.Context, name string) (string, erro
 }
 
 func (c *Core) NodesTop(ctx context.Context, options api.NodesTopOptions) (*metrics.NodeMetricsList, error) {
-	// When experimental_enable_target_compatibility_tool_filters is enabled,
+	// When enable_target_compatibility_tool_filters is enabled (the default),
 	// TargetCompatibilityFilters also omit the nodes_top tool if this API is absent.
 	if !c.supportsGroupVersion(NodeMetricsGVK.GroupVersion().String()) {
 		return nil, errors.New("metrics API is not available")

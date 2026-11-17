@@ -32,6 +32,7 @@ type ProviderCloseTestSuite struct {
 	mu          sync.Mutex
 	activeConns map[net.Conn]struct{}
 	server      *httptest.Server
+	cfg         *config.Config
 	providers   []Provider
 }
 
@@ -64,6 +65,7 @@ func (s *ProviderCloseTestSuite) SetupTest() {
 		c.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
 		return c
 	}()
+	s.cfg = cfg
 
 	singleProvider, err := newSingleClusterProvider(config.ClusterProviderDisabled)(s.T().Context(), cfg)
 	s.Require().NoError(err)
@@ -186,6 +188,47 @@ func (s *ProviderCloseTestSuite) TestClosesLazyContextConnectionsOnReset() {
 				return s.allClosed(providerConns)
 			}, 2*time.Second, 100*time.Millisecond,
 				"expected all old manager connections (including lazily initialized) to be closed after reset")
+		})
+	}
+}
+
+// TestCloseRacesReset exercises Close concurrently with reset(), which
+// installs a replacement manager while holding the provider lock. It guards
+// the shutdown path taken in this change: Close reads the manager(s) under
+// p.mu without deadlocking against reset's p.mu -> WatcherGroup lock order,
+// stays idempotent when several closers run at once, and the whole sequence
+// is race-clean under -race.
+func (s *ProviderCloseTestSuite) TestCloseRacesReset() {
+	factories := map[string]ProviderFactory{
+		"single":     newSingleClusterProvider(config.ClusterProviderDisabled),
+		"kubeconfig": newKubeConfigClusterProvider,
+	}
+	for name, factory := range factories {
+		s.Run("closes safely while a reset is in flight for "+name, func() {
+			for i := 0; i < 20; i++ {
+				provider, err := factory(s.T().Context(), s.cfg)
+				s.Require().NoError(err)
+
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					// A reset that loses the race returns errProviderClosed.
+					_ = provider.(resettable).reset(s.T().Context())
+				}()
+				// Several closers run the shutdown path concurrently with
+				// the reset that is installing a replacement manager.
+				for j := 0; j < 8; j++ {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						provider.Close()
+					}()
+				}
+				wg.Wait()
+				// Close stays idempotent after the race.
+				provider.Close()
+			}
 		})
 	}
 }

@@ -278,25 +278,7 @@ func (rt *AccessControlRoundTripper) isAllowed(
 	cfg *config.Config,
 ) bool {
 	denied := rt.currentDeniedResources(cfg)
-	if len(denied) == 0 {
-		return true
-	}
-
-	for _, val := range denied {
-		// If kind is empty, that means Group/Version pair is denied entirely
-		if val.Kind == "" {
-			if gvk.Group == val.Group && gvk.Version == val.Version {
-				return false
-			}
-		}
-		if gvk.Group == val.Group &&
-			gvk.Version == val.Version &&
-			gvk.Kind == val.Kind {
-			return false
-		}
-	}
-
-	return true
+	return !config.IsDeniedResource(gvk.GroupVersion().String(), gvk.Kind, denied)
 }
 
 // resourceExistsInDiscovery checks whether the given GVR (and optional

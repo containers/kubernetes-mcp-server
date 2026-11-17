@@ -9,8 +9,11 @@ import (
 
 // mockAlertmanagerAPI is a mock implementation of the Alertmanager Loader interface
 type mockAlertmanagerAPI struct {
-	getAlertsFunc   func(ctx context.Context, active, silenced, inhibited, unprocessed *bool, filter []string, receiver string) (models.GettableAlerts, error)
-	getSilencesFunc func(ctx context.Context, filter []string) (models.GettableSilences, error)
+	getAlertsFunc     func(ctx context.Context, active, silenced, inhibited, unprocessed *bool, filter []string, receiver string) (models.GettableAlerts, error)
+	getSilencesFunc   func(ctx context.Context, filter []string) (models.GettableSilences, error)
+	getSilenceFunc    func(ctx context.Context, id string) (*models.GettableSilence, error)
+	postSilenceFunc   func(ctx context.Context, silence *models.PostableSilence) (string, error)
+	deleteSilenceFunc func(ctx context.Context, id string) error
 }
 
 func (m *mockAlertmanagerAPI) GetAlerts(ctx context.Context, active, silenced, inhibited, unprocessed *bool, filter []string, receiver string) (models.GettableAlerts, error) {
@@ -25,6 +28,27 @@ func (m *mockAlertmanagerAPI) GetSilences(ctx context.Context, filter []string) 
 		return m.getSilencesFunc(ctx, filter)
 	}
 	return models.GettableSilences{}, nil
+}
+
+func (m *mockAlertmanagerAPI) GetSilence(ctx context.Context, id string) (*models.GettableSilence, error) {
+	if m.getSilenceFunc != nil {
+		return m.getSilenceFunc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *mockAlertmanagerAPI) PostSilence(ctx context.Context, silence *models.PostableSilence) (string, error) {
+	if m.postSilenceFunc != nil {
+		return m.postSilenceFunc(ctx, silence)
+	}
+	return "", nil
+}
+
+func (m *mockAlertmanagerAPI) DeleteSilence(ctx context.Context, id string) error {
+	if m.deleteSilenceFunc != nil {
+		return m.deleteSilenceFunc(ctx, id)
+	}
+	return nil
 }
 
 // Ensure mockAlertmanagerAPI implements Loader at compile time

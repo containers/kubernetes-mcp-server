@@ -1,7 +1,9 @@
 name: Publish MCPB Bundles
 
 on:
-  workflow_run:
+  # Bundles require the binaries published by Release. The job checks upstream
+  # success, event and repository, then verifies the tag against the checkout SHA.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Release]
     types: [completed]
   workflow_dispatch:
@@ -58,12 +60,13 @@ jobs:
             binary_suffix: ".exe"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
+          # Automatic runs use the Release commit; manual runs resolve only tags.
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.event.workflow_run.head_sha }}
           persist-credentials: false
 
-      - name: Get version and tag
+      - name: Validate release tag and get version
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -74,6 +77,19 @@ jobs:
             TAG="$INPUT_TAG"
           else
             TAG="$HEAD_BRANCH"
+          fi
+          # Accept only release tags, never a branch or an arbitrary revision.
+          if [[ "$TAG" != v?* ]] || ! git check-ref-format "refs/tags/$TAG"; then
+            echo "Expected a valid v-prefixed release tag" >&2
+            exit 1
+          fi
+          # Peel annotated tags and fail if the tag has moved away from the
+          # Release commit (or the tag commit checked out for a manual dispatch).
+          git fetch --no-tags --depth=1 origin "refs/tags/$TAG"
+          TAG_COMMIT=$(git rev-parse --verify 'FETCH_HEAD^{commit}')
+          if [ "$TAG_COMMIT" != "$(git rev-parse HEAD)" ]; then
+            echo "Release tag does not match the checked-out commit" >&2
+            exit 1
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           # Strip the v prefix
@@ -109,9 +125,10 @@ jobs:
           chmod +x "bundle/$ENTRY_POINT"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          package-manager-cache: false
 
       - name: Pack MCPB bundle
         env:

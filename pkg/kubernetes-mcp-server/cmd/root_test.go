@@ -205,7 +205,12 @@ func TestConfig(t *testing.T) {
 	})
 	t.Run("--config - is rejected in stdio mode", func(t *testing.T) {
 		ioStreams, _ := testStream()
-		ioStreams.In = strings.NewReader("read_only = true\n")
+		// Establish the stdio starting condition explicitly instead of
+		// relying on the default port being empty: a config that defaults
+		// port to a value makes this an HTTP-mode run, where reading the
+		// config from stdin is legal. The explicit empty port keeps this
+		// subtest on the stdio path it covers.
+		ioStreams.In = strings.NewReader("port = \"\"\nread_only = true\n")
 		rootCmd := NewMCPServer(ioStreams)
 		rootCmd.SetArgs([]string{"--version", "--config", "-"})
 		err := rootCmd.Execute()

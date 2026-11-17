@@ -30,6 +30,16 @@ func (m *stubInspector) GetTargets(context.Context) ([]string, error) {
 func (m *stubInspector) GetDefaultTarget() string       { return "" }
 func (m *stubInspector) GetTargetParameterName() string { return "" }
 func (m *stubInspector) IsMultiTarget() bool            { return false }
+func (m *stubInspector) ServerResourcesForGroup(ctx context.Context, _ string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, m, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		list := &metav1.APIResourceList{}
+		if m.isOpenShift {
+			list.APIResources = []metav1.APIResource{{Kind: "Project"}}
+		}
+		return []*metav1.APIResourceList{list}, nil
+	})
+}
+
 func (m *stubInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, m, func(context.Context, string) (*metav1.APIResourceList, error) {
 		list := &metav1.APIResourceList{}

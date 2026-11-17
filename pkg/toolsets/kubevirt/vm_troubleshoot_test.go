@@ -578,6 +578,9 @@ func (c promptKubeClient) RESTMapper() meta.ResettableRESTMapper {
 func (promptKubeClient) DiscoveryClient() discovery.CachedDiscoveryInterface {
 	return promptEventDiscovery{}
 }
+func (promptKubeClient) RawDiscoveryClient() discovery.DiscoveryInterface {
+	return promptEventDiscovery{}
+}
 func (c promptKubeClient) DynamicClient() dynamic.Interface { return c.dyn }
 func (promptKubeClient) AuthorizationV1() authv1client.AuthorizationV1Interface {
 	return nil

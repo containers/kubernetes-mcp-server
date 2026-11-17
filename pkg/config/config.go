@@ -103,6 +103,9 @@ type TelemetryConfig struct {
 	// If nil (not set), telemetry is auto-enabled when Endpoint is configured.
 	// If explicitly set to false, telemetry is disabled even if env vars are set.
 	Enabled Option[*bool]
+	// ServiceName is the trace service name. Empty uses the supplied server name.
+	// Overridden by OTEL_SERVICE_NAME when that env var is non-empty.
+	ServiceName Option[string]
 	// Endpoint is the OTLP endpoint URL (e.g., "http://localhost:4317").
 	// Overridden by OTEL_EXPORTER_OTLP_ENDPOINT when that env var is non-empty.
 	Endpoint Option[string]
@@ -129,6 +132,7 @@ type TelemetryConfig struct {
 func newTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
 		Enabled:          opt[*bool]("enabled", nil).desc("Explicitly enable or disable telemetry"),
+		ServiceName:      opt("service_name", "").env("OTEL_SERVICE_NAME", parseEnvString).desc("Trace service name (empty uses the server name)"),
 		Endpoint:         opt("endpoint", "").env("OTEL_EXPORTER_OTLP_ENDPOINT", parseEnvString).desc("OTLP endpoint URL"),
 		Protocol:         opt("protocol", "grpc").env("OTEL_EXPORTER_OTLP_PROTOCOL", parseEnvString).desc("OTLP protocol (grpc or http/protobuf)"),
 		TracesSampler:    opt("traces_sampler", "").env("OTEL_TRACES_SAMPLER", parseEnvString).desc("Trace sampling strategy"),
@@ -299,14 +303,17 @@ type Config struct {
 	ValidationEnabled Option[bool]
 	// EnableTargetCompatibilityToolFilters enables filtering of tools based on
 	// cluster target compatibility (e.g., hiding OpenShift-specific tools when
-	// connected to a non-OpenShift cluster). This feature is experimental, and
-	// this option is subject to change or removal in a future release.
-	// Defaults to false.
+	// connected to a non-OpenShift cluster).
+	// Defaults to true.
 	EnableTargetCompatibilityToolFilters Option[bool]
 	// Toolsets lists the MCP toolsets to enable.
 	Toolsets Option[[]string]
 	// Tool configuration
-	EnabledTools  Option[[]string]
+	// EnabledTools is an explicit allowlist of tools to enable from enabled toolsets.
+	EnabledTools Option[[]string]
+	// OptInTools enables additional tools on top of the current tool selection.
+	// The owning toolset must be enabled; DisabledTools takes precedence.
+	OptInTools    Option[[]string]
 	DisabledTools Option[[]string]
 	ToolOverrides Option[map[string]ToolOverride]
 	// Prompt configuration
@@ -382,6 +389,11 @@ type Config struct {
 	WorkspacePollInterval Option[time.Duration]
 	// WorkspaceDebounceWindow is the debounce window for kcp workspace reloads.
 	WorkspaceDebounceWindow Option[time.Duration]
+	// CARefreshInterval is how often cached CA certificates are re-fetched
+	// so a rotated cluster CA is picked up without a restart. Zero disables
+	// re-fetching; the CA is then only refreshed when a manager is rebuilt
+	// or on an on-demand SIGHUP re-fetch.
+	CARefreshInterval Option[time.Duration]
 
 	// Internal: parsed provider configs (not exposed to TOML as Option fields)
 	parsedClusterProviderConfigs map[string]ExtendedConfig
@@ -456,10 +468,11 @@ func newConfig() *Config {
 		ReadOnly:           opt("read_only", false).reload().desc("Expose only tools annotated readOnlyHint=true"),
 		DisableDestructive: opt("disable_destructive", false).reload().desc("Disable tools annotated destructiveHint=true"),
 		ValidationEnabled:  opt("validation_enabled", false).reload().desc("Enable pre-execution validation of tool calls"),
-		EnableTargetCompatibilityToolFilters: opt("experimental_enable_target_compatibility_tool_filters", false).reload().
+		EnableTargetCompatibilityToolFilters: opt("enable_target_compatibility_tool_filters", true).reload().
 			desc("Filter tools based on cluster target compatibility"),
 		Toolsets:      opt("toolsets", []string{"core", "config"}).reload().desc("MCP toolsets to enable"),
-		EnabledTools:  opt("enabled_tools", []string(nil)).reload().desc("If set, only these tools are exposed"),
+		EnabledTools:  opt("enabled_tools", []string(nil)).reload().desc("Explicit allowlist of tools to enable from enabled toolsets"),
+		OptInTools:    opt("opt_in_tools", []string(nil)).reload().desc("Additional tools to enable from enabled toolsets, on top of the current selection; disabled_tools takes precedence"),
 		DisabledTools: opt("disabled_tools", []string(nil)).reload().desc("Tools to hide"),
 		ToolOverrides: opt("tool_overrides", map[string]ToolOverride(nil)).reload().desc("Per-tool configuration overrides"),
 		Prompts:       opt("prompts", []Prompt(nil)).reload().desc("Custom MCP prompts"),
@@ -500,6 +513,8 @@ func newConfig() *Config {
 			env("WORKSPACE_POLL_INTERVAL_MS", parseEnvDurationMS).desc("Poll interval for kcp workspace changes"),
 		WorkspaceDebounceWindow: opt("workspace_debounce_window", 5*time.Second).
 			env("WORKSPACE_DEBOUNCE_WINDOW_MS", parseEnvDurationMS).desc("Debounce window for kcp workspace changes"),
+		CARefreshInterval: opt("ca_refresh_interval", 24*time.Hour).
+			desc("How often a CA fetched via the caURL kubeconfig cluster extension is re-fetched (0 disables)"),
 	}
 }
 
@@ -923,7 +938,7 @@ func resolve(ctx context.Context, merged map[string]any, sources map[string]stri
 		cfg.TokenExchange.present = true
 	}
 
-	if err := applyTOML(cfg, merged, sources); err != nil {
+	if err := applyTOML(ctx, cfg, merged, sources); err != nil {
 		return nil, err
 	}
 	if err := rejectUnknownKeys(merged, cfg, sources); err != nil {
@@ -971,7 +986,7 @@ func walkApply(cfg *Config, fn func(option) error) error {
 }
 
 // applyTOML copies present TOML keys onto matching Options.
-func applyTOML(cfg *Config, merged map[string]any, sources map[string]string) error {
+func applyTOML(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string) error {
 	var applyErr error
 	walkOptions(cfg, func(o option, path string) {
 		if applyErr != nil || path == "" {
@@ -987,7 +1002,10 @@ func applyTOML(cfg *Config, merged map[string]any, sources map[string]string) er
 		}
 		applyErr = o.applyTOML(raw, src, path)
 	})
-	return applyErr
+	if applyErr != nil {
+		return applyErr
+	}
+	return applyDeprecatedKeys(ctx, cfg, merged, sources)
 }
 
 // mapLookup walks a dotted key path through nested maps.
@@ -1006,6 +1024,38 @@ func mapLookup(m map[string]any, dotted string) (any, bool) {
 		cur = next
 	}
 	return cur, true
+}
+
+// legacyTargetCompatibilityKey is the old name of enable_target_compatibility_tool_filters.
+const legacyTargetCompatibilityKey = "experimental_enable_target_compatibility_tool_filters"
+
+// applyDeprecatedKeys converts deprecated TOML keys to their replacements and
+// removes them from merged so rejectUnknownKeys accepts them. A replacement key
+// set in the TOML wins over the deprecated one.
+func applyDeprecatedKeys(ctx context.Context, cfg *Config, merged map[string]any, sources map[string]string) error {
+	raw, ok := merged[legacyTargetCompatibilityKey]
+	if !ok {
+		return nil
+	}
+	delete(merged, legacyTargetCompatibilityKey)
+	legacy, err := parseTyped[bool](raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", legacyTargetCompatibilityKey, err)
+	}
+	klogutil.LogWarn(klogutil.FromContext(ctx),
+		legacyTargetCompatibilityKey+" is deprecated and will be removed in a future release; use "+
+			cfg.EnableTargetCompatibilityToolFilters.TOMLKey+" instead",
+		klogutil.Field("config.key", legacyTargetCompatibilityKey),
+	)
+	if _, replaced := merged[cfg.EnableTargetCompatibilityToolFilters.TOMLKey]; replaced {
+		return nil
+	}
+	src := Source(sources[legacyTargetCompatibilityKey])
+	if src == "" {
+		src = Source("<file>")
+	}
+	cfg.EnableTargetCompatibilityToolFilters.setParsed(legacy, src)
+	return nil
 }
 
 // removedKeyReplacements maps dropped TOML keys to their [token_exchange] replacements.

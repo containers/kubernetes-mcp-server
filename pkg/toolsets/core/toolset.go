@@ -27,13 +27,13 @@ func (t *Toolset) GetDescription() string {
 }
 
 func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
-	return slices.Concat(
+	return withAppOverrides(slices.Concat(
 		initEvents(),
 		initNamespaces(toolsetContext.Inspector),
 		initNodes(toolsetContext.Inspector),
 		initPods(toolsetContext.Inspector),
 		initResources(ctx, toolsetContext.Inspector, toolsetContext.TargetCompatibilityFiltersEnabled),
-	)
+	))
 }
 
 func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {

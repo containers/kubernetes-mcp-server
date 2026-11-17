@@ -17,6 +17,7 @@ import (
 	configuration "github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/alertmanagement"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/core"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
@@ -65,6 +66,8 @@ func (s *ToolsetsSuite) SetupTest() {
 	// Set up default discovery handler for non-OpenShift cluster
 	s.Handle(test.NewDiscoveryClientHandler())
 	s.Cfg = configuration.BaseDefault()
+	// Target compatibility filtering is on by default; tests that need it set it explicitly.
+	s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
 	s.Cfg.KubeConfig.SetForTest(s.KubeconfigFile(s.T()))
 	test.ApplyEnvtestClientLimits(s.Cfg)
 	s.updateJson = os.Getenv(updateJsonEnvVar) != ""
@@ -209,7 +212,7 @@ func (s *ToolsetsSuite) TestKialiToolsFilteredWhenURLUnreachable() {
 		kubeConfig := s.Cfg.KubeConfig.Get()
 		cfg, err := configuration.ReadToml(s.T().Context(), fmt.Appendf(nil, `
 			toolsets = ["%s"]
-			experimental_enable_target_compatibility_tool_filters = true
+			enable_target_compatibility_tool_filters = true
 			[toolset_configs.kiali]
 			url = "http://127.0.0.1:1"
 			insecure = true
@@ -401,6 +404,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 	}))
 	s.handlePersesList(http.StatusOK, persesListWithInstance)
 	testCases := []api.Toolset{
+		&alertmanagement.Toolset{},
 		&core.Toolset{},
 		&config.Toolset{},
 		&helm.Toolset{},
@@ -538,6 +542,14 @@ func (f *fakeProvider) Unstructured() api.AggregateUnstructured { return f }
 func (f *fakeProvider) BearerToken(ctx context.Context) api.Results[string] {
 	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
 }
+func (f *fakeProvider) ServerResourcesForGroup(ctx context.Context, _ string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		return []*metav1.APIResourceList{{APIResources: []metav1.APIResource{
+			{Kind: "Project"}, {Kind: "Route"}, {Kind: "NodeMetrics"}, {Kind: "PodMetrics"},
+			{Kind: "VirtualMachine"}, {Kind: "VirtualMachineTemplate"},
+		}}}, nil
+	})
+}
 func (f *fakeProvider) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
 	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
 		return &metav1.APIResourceList{APIResources: []metav1.APIResource{
@@ -670,4 +682,24 @@ func (s *ToolsetsSuite) assertJsonSnapshot(snapshotFile string, actual any) {
 
 func TestToolsets(t *testing.T) {
 	suite.Run(t, new(ToolsetsSuite))
+}
+
+func (s *ToolsetsSuite) TestAlertManagementUsesConfiguredEndpoint() {
+	toolsets.Clear()
+	toolsets.Register(&alertmanagement.Toolset{})
+	kubeconfig := s.Kubeconfig()
+	kubeconfig.Contexts["another-cluster"] = clientcmdapi.NewContext()
+	s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+	s.Cfg.Toolsets.SetForTest([]string{alertmanagement.ToolsetName})
+	s.InitMcpClient()
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.Require().Len(tools.Tools, 6)
+	for _, tool := range tools.Tools {
+		schema, ok := tool.InputSchema.(map[string]any)
+		s.Require().True(ok)
+		properties, ok := schema["properties"].(map[string]any)
+		s.Require().True(ok)
+		s.NotContains(properties, "context", "%s must use its configured endpoint rather than select a Kubernetes target", tool.Name)
+	}
 }

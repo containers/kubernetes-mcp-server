@@ -149,7 +149,7 @@ setup is needed.
 A task is "judge-backed" when its verify phase has an `llmJudge` step —
 **including the legacy `verify: contains:` short form, which is judge-evaluated
 (semantic), not a literal string match.** Judge-backed task counts per suite:
-`helm` 0, `core` 4, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. Filter
+`helm` 0, `core` 5, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. Filter
 any config to one suite with `--label-selector suite=<name>`.
 
 ## Agent configuration
@@ -233,6 +233,11 @@ make run-evals SUITE=core-readonly
 ```
 
 `READ_ONLY=true|false` can still be passed explicitly to override the default.
+
+The weekly mcpchecker CI workflow runs `core-readonly` with `core,config`
+toolsets and `READ_ONLY=true`. It can also be selected through the workflow's
+manual suite input or a maintainer's `/run-mcpchecker core-readonly` review.
+Other suites retain their normal read-write server mode.
 
 ## Versions
 

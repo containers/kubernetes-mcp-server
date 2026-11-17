@@ -77,6 +77,6 @@ make tekton-status
 1. Create a new subdirectory (e.g., `update-pipeline/`) with a `task.yaml` following the `mcpchecker/v1alpha2` format.
 2. Set `metadata.labels.suite: tekton` and `metadata.labels.requires: tekton` so the task is grouped correctly in eval reports and the eval framework can filter tasks that need Tekton installed.
 3. Use `tekton-eval` as the namespace for consistency across the task stack.
-4. Use the shared `helpers/cleanup-namespace.sh` script for namespace cleanup in setup steps.
+4. Use the shared `helpers/cleanup-namespace.sh` script for namespace cleanup in setup steps, and source `helpers/require-output.sh` to get `require <string>` for deterministic checks on `$AGENT_OUTPUT`.
 5. Include `ignoreNotFound: true` on all cleanup steps to keep tasks idempotent.
-6. For verify steps that check Kubernetes resource state use `script.inline` with `kubectl`; for verifying agent output use `llmJudge`.
+6. For verify steps that check Kubernetes resource state use `script.inline` with `kubectl`; for verifying literal identifiers or exact markers in agent output use a deterministic `script` check on `{agent.output}`, and reserve `llmJudge` for judging the meaning of the answer.

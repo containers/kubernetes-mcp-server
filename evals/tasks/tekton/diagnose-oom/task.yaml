@@ -22,12 +22,18 @@ spec:
           setup_diagnosis_scenario oom
 
   verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          source ../helpers/require-output.sh
+          require 'failed-run'
+          require 'OOMKilled'
+          require 'memory'
     - llmJudge:
-        contains: "failed-run"
-    - llmJudge:
-        contains: "OOM"
-    - llmJudge:
-        contains: "memory"
+        contains: "The response diagnoses the failed step as terminated for exceeding its memory limit (OOMKilled), based on observed runtime evidence."
 
   cleanup:
     - k8s.delete:

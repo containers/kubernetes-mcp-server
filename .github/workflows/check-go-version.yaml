@@ -3,8 +3,6 @@ name: Go Version Check
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
-    paths:
-      - go.mod
   merge_group:
 
 permissions:
@@ -24,7 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Fetch base ref
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}

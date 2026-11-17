@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -168,6 +169,39 @@ func (s *ConfigReloadSuite) TestReloadTargetCompatibilityFiltersRebuildsToolDesc
 		s.Require().NoError(err)
 		s.NotContains(resourceListDescription(s, tools), "route.openshift.io/v1 Route")
 	})
+}
+
+func (s *ConfigReloadSuite) TestReloadOptInToolsOverHTTP() {
+	s.Cfg.Port.SetForTest("8080")
+	s.InitMcpClient()
+
+	for _, tc := range []struct {
+		name     string
+		optIn    []string
+		disabled []string
+		visible  bool
+	}{
+		{name: "opt in adds configuration view", optIn: []string{"configuration_view"}, visible: true},
+		{name: "disabled tools overrides opt in", optIn: []string{"configuration_view"}, disabled: []string{"configuration_view"}},
+		{name: "removing opt in restores HTTP default"},
+	} {
+		s.Run(tc.name, func() {
+			next := config.New()
+			next.KubeConfig.SetForTest(s.Cfg.KubeConfig.Get())
+			next.ReadOnly.SetForTest(s.Cfg.ReadOnly.Get())
+			next.Toolsets.SetForTest(s.Cfg.Toolsets.Get())
+			next.Port.SetForTest(s.Cfg.Port.Get())
+			next.OptInTools.SetForTest(tc.optIn)
+			next.DisabledTools.SetForTest(tc.disabled)
+			s.Require().NoError(s.mcpServer.ReloadConfiguration(s.T().Context(), next))
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err)
+			s.Equal(tc.visible, slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+				return tool.Name == "configuration_view"
+			}))
+		})
+	}
 }
 
 func resourceListDescription(s *ConfigReloadSuite, tools *mcp.ListToolsResult) string {

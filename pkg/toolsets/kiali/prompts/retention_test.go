@@ -184,6 +184,7 @@ func (kialiPromptClient) RESTMapper() meta.ResettableRESTMapper {
 	return nil
 }
 func (kialiPromptClient) DiscoveryClient() discovery.CachedDiscoveryInterface { return nil }
+func (kialiPromptClient) RawDiscoveryClient() discovery.DiscoveryInterface    { return nil }
 func (kialiPromptClient) DynamicClient() dynamic.Interface                    { return nil }
 func (kialiPromptClient) MetricsV1beta1Client() *metricsv1beta1.MetricsV1beta1Client {
 	return nil

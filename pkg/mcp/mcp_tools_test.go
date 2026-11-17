@@ -42,6 +42,7 @@ func (s *McpToolProcessingSuite) TestUnrestricted() {
 func (s *McpToolProcessingSuite) TestReadOnly() {
 	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		read_only = true
+		opt_in_tools = ["pods_run", "pods_delete"]
 	`)
 	s.InitMcpClient()
 
@@ -110,6 +111,7 @@ func (s *McpToolProcessingSuite) TestReadOnlyBlocksWriteToolInvocation() {
 func (s *McpToolProcessingSuite) TestDisableDestructive() {
 	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		disable_destructive = true
+		opt_in_tools = ["pods_delete"]
 	`)
 	s.InitMcpClient()
 
@@ -150,6 +152,19 @@ func (s *McpToolProcessingSuite) TestEnabledTools() {
 				"Tool %s is not enabled but should be", tool.Name)
 		}
 	})
+}
+
+func (s *McpToolProcessingSuite) TestOptInToolsWithEmptyAllowlist() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		enabled_tools = []
+		opt_in_tools = ["pods_list"]
+	`)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.Require().Len(tools.Tools, 1)
+	s.Equal("pods_list", tools.Tools[0].Name)
 }
 
 func (s *McpToolProcessingSuite) TestDisabledTools() {

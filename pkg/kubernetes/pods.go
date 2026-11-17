@@ -259,7 +259,7 @@ func (c *Core) PodsRun(ctx context.Context, namespace, name, image string, port 
 }
 
 func (c *Core) PodsTop(ctx context.Context, options api.PodsTopOptions) (*metrics.PodMetricsList, error) {
-	// When experimental_enable_target_compatibility_tool_filters is enabled,
+	// When enable_target_compatibility_tool_filters is enabled (the default),
 	// TargetCompatibilityFilters also omit the pods_top tool if this API is absent.
 	if !c.supportsGroupVersion(PodMetricsGVK.GroupVersion().String()) {
 		return nil, errors.New("metrics API is not available")

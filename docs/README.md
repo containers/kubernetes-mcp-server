@@ -51,5 +51,6 @@ Living documentation for implemented and planned features:
 
 ## Reference
 
+- **[Releases](releases.md)** - Release cadence, versioning, and published artifacts
 - **[Main README](../README.md)** - Project overview and general information
 

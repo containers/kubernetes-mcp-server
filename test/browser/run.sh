@@ -21,6 +21,12 @@ mkdir -p "$playwright"
 mkdir -p "$host"
 cp "$root/test/browser/package.json" "$playwright/package.json"
 cp "$root/test/browser/"*.spec.mjs "$playwright/"
+# Preserve extension folders so suites can use their own helpers and assets.
+# Remove the previous copy so deleted tests and fixtures do not linger.
+rm -rf "$playwright/extensions"
+if [[ -d "$root/test/browser/extensions" ]]; then
+  cp -R "$root/test/browser/extensions" "$playwright/"
+fi
 if ! curl --cacert "$proxy_cert" -sS --connect-timeout 2 -o /dev/null "$MCP_SERVER_URL"; then
   echo "MCP_SERVER_URL is not reachable: $MCP_SERVER_URL" >&2
   exit 1

@@ -66,6 +66,46 @@ enabled = false
 	})
 }
 
+func (s *TelemetryConfigSuite) TestGetServiceName() {
+	for _, tc := range []struct {
+		name string
+		toml string
+		env  string
+		want string
+	}{
+		{
+			name: "returns empty when no config and no env var",
+		},
+		{
+			name: "returns config value when no env var",
+			toml: "[telemetry]\nservice_name = 'config-service'",
+			want: "config-service",
+		},
+		{
+			name: "returns env value when no config",
+			env:  "env-service",
+			want: "env-service",
+		},
+		{
+			name: "env var takes precedence over config",
+			toml: "[telemetry]\nservice_name = 'config-service'",
+			env:  "env-service",
+			want: "env-service",
+		},
+		{
+			name: "empty config value preserves the default",
+			toml: "[telemetry]\nservice_name = ''",
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.T().Setenv("OTEL_SERVICE_NAME", tc.env)
+			cfg, err := ReadToml(s.T().Context(), []byte(tc.toml), WithBaseDefault())
+			s.Require().NoError(err)
+			s.Equal(tc.want, cfg.Telemetry.ServiceName.Get())
+		})
+	}
+}
+
 func (s *TelemetryConfigSuite) TestGetEndpoint() {
 	s.Run("returns config value when no env var", func() {
 		cfg := New()

@@ -58,10 +58,10 @@ build-multiarch: ## Build the project for a specific OS/ARCH (used by container 
 .PHONY: build-all-platforms
 build-all-platforms: clean tidy format lint ## Build the project for all platforms
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
-		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
+		GOOS=$(os) GOARCH=$(arch) CGO_ENABLED=0 go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
 	$(foreach arch,$(LINUX_EXTRA_ARCHS), \
-		GOOS=linux GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-linux-$(arch) ./cmd/kubernetes-mcp-server; \
+		GOOS=linux GOARCH=$(arch) CGO_ENABLED=0 go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-linux-$(arch) ./cmd/kubernetes-mcp-server; \
 	)
 
 .PHONY: test

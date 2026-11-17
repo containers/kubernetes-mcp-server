@@ -12,7 +12,7 @@ metadata:
 steps:
   setup:
   verify:
-    contains: "master"
+    contains: "control-plane"
   cleanup:
   prompt:
-    inline: "Check the resource usage of the master nodes in the cluster."
+    inline: "Check the resource usage of the control-plane nodes in the cluster."

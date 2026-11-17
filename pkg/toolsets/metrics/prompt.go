@@ -9,6 +9,8 @@ When the user asks about issues, errors, failures, outages, or things going wron
 
 If the user mentions a specific alert by name, use get_alerts with a filter to retrieve its full labels before investigating further.
 
+To mute notifications, use create_silence / update_silence / delete_silence when those tools are listed. Prefer matchers from get_alerts labels (alertname plus namespace and other distinguishing labels). Explain which alerts the matchers will mute and wait for the user to agree before writing. A matcher of only alertname mutes every instance of that alert. get_silences lists existing silences. If the write tools are not listed, tell the user writes are disabled (--read-only=false standalone, or read_only = false in openshift-mcp-server). delete_silence also requires destructive tools to be enabled (--disable-destructive=false standalone, or disable_destructive = false in openshift-mcp-server).
+
 ## MANDATORY WORKFLOW FOR QUERYING - ALWAYS FOLLOW THIS ORDER
 
 **STEP 1: ALWAYS call list_metrics FIRST**
@@ -165,5 +167,41 @@ WHEN TO USE:
 FILTERING:
 - Use 'filter' to apply label matchers to find specific silences
 
-Silences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.`
+Silences are used to temporarily mute alerts based on label matchers. This tool helps you understand what is currently silenced in your environment.
+To create, change, or expire a silence, use create_silence, update_silence, or delete_silence.`
+
+	CreateSilencePrompt = `Create an Alertmanager silence that mutes matching alerts.
+
+WHEN TO USE:
+- The user asks to silence or mute an alert or set of alerts
+- Operator-managed or GitOps-managed rules cannot be edited; mute notifications with a silence instead
+
+BEFORE CALLING:
+- Call get_alerts (and get_silences) so matchers are specific. Prefer alertname plus namespace and other labels from the firing alert.
+- Tell the user which label matchers will apply and for how long. Wait for explicit agreement.
+- alertname alone silences every instance of that alert name.
+
+PARAMETERS:
+- comment is required.
+- Provide labels (equality map) and/or matchers. At least one matcher is required after combining them.
+- duration defaults to 2h when endsAt is omitted. Do not set both duration and endsAt.
+- createdBy defaults to obs-mcp if omitted.`
+
+	UpdateSilencePrompt = `Update an existing Alertmanager silence (POST /api/v2/silences with silence_id).
+
+WHEN TO USE:
+- Extend, shorten, or retarget a silence returned by get_silences
+- silence_id is required (UUID)
+
+Omitted comment, createdBy, matchers/labels, and times keep the existing silence values.
+duration replaces endsAt relative to startsAt.
+Explain the change and wait for the user to agree before calling.`
+
+	DeleteSilencePrompt = `Expire (delete) an Alertmanager silence by UUID.
+
+WHEN TO USE:
+- The user asks to un-silence, expire, or remove a silence
+- silence_id is required (from get_silences)
+
+Explain which silence will be removed and wait for the user to agree. This calls DELETE /api/v2/silence/{id}.`
 )

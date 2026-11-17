@@ -64,17 +64,28 @@ func getClientIP(r *http.Request, trustProxy bool) string {
 	return host
 }
 
-// getHTTPRoute returns a normalized route for the request path.
-// This helps reduce cardinality in traces by grouping similar paths.
-func getHTTPRoute(path string) string {
-	// Known routes for this server
+// knownHTTPRoute maps a request path to the route it is reported as in span
+// names and metric labels, and reports whether the path is a known route.
+// Matching is exact, except that every path under /.well-known/ is reported as
+// /.well-known/*. New HTTP endpoints must be added to this switch, or their
+// traffic keeps its raw path in span names and is counted as "other" in metrics.
+func knownHTTPRoute(path string) (string, bool) {
 	switch path {
-	case "/healthz", "/mcp", "/stats":
-		return path
+	case mcpEndpoint, healthEndpoint, statsEndpoint, metricsEndpoint:
+		return path, true
 	}
-	// Check for well-known prefix
 	if strings.HasPrefix(path, "/.well-known/") {
-		return "/.well-known/*"
+		return "/.well-known/*", true
+	}
+	return "", false
+}
+
+// getHTTPRoute returns a normalized route for the request path, or the raw
+// path for an unknown route. This helps reduce cardinality in traces by
+// grouping similar paths.
+func getHTTPRoute(path string) string {
+	if route, ok := knownHTTPRoute(path); ok {
+		return route
 	}
 	return path
 }

@@ -137,3 +137,40 @@ func (p *singleClusterProvider) PublishKubernetesConfig(cfg *config.Config) {
 func (p *singleClusterProvider) GetTargetParameterName() string {
 	return ""
 }
+
+// Close stops the watchers (through the embedded WatcherGroup), so shutdown
+// leaves nothing running behind, and releases the manager's HTTP transport
+// and background CA refresh loop. reset() closes the previous manager
+// explicitly and swaps the watchers through Replace, so it never closes the
+// manager it just installed.
+//
+// The manager is read under p.mu because reset() installs a replacement while
+// holding it. It is closed after the read lock is released: Manager.Close
+// waits for the CA refresh loop, and blocking every p.mu holder on that wait
+// would stall shutdown behind unrelated callers. Nothing re-takes p.mu, so
+// this cannot deadlock.
+func (p *singleClusterProvider) Close() {
+	// WatcherGroup.Close first (and outside p.mu) so a concurrent reset()
+	// fails on ErrClosed instead of installing a manager after the snapshot
+	// below is taken.
+	p.WatcherGroup.Close()
+	p.mu.RLock()
+	manager := p.manager
+	p.mu.RUnlock()
+	if manager != nil {
+		manager.Close()
+	}
+}
+
+// RefreshCAs re-fetches the manager's cluster CA now, so a rotated CA is
+// picked up on SIGHUP config reload without waiting out
+// ca_refresh_interval. The manager is read under the lock because a reload
+// may be replacing it concurrently.
+func (p *singleClusterProvider) RefreshCAs() {
+	p.mu.RLock()
+	manager := p.manager
+	p.mu.RUnlock()
+	if manager != nil {
+		manager.RefreshCAs()
+	}
+}
