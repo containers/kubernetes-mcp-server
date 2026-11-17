@@ -73,6 +73,15 @@ type HTTPConfig struct {
 	// Only effective when rate_limit_rps > 0.
 	// When zero, the rate limiting middleware applies DefaultRateLimitBurst.
 	RateLimitBurst Option[int]
+	// ClientRateLimitRPS is the maximum number of MCP requests per second per client,
+	// across all of that client's sessions and also in stateless mode.
+	// A client is the subject of a verified bearer token, otherwise the client IP address.
+	// When set to 0 (default), per-client rate limiting is disabled.
+	ClientRateLimitRPS Option[float64]
+	// ClientRateLimitBurst is the maximum burst size for per-client rate limiting.
+	// Only effective when client_rate_limit_rps > 0.
+	// When zero, the middleware applies DefaultRateLimitBurst.
+	ClientRateLimitBurst Option[int]
 }
 
 // newHTTPConfig returns HTTPConfig with Option metadata and defaults.
@@ -92,6 +101,18 @@ func newHTTPConfig() HTTPConfig {
 			}
 			return nil
 		}).desc("Max burst size for rate limiting per session"),
+		ClientRateLimitRPS: opt("client_rate_limit_rps", 0.0).reload().validate(func(v float64) error {
+			if v < 0 {
+				return fmt.Errorf("client_rate_limit_rps must not be negative (got %v)", v)
+			}
+			return nil
+		}).desc("Max MCP requests per second per client (0 disables)"),
+		ClientRateLimitBurst: opt("client_rate_limit_burst", 0).reload().validate(func(v int) error {
+			if v < 0 {
+				return fmt.Errorf("client_rate_limit_burst must not be negative (got %d)", v)
+			}
+			return nil
+		}).desc("Max burst size for rate limiting per client"),
 	}
 }
 

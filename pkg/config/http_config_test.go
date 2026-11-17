@@ -114,6 +114,41 @@ func (s *HTTPConfigSuite) TestValidate() {
 		cfg.HTTP.RateLimitBurst.SetForTest(0)
 		s.NoError(cfg.Validate(s.T().Context()))
 	})
+
+	s.Run("negative client RPS is rejected", func() {
+		cfg := New()
+		cfg.HTTP.ClientRateLimitRPS.SetForTest(-1)
+		err := cfg.Validate(s.T().Context())
+		s.Error(err)
+		s.Contains(err.Error(), "client_rate_limit_rps must not be negative")
+	})
+
+	s.Run("negative client burst is rejected", func() {
+		cfg := New()
+		cfg.HTTP.ClientRateLimitBurst.SetForTest(-5)
+		err := cfg.Validate(s.T().Context())
+		s.Error(err)
+		s.Contains(err.Error(), "client_rate_limit_burst must not be negative")
+	})
+}
+
+func (s *HTTPConfigSuite) TestClientRateLimitTOML() {
+	s.Run("disabled by default", func() {
+		cfg := New()
+		s.Equal(0.0, cfg.HTTP.ClientRateLimitRPS.Get())
+		s.Equal(0, cfg.HTTP.ClientRateLimitBurst.Get())
+	})
+
+	s.Run("parses client rate limit fields", func() {
+		cfg, err := ReadToml(s.T().Context(), []byte(`
+[http]
+client_rate_limit_rps = 2.5
+client_rate_limit_burst = 20
+`))
+		s.Require().NoError(err)
+		s.Equal(2.5, cfg.HTTP.ClientRateLimitRPS.Get())
+		s.Equal(20, cfg.HTTP.ClientRateLimitBurst.Get())
+	})
 }
 
 func (s *HTTPConfigSuite) TestDefaultRateLimitBurst() {

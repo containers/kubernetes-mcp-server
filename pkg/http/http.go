@@ -147,6 +147,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.ConfigSt
 	wrappedMux := chain(mux,
 		RequestMiddleware(cfgState),
 		AuthorizationMiddleware(cfgState, oauthState),
+		ClientRateLimitMiddleware(cfgState),
 		MaxBodyMiddleware(cfgState),
 	)
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
