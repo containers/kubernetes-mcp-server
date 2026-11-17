@@ -32,8 +32,8 @@ func (e *ErrNonIntegralInt64) Error() string {
 func ParseInt64(value interface{}) (int64, error) {
 	switch v := value.(type) {
 	case float64:
-		// -2^63 is exactly representable as float64; 2^63 is the first value above math.MaxInt64.
-		if v != math.Trunc(v) || v < math.MinInt64 || v >= -math.MinInt64 {
+		// The int64 range is [-2^63, 2^63); both bounds are exact float64 values.
+		if v != math.Trunc(v) || v < -(1<<63) || v >= 1<<63 {
 			return 0, &ErrNonIntegralInt64{Value: v}
 		}
 		return int64(v), nil
