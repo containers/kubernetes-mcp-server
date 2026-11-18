@@ -14,7 +14,7 @@ func uncapped() (int64, error) { return 0, nil }
 func TestSearch_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/api/search", r.URL.Path)
-		require.Equal(t, "application/vnd.grafana.llm", r.Header.Get("Accept"))
+		require.Equal(t, "application/json", r.Header.Get("Accept"))
 
 		q := r.URL.Query()
 		require.Equal(t, "{duration > 1s}", q.Get("q"))
@@ -55,7 +55,7 @@ func TestSearch_ServerError(t *testing.T) {
 func TestQueryV2_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/api/v2/traces/abc123", r.URL.Path)
-		require.Equal(t, "application/vnd.grafana.llm", r.Header.Get("Accept"))
+		require.Equal(t, "application/json", r.Header.Get("Accept"))
 
 		q := r.URL.Query()
 		require.Equal(t, "1000", q.Get("start"))
@@ -103,7 +103,7 @@ func TestQueryV2_ServerError(t *testing.T) {
 func TestSearchTagsV2_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/api/v2/search/tags", r.URL.Path)
-		require.Equal(t, "application/vnd.grafana.llm", r.Header.Get("Accept"))
+		require.Equal(t, "application/json", r.Header.Get("Accept"))
 
 		q := r.URL.Query()
 		require.Equal(t, "resource", q.Get("scope"))
@@ -146,7 +146,7 @@ func TestSearchTagsV2_ServerError(t *testing.T) {
 func TestSearchTagValuesV2_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/api/v2/search/tag/resource.service.name/values", r.URL.Path)
-		require.Equal(t, "application/vnd.grafana.llm", r.Header.Get("Accept"))
+		require.Equal(t, "application/json", r.Header.Get("Accept"))
 
 		q := r.URL.Query()
 		require.Equal(t, `{ status=error }`, q.Get("q"))
