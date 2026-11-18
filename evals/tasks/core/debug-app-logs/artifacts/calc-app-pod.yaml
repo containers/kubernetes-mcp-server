@@ -11,8 +11,7 @@ spec:
       type: RuntimeDefault
   containers:
   - name: calc-app-executor
-    image: python:3.9-slim-buster
-    command: ["python"]
+    image: gcr.io/distroless/python3-debian13:nonroot
     args: ["/etc/config/calc-app.py"]
     securityContext:
       allowPrivilegeEscalation: false
