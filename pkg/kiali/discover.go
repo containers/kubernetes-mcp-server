@@ -164,11 +164,12 @@ func listKialiCRsClusterWide(ctx context.Context, unstructuredAPI api.AggregateU
 
 // discoverAndValidateInternalURL finds a Kiali CR, builds in-cluster Service URL candidates,
 // and returns the first base URL that responds successfully to GET /api/status.
-func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
+// Listed CRs are returned when present so DNS fallback can reuse them without a second list.
+func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, []*KialiCR, bool) {
 	namespaces := urlDiscoveryNamespaces(kialiCfg)
 	crs := listKialiCRs(ctx, inspector, namespaces)
 	if len(crs) == 0 {
-		return "", false
+		return "", nil, false
 	}
 
 	requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
@@ -179,24 +180,27 @@ func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterIn
 	url, ok := probeCandidateURLs(ctx, candidates, kialiCfg, serverCfg, bearerToken)
 	if ok {
 		klogutil.FromContext(ctx).V(1).Info("discovered reachable Kiali URL from CR", "url", url)
-		return url, true
+		return url, crs, true
 	}
 	klogutil.FromContext(ctx).V(1).Info("Kiali CR(s) found but no reachable in-cluster URL")
-	return "", false
+	return "", crs, false
 }
 
 // namespacesForServiceDNSProbe returns the namespace list used for kiali.<ns>.svc
 // fallbacks after CR-based discovery. It matches allowed_namespaces (or the default).
-// With "**", namespaces come from cluster-wide Kiali CRs (same scope as CR discovery),
+// With "**", namespaces come from deployment namespaces on crs (same CR list as discovery),
 // not from a cluster Namespace list.
-func namespacesForServiceDNSProbe(ctx context.Context, inspector api.ClusterInspector, configured []string) []string {
+func namespacesForServiceDNSProbe(configured []string, crs []*KialiCR) []string {
 	if !DiscoverAllNamespaces(configured) {
 		return configured
 	}
-	crs := listKialiCRs(ctx, inspector, configured)
 	if len(crs) == 0 {
 		return nil
 	}
+	return deploymentNamespacesFromCRs(crs)
+}
+
+func deploymentNamespacesFromCRs(crs []*KialiCR) []string {
 	seen := sets.New[string]()
 	out := make([]string, 0, len(crs))
 	for _, cr := range crs {

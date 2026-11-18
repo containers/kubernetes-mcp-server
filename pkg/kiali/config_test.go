@@ -207,6 +207,20 @@ func (s *ConfigSuite) TestValidate() {
 		s.Error(err)
 		s.ErrorContains(err, "**")
 	})
+	s.Run("allowed_namespaces wildcard first still cannot be combined with namespace names", func() {
+		cfg := &Config{AllowedNamespaces: []string{"**", "istio-system"}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "**")
+	})
+	s.Run("URLDiscoveryNamespaces soft-normalizes without Validate", func() {
+		cfg := &Config{AllowedNamespaces: []string{"", "mesh", " mesh ", "openshift-operators"}}
+		s.Equal([]string{"mesh", "openshift-operators"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("URLDiscoveryNamespaces keeps invalid names for Validate to reject", func() {
+		cfg := &Config{AllowedNamespaces: []string{"not a valid ns", "mesh"}}
+		s.Equal([]string{"not a valid ns", "mesh"}, cfg.URLDiscoveryNamespaces())
+	})
 	s.Run("invalid URL returns error", func() {
 		cfg := &Config{Url: "://bad-url"}
 		err := cfg.Validate()

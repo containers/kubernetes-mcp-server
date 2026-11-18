@@ -86,7 +86,7 @@ func TestListKialiCRs_RespectsAllowedNamespaces(t *testing.T) {
 
 func TestNamespacesForServiceDNSProbe(t *testing.T) {
 	t.Run("uses configured namespaces", func(t *testing.T) {
-		got := namespacesForServiceDNSProbe(context.Background(), nil, []string{"mesh", "istio-system"})
+		got := namespacesForServiceDNSProbe([]string{"mesh", "istio-system"}, nil)
 		if len(got) != 2 || got[0] != "mesh" {
 			t.Fatalf("expected configured list, got %v", got)
 		}
@@ -94,7 +94,8 @@ func TestNamespacesForServiceDNSProbe(t *testing.T) {
 
 	t.Run("wildcard derives probe namespaces from cluster-wide Kiali CRs", func(t *testing.T) {
 		inspector := &namespaceFilteringInspector{mockKialiInspector: mockKialiInspector{available: true}}
-		got := namespacesForServiceDNSProbe(context.Background(), inspector, []string{DiscoveryAllNamespacesWildcard})
+		crs := listKialiCRs(context.Background(), inspector, []string{DiscoveryAllNamespacesWildcard})
+		got := namespacesForServiceDNSProbe([]string{DiscoveryAllNamespacesWildcard}, crs)
 		if len(got) != 1 || got[0] != "istio-system" {
 			t.Fatalf("expected [istio-system] from CR, got %v", got)
 		}

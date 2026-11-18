@@ -75,11 +75,11 @@ func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, inspecto
 
 func discoverInjectAndProbe(ctx context.Context, serverCfg *config.Config, kialiCfg *Config, inspector api.ClusterInspector) bool {
 	token := bearerTokenFromInspector(ctx, inspector)
-	url, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
+	url, crs, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
 	if !ok {
 		requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
 		configured := urlDiscoveryNamespaces(kialiCfg)
-		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(namespacesForServiceDNSProbe(ctx, inspector, configured), requireTLS), kialiCfg, serverCfg, token)
+		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(namespacesForServiceDNSProbe(configured, crs), requireTLS), kialiCfg, serverCfg, token)
 	}
 	if !ok {
 		setDiscoveredURL("")

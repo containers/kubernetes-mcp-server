@@ -67,10 +67,48 @@ func (c *Config) Validate() error {
 	return c.validateAllowedNamespaces()
 }
 
-func (c *Config) validateAllowedNamespaces() error {
+// normalizeAllowedNamespaces trims, skips empties, and deduplicates preserving
+// first-occurrence order. If the only non-empty entry is "**", returns ["**"].
+// Mixed "**" + names keeps the namespace names; Validate rejects that config.
+func normalizeAllowedNamespaces(raw []string) []string {
+	if len(raw) == 0 {
+		return []string{defaultURLDiscoveryNamespace}
+	}
 	seen := sets.New[string]()
-	for _, ns := range c.AllowedNamespaces {
-		ns = strings.TrimSpace(ns)
+	out := make([]string, 0, len(raw))
+	hasWildcard := false
+	for _, entry := range raw {
+		ns := strings.TrimSpace(entry)
+		if ns == "" {
+			continue
+		}
+		if ns == DiscoveryAllNamespacesWildcard {
+			hasWildcard = true
+			continue
+		}
+		if seen.Has(ns) {
+			continue
+		}
+		seen.Insert(ns)
+		out = append(out, ns)
+	}
+	if hasWildcard && len(out) == 0 {
+		return []string{DiscoveryAllNamespacesWildcard}
+	}
+	if len(out) == 0 {
+		return []string{defaultURLDiscoveryNamespace}
+	}
+	return out
+}
+
+func (c *Config) validateAllowedNamespaces() error {
+	if len(c.AllowedNamespaces) == 0 {
+		return nil
+	}
+	seen := sets.New[string]()
+	out := make([]string, 0, len(c.AllowedNamespaces))
+	for _, entry := range c.AllowedNamespaces {
+		ns := strings.TrimSpace(entry)
 		if ns == "" {
 			return errors.New("allowed_namespaces entries must not be empty")
 		}
@@ -81,40 +119,31 @@ func (c *Config) validateAllowedNamespaces() error {
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
 			return fmt.Errorf("allowed_namespaces entry %q is not a valid namespace name: %s", ns, strings.Join(errs, ", "))
 		}
+		if seen.Has(ns) {
+			continue
+		}
 		seen.Insert(ns)
+		out = append(out, ns)
 	}
 	if seen.Has(DiscoveryAllNamespacesWildcard) && seen.Len() != 1 {
 		return fmt.Errorf("allowed_namespaces must contain only %q when enabling cluster-wide discovery", DiscoveryAllNamespacesWildcard)
 	}
+	if seen.Has(DiscoveryAllNamespacesWildcard) {
+		c.AllowedNamespaces = []string{DiscoveryAllNamespacesWildcard}
+		return nil
+	}
+	c.AllowedNamespaces = out
 	return nil
 }
 
 // URLDiscoveryNamespaces returns namespaces searched for Kiali CRs and
 // well-known in-cluster Service URLs when url is empty.
+// Soft-normalizes (trim/dedupe); hard checks belong in Validate.
 func (c *Config) URLDiscoveryNamespaces() []string {
 	if c == nil || len(c.AllowedNamespaces) == 0 {
 		return []string{defaultURLDiscoveryNamespace}
 	}
-	out := make([]string, 0, len(c.AllowedNamespaces))
-	seen := sets.New[string]()
-	for _, ns := range c.AllowedNamespaces {
-		trimmed := strings.TrimSpace(ns)
-		if trimmed == "" {
-			continue
-		}
-		if trimmed == DiscoveryAllNamespacesWildcard {
-			return []string{DiscoveryAllNamespacesWildcard}
-		}
-		if seen.Has(trimmed) {
-			continue
-		}
-		seen.Insert(trimmed)
-		out = append(out, trimmed)
-	}
-	if len(out) == 0 {
-		return []string{defaultURLDiscoveryNamespace}
-	}
-	return out
+	return normalizeAllowedNamespaces(c.AllowedNamespaces)
 }
 
 // DiscoverAllNamespaces reports whether discovery should list Kiali CRs cluster-wide.
