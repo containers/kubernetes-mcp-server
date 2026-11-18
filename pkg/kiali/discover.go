@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -102,6 +103,19 @@ func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
 	return &cr, nil
 }
 
+func kialiCRsFromUnstructuredList(ctx context.Context, items []unstructured.Unstructured) []*KialiCR {
+	out := make([]*KialiCR, 0, len(items))
+	for i := range items {
+		cr, err := kialiFromUnstructured(&items[i])
+		if err != nil {
+			klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
+			continue
+		}
+		out = append(out, cr)
+	}
+	return out
+}
+
 // listKialiCRs returns Kiali CRs in the given namespaces. Returns nil when none exist or on error.
 func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespaces []string) []*KialiCR {
 	if inspector == nil || len(namespaces) == 0 {
@@ -111,10 +125,10 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespace
 	if unstructuredAPI == nil {
 		return nil
 	}
-	out := make([]*KialiCR, 0)
 	if DiscoverAllNamespaces(namespaces) {
-		return listKialiCRsClusterWide(ctx, unstructuredAPI, out)
+		return listKialiCRsClusterWide(ctx, unstructuredAPI)
 	}
+	out := make([]*KialiCR, 0)
 	for _, ns := range namespaces {
 		list, err := unstructuredAPI.Resource(KialiGVR).Namespace(ns).List(ctx, metav1.ListOptions{}).Default()
 		if err != nil {
@@ -124,14 +138,7 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespace
 		if list == nil || len(list.Items) == 0 {
 			continue
 		}
-		for i := range list.Items {
-			cr, err := kialiFromUnstructured(&list.Items[i])
-			if err != nil {
-				klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
-				continue
-			}
-			out = append(out, cr)
-		}
+		out = append(out, kialiCRsFromUnstructuredList(ctx, list.Items)...)
 	}
 	if len(out) == 0 {
 		return nil
@@ -139,7 +146,7 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespace
 	return out
 }
 
-func listKialiCRsClusterWide(ctx context.Context, unstructuredAPI api.AggregateUnstructured, out []*KialiCR) []*KialiCR {
+func listKialiCRsClusterWide(ctx context.Context, unstructuredAPI api.AggregateUnstructured) []*KialiCR {
 	list, err := unstructuredAPI.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
 	if err != nil {
 		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs cluster-wide", "error", err)
@@ -148,14 +155,7 @@ func listKialiCRsClusterWide(ctx context.Context, unstructuredAPI api.AggregateU
 	if list == nil || len(list.Items) == 0 {
 		return nil
 	}
-	for i := range list.Items {
-		cr, err := kialiFromUnstructured(&list.Items[i])
-		if err != nil {
-			klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
-			continue
-		}
-		out = append(out, cr)
-	}
+	out := kialiCRsFromUnstructuredList(ctx, list.Items)
 	if len(out) == 0 {
 		return nil
 	}
@@ -197,17 +197,14 @@ func namespacesForServiceDNSProbe(ctx context.Context, inspector api.ClusterInsp
 	if len(crs) == 0 {
 		return nil
 	}
-	seen := make(map[string]struct{}, len(crs))
+	seen := sets.New[string]()
 	out := make([]string, 0, len(crs))
 	for _, cr := range crs {
 		ns := deploymentNamespaceFromCR(cr)
-		if ns == "" {
+		if ns == "" || seen.Has(ns) {
 			continue
 		}
-		if _, dup := seen[ns]; dup {
-			continue
-		}
-		seen[ns] = struct{}{}
+		seen.Insert(ns)
 		out = append(out, ns)
 	}
 	return out

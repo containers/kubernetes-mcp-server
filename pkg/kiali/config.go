@@ -11,6 +11,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -67,25 +68,23 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) validateAllowedNamespaces() error {
-	seen := make(map[string]struct{})
-	wildcard := false
+	seen := sets.New[string]()
 	for _, ns := range c.AllowedNamespaces {
 		ns = strings.TrimSpace(ns)
 		if ns == "" {
 			return errors.New("allowed_namespaces entries must not be empty")
 		}
 		if ns == DiscoveryAllNamespacesWildcard {
-			wildcard = true
-			seen[ns] = struct{}{}
+			seen.Insert(ns)
 			continue
 		}
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
 			return fmt.Errorf("allowed_namespaces entry %q is not a valid namespace name: %s", ns, strings.Join(errs, ", "))
 		}
-		seen[ns] = struct{}{}
+		seen.Insert(ns)
 	}
-	if wildcard && len(seen) != 1 {
-		return fmt.Errorf("allowed_namespaces must be only %q when enabling cluster-wide discovery", DiscoveryAllNamespacesWildcard)
+	if seen.Has(DiscoveryAllNamespacesWildcard) && seen.Len() != 1 {
+		return fmt.Errorf("allowed_namespaces must contain only %q when enabling cluster-wide discovery", DiscoveryAllNamespacesWildcard)
 	}
 	return nil
 }
@@ -97,18 +96,20 @@ func (c *Config) URLDiscoveryNamespaces() []string {
 		return []string{defaultURLDiscoveryNamespace}
 	}
 	out := make([]string, 0, len(c.AllowedNamespaces))
-	seen := make(map[string]struct{}, len(c.AllowedNamespaces))
+	seen := sets.New[string]()
 	for _, ns := range c.AllowedNamespaces {
-		if trimmed := strings.TrimSpace(ns); trimmed != "" {
-			if trimmed == DiscoveryAllNamespacesWildcard {
-				return []string{DiscoveryAllNamespacesWildcard}
-			}
-			if _, dup := seen[trimmed]; dup {
-				continue
-			}
-			seen[trimmed] = struct{}{}
-			out = append(out, trimmed)
+		trimmed := strings.TrimSpace(ns)
+		if trimmed == "" {
+			continue
 		}
+		if trimmed == DiscoveryAllNamespacesWildcard {
+			return []string{DiscoveryAllNamespacesWildcard}
+		}
+		if seen.Has(trimmed) {
+			continue
+		}
+		seen.Insert(trimmed)
+		out = append(out, trimmed)
 	}
 	if len(out) == 0 {
 		return []string{defaultURLDiscoveryNamespace}
