@@ -22,14 +22,14 @@ func init() {
 type Config struct {
 	// AuthMode controls where the bearer token is obtained for authenticating against Loki endpoints.
 	// Valid values: "header" (default), "kubeconfig".
-	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
+	AuthMode auth.AuthMode `toml:"auth_mode,omitempty" configLog:"value"`
 
 	// LokiURL is the URL of the Loki API endpoint.
-	LokiURL string `toml:"loki_url,omitempty"`
+	LokiURL string `toml:"loki_url,omitempty" configLog:"url"`
 
 	// Insecure is retained for configuration compatibility but rejected when a client is created.
 	// Configure a trusted CA instead of disabling certificate verification.
-	Insecure bool `toml:"insecure,omitempty"`
+	Insecure bool `toml:"insecure,omitempty" configLog:"value"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering LokiStack endpoints.
 	//
@@ -37,7 +37,7 @@ type Config struct {
 	// automatically during TOML parse and Validate (before handlers run). Prefer
 	// setting Resolver directly for custom discovery; UseRoute remains for
 	// backward-compatible TOML/flag parsing.
-	UseRoute bool `toml:"use_route,omitempty"`
+	UseRoute bool `toml:"use_route,omitempty" configLog:"value"`
 
 	// Resolver performs cluster-based endpoint discovery (e.g., OpenShift Routes).
 	// When nil, in-cluster service DNS is used. Not exposed in TOML; set programmatically

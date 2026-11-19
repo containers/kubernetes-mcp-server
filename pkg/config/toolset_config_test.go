@@ -26,9 +26,10 @@ func (s *ToolsetConfigSuite) TearDownTest() {
 }
 
 type ToolsetConfigForTest struct {
-	Enabled  bool   `toml:"enabled"`
-	Endpoint string `toml:"endpoint"`
-	Timeout  int    `toml:"timeout"`
+	Enabled  bool   `toml:"enabled" configLog:"value"`
+	Endpoint string `toml:"endpoint" configLog:"url"`
+	Timeout  int    `toml:"timeout" configLog:"value"`
+	Token    string `toml:"token"`
 }
 
 var _ ExtendedConfig = (*ToolsetConfigForTest)(nil)

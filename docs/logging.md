@@ -24,6 +24,11 @@ kubernetes-mcp-server --config /path/to/config.toml
 
 **Note for stdio mode:** server-side diagnostic logs are silenced by default under the STDIO transport because stdout is the MCP protocol channel. Set `log_file` to a path on disk, or to the special value `stderr` (the [MCP spec](https://modelcontextprotocol.io/specification/draft/basic/transports#stdio) permits stderr in stdio mode), to recover them.
 
+At level 1, startup and configuration reloads log resolved configuration options. Built-in
+toolset settings are listed by their TOML path. Endpoint URLs in those settings show only the
+scheme and host. Extension fields are included only when their definition explicitly opts in
+with a `configLog:"value"` or `configLog:"url"` tag.
+
 ### Verbosity Reference
 
 | Level | What is logged |

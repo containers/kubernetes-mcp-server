@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1273,6 +1275,9 @@ func equalExtendedMaps(a, b map[string]ExtendedConfig) bool {
 // failure (startup and SIGHUP). Pass nil prev at startup.
 func (cfg *Config) Dump(ctx context.Context, prev *Config) {
 	logger := klogutil.FromContext(ctx).V(1)
+	if !logger.Enabled() {
+		return
+	}
 	prevs := map[string]option{}
 	if prev != nil {
 		prevs = optionsByPath(prev)
@@ -1296,8 +1301,8 @@ func (cfg *Config) dumpExtended(logger interface{ Info(string, ...any) }, name s
 		src = SourceDefault
 	}
 	keys := []any{"option", name, "value", describeExtended(parsed, src)}
+	var prevParsed map[string]ExtendedConfig
 	if prev != nil {
-		var prevParsed map[string]ExtendedConfig
 		var prevSrc Source
 		if name == extensionToolsetTable {
 			prevParsed = prev.parsedToolsetConfigs
@@ -1314,6 +1319,17 @@ func (cfg *Config) dumpExtended(logger interface{ Info(string, ...any) }, name s
 		}
 	}
 	logger.Info("config option", keys...)
+
+	values := extendedLogValues(name, parsed)
+	previous := extendedLogValues(name, prevParsed)
+	for _, path := range slices.Sorted(maps.Keys(values)) {
+		value := values[path]
+		keys := []any{"option", path, "value", value}
+		if old, ok := previous[path]; ok && old != value {
+			keys = append(keys, "changed", true, "previous", old)
+		}
+		logger.Info("config option", keys...)
+	}
 }
 
 func describeExtended(parsed map[string]ExtendedConfig, src Source) string {
