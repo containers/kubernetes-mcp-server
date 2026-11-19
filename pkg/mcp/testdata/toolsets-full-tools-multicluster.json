@@ -3,6 +3,51 @@
     "_meta": {
       "io.kubernetes-mcp-server/rbac": {
         "unbounded": {
+          "reason": "requires Kubernetes OpenAPI v3 non-resource URL access; current RBAC metadata cannot express non-resource URLs"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "API Resources: Explain Schema"
+    },
+    "description": "Explain one Kubernetes kind's live OpenAPI v3 schema, without reading instances or CRD objects. apiVersion is optional for a unique kind with complete discovery; incomplete discovery requires an explicit apiVersion, and ambiguity returns candidates. Returns full descriptions and validation rules when they fit 24 KiB; otherwise at most three coarse branches are visibly marked x-mcp-omitted with path-based explanations and expand arguments. A compacted response is successful but complete=false. Expand only branches needed for the task via fieldPath. Field queries include ancestor validation context; OpenAPI does not cover all admission/controller behaviour.",
+    "inputSchema": {
+      "properties": {
+        "apiVersion": {
+          "description": "Optional served group/version, such as apps/v1 (core: v1). Required for ambiguity or incomplete discovery; otherwise uses the unique kind's preferred version",
+          "type": "string"
+        },
+        "context": {
+          "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
+          "type": "string"
+        },
+        "fieldPath": {
+          "description": "Optional dot-separated property path; traverses arrays and map values implicitly, e.g. spec.template.spec.containers.image. Use omissions[].expand arguments to inspect a collapsed branch",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "kind": {
+          "description": "Exact Kubernetes kind to explain",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "name": "api_resources_explain",
+    "title": "API Resources: Explain Schema"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
           "reason": "requires Kubernetes API discovery non-resource URL access across all API groups; current RBAC metadata cannot express non-resource URLs"
         },
         "version": "v1alpha1"
@@ -13,28 +58,41 @@
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
-      "title": "API Resources: List by Kind"
+      "title": "API Resources: List"
     },
-    "description": "Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.",
+    "description": "Discover available Kubernetes API types, not instances. With no arguments, returns preferred types with root-description summaries; start unfiltered when terminology is uncertain. Optional exact kind, group and apiVersion filters and a literal substring query narrow results. The server pages by bytes: if continue is present, pass it with the same filters to retrieve remaining types. Use api_resources_explain to inspect a type's live schema.",
     "inputSchema": {
       "properties": {
+        "apiVersion": {
+          "description": "Optional exact apiVersion filter, such as apps/v1",
+          "type": "string"
+        },
         "context": {
           "description": "Optional parameter selecting which context to run the tool in. Defaults to fake-context if not set",
           "type": "string"
         },
+        "continue": {
+          "description": "Opaque continuation returned by the previous call; reuse the same filters, restart without this token if discovery changes",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "group": {
+          "description": "Optional exact API group filter; an explicit empty string selects the core group",
+          "type": "string"
+        },
         "kind": {
-          "description": "Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.",
-          "minLength": 1,
+          "description": "Optional case-insensitive exact kind filter; matches across API groups",
+          "type": "string"
+        },
+        "query": {
+          "description": "Optional case-insensitive literal substring over kind, plural resource name and API group only; does not search descriptions or aliases. No regex. Start unfiltered if terminology is uncertain",
           "type": "string"
         }
       },
-      "required": [
-        "kind"
-      ],
       "type": "object"
     },
     "name": "api_resources_list",
-    "title": "API Resources: List by Kind"
+    "title": "API Resources: List"
   },
   {
     "_meta": {

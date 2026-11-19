@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/openapi"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
@@ -31,6 +32,10 @@ type apiResourcesListDiscovery struct {
 
 func (d apiResourcesListDiscovery) ServerPreferredResourcesWithContext(context.Context) ([]*metav1.APIResourceList, error) {
 	return d.resources, d.err
+}
+
+func (d apiResourcesListDiscovery) OpenAPIV3WithContext(context.Context) openapi.ClientWithContext {
+	return nil
 }
 
 type apiResourcesListKubernetesClient struct {
@@ -57,7 +62,6 @@ func TestAPIResourcesListValidation(t *testing.T) {
 		args map[string]any
 		want string
 	}{
-		{name: "missing kind", args: map[string]any{}, want: "kind parameter required"},
 		{name: "wrong kind type", args: map[string]any{"kind": 123}, want: "kind parameter must be a string"},
 		{name: "empty kind", args: map[string]any{"kind": "   "}, want: "kind parameter must not be empty"},
 	}
@@ -111,7 +115,12 @@ func TestAPIResourcesListDiscoveryResults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			raw := apiResourcesListDiscovery{resources: tt.discovered, err: tt.discoveryErr}
+			raw := &apiResourcesTestDiscovery{
+				apiResourcesListDiscovery: apiResourcesListDiscovery{resources: tt.discovered, err: tt.discoveryErr},
+				openAPIV3: apiResourcesTestOpenAPIV3Client{document: map[string]any{"components": map[string]any{"schemas": map[string]any{
+					"Pod": map[string]any{"description": "A group of containers.", "x-kubernetes-group-version-kind": []any{map[string]any{"group": "", "version": "v1", "kind": "Pod"}}},
+				}}}},
+			}
 			client := apiResourcesListKubernetesClient{discovery: raw}
 			result, err := apiResourcesList(apiResourcesListParams(config.New(), client, map[string]any{"kind": "pod"}))
 			if err != nil {
@@ -146,19 +155,18 @@ func TestAPIResourcesListDiscoveryResults(t *testing.T) {
 	}
 }
 
-func TestFilterDeniedAPIResources(t *testing.T) {
-	resources := []kubernetes.APIResourceInfo{
-		{APIVersion: "v1", Kind: "Pod", Name: "pods"},
-		{APIVersion: "v1", Kind: "Secret", Name: "secrets"},
-		{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Name: "roles"},
-	}
+func TestAPIResourcesListDeniedPolicies(t *testing.T) {
+	discovery := apiResourcesListDiscovery{resources: []*metav1.APIResourceList{
+		{GroupVersion: "v1", APIResources: []metav1.APIResource{{Name: "pods", Kind: "Pod"}, {Name: "secrets", Kind: "Secret"}}},
+		{GroupVersion: "rbac.authorization.k8s.io/v1", APIResources: []metav1.APIResource{{Name: "roles", Kind: "Role"}}},
+	}}
 
 	tests := []struct {
 		name   string
 		denied []config.GroupVersionKind
 		want   []string
 	}{
-		{name: "no denials", want: []string{"Pod", "Secret", "Role"}},
+		{name: "no denials", want: []string{"Role", "Pod", "Secret"}},
 		{
 			name: "exact and group-wide denials",
 			denied: []config.GroupVersionKind{
@@ -171,7 +179,13 @@ func TestFilterDeniedAPIResources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filtered := filterDeniedAPIResources(context.Background(), resources, tt.denied)
+			cfg := config.BaseDefault()
+			cfg.DeniedResources.SetForTest(tt.denied)
+			result, err := apiResourcesList(apiResourcesListParams(cfg, apiResourcesListKubernetesClient{discovery: discovery}, map[string]any{}))
+			if err != nil || result.Error != nil {
+				t.Fatalf("unexpected discovery failure: %v / %v", err, result.Error)
+			}
+			filtered := result.StructuredContent.(kubernetes.APIResourcePage).Resources
 			if len(filtered) != len(tt.want) {
 				t.Fatalf("expected kinds %v, got %#v", tt.want, filtered)
 			}

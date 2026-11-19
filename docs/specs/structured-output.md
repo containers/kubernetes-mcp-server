@@ -207,6 +207,19 @@ leave `StructuredContent` nil. Do **not** pass an empty slice / map / struct;
 a typed nil leaking into the `any` interface would create a non-nil interface
 value, which is a footgun for downstream nil checks.
 
+## Explicit structured errors
+
+When a tool returns an error with non-empty `Content` and non-nil
+`StructuredContent`, both representations are retained with `isError: true`.
+Use `NewToolCallResultStructured(payload, err)` when recovery details must also
+reach text-only clients, as in [API discovery](api-discovery.md#errors-authorization-and-compatibility).
+Leave `Content` empty to use the error message as text alongside the structured
+payload.
+
+`max_result_bytes` counts the emitted text plus JSON-encoded structured content,
+including on errors. Multi-content errors emit only the error message; their
+supplied blocks and structured payload are discarded and do not count.
+
 ## Kubernetes error status
 
 When a core resource tool (`resources_get`, `resources_list`,

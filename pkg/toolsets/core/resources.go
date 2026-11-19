@@ -14,8 +14,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcpapps"
 	"github.com/containers/kubernetes-mcp-server/pkg/output"
@@ -237,20 +235,35 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 		}), Handler: resourcesScale},
 		{Tool: api.Tool{
 			Name:        "api_resources_list",
-			Description: "Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.",
+			Description: "Discover available Kubernetes API types, not instances. With no arguments, returns preferred types with root-description summaries; start unfiltered when terminology is uncertain. Optional exact kind, group and apiVersion filters and a literal substring query narrow results. The server pages by bytes: if continue is present, pass it with the same filters to retrieve remaining types. Use api_resources_explain to inspect a type's live schema.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
+					"group": {
+						Type:        "string",
+						Description: "Optional exact API group filter; an explicit empty string selects the core group",
+					},
+					"apiVersion": {
+						Type:        "string",
+						Description: "Optional exact apiVersion filter, such as apps/v1",
+					},
 					"kind": {
 						Type:        "string",
-						MinLength:   ptr.To(1),
-						Description: "Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.",
+						Description: "Optional case-insensitive exact kind filter; matches across API groups",
+					},
+					"query": {
+						Type:        "string",
+						Description: "Optional case-insensitive literal substring over kind, plural resource name and API group only; does not search descriptions or aliases. No regex. Start unfiltered if terminology is uncertain",
+					},
+					"continue": {
+						Type:        "string",
+						MaxLength:   ptr.To(512),
+						Description: "Opaque continuation returned by the previous call; reuse the same filters, restart without this token if discovery changes",
 					},
 				},
-				Required: []string{"kind"},
 			},
 			Annotations: api.ToolAnnotations{
-				Title:           "API Resources: List by Kind",
+				Title:           "API Resources: List",
 				ReadOnlyHint:    ptr.To(true),
 				DestructiveHint: ptr.To(false),
 				IdempotentHint:  ptr.To(true),
@@ -259,6 +272,38 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 		}, RBAC: api.RBACUnbounded(
 			"requires Kubernetes API discovery non-resource URL access across all API groups; current RBAC metadata cannot express non-resource URLs",
 		), Handler: apiResourcesList},
+		{Tool: api.Tool{
+			Name:        "api_resources_explain",
+			Description: "Explain one Kubernetes kind's live OpenAPI v3 schema, without reading instances or CRD objects. apiVersion is optional for a unique kind with complete discovery; incomplete discovery requires an explicit apiVersion, and ambiguity returns candidates. Returns full descriptions and validation rules when they fit 24 KiB; otherwise at most three coarse branches are visibly marked x-mcp-omitted with path-based explanations and expand arguments. A compacted response is successful but complete=false. Expand only branches needed for the task via fieldPath. Field queries include ancestor validation context; OpenAPI does not cover all admission/controller behaviour.",
+			InputSchema: &jsonschema.Schema{
+				Type: "object",
+				Properties: map[string]*jsonschema.Schema{
+					"apiVersion": {
+						Type:        "string",
+						Description: "Optional served group/version, such as apps/v1 (core: v1). Required for ambiguity or incomplete discovery; otherwise uses the unique kind's preferred version",
+					},
+					"kind": {
+						Type:        "string",
+						Description: "Exact Kubernetes kind to explain",
+					},
+					"fieldPath": {
+						Type:        "string",
+						MaxLength:   ptr.To(512),
+						Description: "Optional dot-separated property path; traverses arrays and map values implicitly, e.g. spec.template.spec.containers.image. Use omissions[].expand arguments to inspect a collapsed branch",
+					},
+				},
+				Required: []string{"kind"},
+			},
+			Annotations: api.ToolAnnotations{
+				Title:           "API Resources: Explain Schema",
+				ReadOnlyHint:    ptr.To(true),
+				DestructiveHint: ptr.To(false),
+				IdempotentHint:  ptr.To(true),
+				OpenWorldHint:   ptr.To(true),
+			},
+		}, RBAC: api.RBACUnbounded(
+			"requires Kubernetes OpenAPI v3 non-resource URL access; current RBAC metadata cannot express non-resource URLs",
+		), Handler: apiResourcesExplain},
 	}
 }
 
@@ -266,60 +311,69 @@ func initResources(ctx context.Context, inspector api.ClusterInspector, targetCo
 // returning a bare slice) per the MCP spec's requirement that
 // structuredContent be a JSON object, and carries a warning when discovery
 // returned partial results instead of silently dropping them.
-type apiResourcesListResult struct {
-	Resources []kubernetes.APIResourceInfo `json:"resources"`
-	Warning   string                       `json:"warning,omitempty"`
+type apiResourcesListResult = kubernetes.APIResourcePage
+
+func discoveryToolError(err error) *api.ToolCallResult {
+	var detail *kubernetes.APIDiscoveryError
+	if !errors.As(err, &detail) {
+		detail = &kubernetes.APIDiscoveryError{Code: "discovery_failed", Message: err.Error()}
+	}
+	return api.NewToolCallResultStructured(map[string]any{"error": detail}, err)
 }
 
-func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	p := api.WrapParams(params)
-	kindFilter := strings.TrimSpace(p.RequiredString("kind"))
-	if err := p.Err(); err != nil {
-		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
+func discoveryStrings(params api.ToolHandlerParams, names ...string) (map[string]string, error) {
+	values := map[string]string{}
+	for _, name := range names {
+		if value, present := params.GetArguments()[name]; present {
+			parsed, ok := value.(string)
+			if !ok {
+				return nil, &kubernetes.APIDiscoveryError{Code: "invalid_argument", Message: fmt.Sprintf("%s parameter must be a string", name)}
+			}
+			if strings.TrimSpace(parsed) == "" && name == "kind" {
+				return nil, &kubernetes.APIDiscoveryError{Code: "invalid_argument", Message: "kind parameter must not be empty"}
+			}
+			values[name] = strings.TrimSpace(parsed)
+		}
 	}
-	if kindFilter == "" {
-		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: kind parameter must not be empty")), nil
+	return values, nil
+}
+
+func apiResourcesExplain(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	values, err := discoveryStrings(params, "kind", "apiVersion", "fieldPath")
+	if err != nil {
+		return discoveryToolError(err), nil
+	}
+	if values["kind"] == "" {
+		return discoveryToolError(&kubernetes.APIDiscoveryError{Code: "invalid_argument", Message: "kind parameter required"}), nil
 	}
 	if params.Config == nil {
-		return api.NewToolCallResultStructured(nil, errors.New("failed to list API resources: config cannot be nil")), nil
+		return discoveryToolError(errors.New("config cannot be nil")), nil
 	}
-
-	resources, err := kubernetes.NewCore(params).APIResourcesList(params.Context, kindFilter)
-	if err != nil && len(resources) == 0 {
-		return api.NewToolCallResultStructured(nil, fmt.Errorf("failed to list API resources: %w", err)), nil
-	}
-	resources = filterDeniedAPIResources(params.Context, resources, params.Config.DeniedResources.Get())
-
-	result := apiResourcesListResult{Resources: resources}
+	result, err := kubernetes.NewCore(params).APIResourceExplain(params.Context, values["apiVersion"], values["kind"], values["fieldPath"], params.Config.DeniedResources.Get())
 	if err != nil {
-		// Partial discovery failure (e.g. one API group unavailable): still
-		// return what was found instead of discarding it -- see
-		// kubernetes.Core.APIResourcesList's doc comment.
-		result.Warning = fmt.Sprintf("some API groups could not be queried and are omitted from this list: %v", err)
+		return discoveryToolError(err), nil
 	}
 	return api.NewToolCallResultStructured(result, nil), nil
 }
 
-func filterDeniedAPIResources(ctx context.Context, resources []kubernetes.APIResourceInfo, denied []config.GroupVersionKind) []kubernetes.APIResourceInfo {
-	if len(denied) == 0 {
-		return resources
+func apiResourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	values, err := discoveryStrings(params, "kind", "apiVersion", "group", "query", "continue")
+	if err != nil {
+		return discoveryToolError(err), nil
+	}
+	if params.Config == nil {
+		return discoveryToolError(errors.New("config cannot be nil")), nil
 	}
 
-	filtered := make([]kubernetes.APIResourceInfo, 0, len(resources))
-	for _, resource := range resources {
-		if config.IsDeniedResource(resource.APIVersion, resource.Kind, denied) {
-			klogutil.LogInfo(
-				klogutil.FromContext(ctx).V(4),
-				"Omitting denied API resource from discovery",
-				klogutil.Field("apiVersion", resource.APIVersion),
-				klogutil.Field("kind", resource.Kind),
-				klogutil.Field("resource", resource.Name),
-			)
-			continue
-		}
-		filtered = append(filtered, resource)
+	options := kubernetes.APIResourceListOptions{Kind: values["kind"], APIVersion: values["apiVersion"], Query: values["query"], Continue: values["continue"], Denied: params.Config.DeniedResources.Get()}
+	if group, present := values["group"]; present {
+		options.Group = &group
 	}
-	return filtered
+	result, err := kubernetes.NewCore(params).APIResourceInventory(params.Context, options)
+	if err != nil {
+		return discoveryToolError(err), nil
+	}
+	return api.NewToolCallResultStructured(result, nil), nil
 }
 
 func resourcesList(params api.ToolHandlerParams) (*api.ToolCallResult, error) {

@@ -1356,19 +1356,54 @@ type apiResourcesListToolResult struct {
 	Warning   string             `json:"warning,omitempty"`
 }
 
+func (s *ResourcesSuite) TestAPIResourcesExplainWireContract() {
+	s.InitMcpClient()
+	s.Run("narrow schema succeeds with canonical kind and implicit array traversal", func() {
+		result, err := s.CallTool("api_resources_explain", map[string]interface{}{
+			"kind": "pod", "apiVersion": "v1", "fieldPath": "spec.containers.image",
+		})
+		s.Require().NoError(err)
+		s.Require().False(result.IsError)
+		data := result.StructuredContent.(map[string]interface{})
+		s.Equal("Pod", data["kind"])
+		s.Equal(true, data["complete"])
+		s.Equal("string", data["schema"].(map[string]interface{})["type"])
+	})
+	s.Run("misspelled fields retain structured and text recovery choices", func() {
+		result, err := s.CallTool("api_resources_explain", map[string]interface{}{
+			"kind": "Pod", "apiVersion": "v1", "fieldPath": "spec.containres",
+		})
+		s.Require().NoError(err)
+		s.Require().True(result.IsError)
+		data := result.StructuredContent.(map[string]interface{})
+		detail := data["error"].(map[string]interface{})
+		s.Equal("unknown_field", detail["code"])
+		s.Contains(detail["message"], "spec.containers")
+		s.Contains(detail["fields"], "containers")
+		var text map[string]interface{}
+		s.Require().NoError(json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &text))
+		s.Equal(data, text)
+	})
+	s.Run("ambiguous kind requires explicit apiVersion", func() {
+		result, err := s.CallTool("api_resources_explain", map[string]interface{}{"kind": "Event"})
+		s.Require().NoError(err)
+		s.Require().True(result.IsError)
+		detail := result.StructuredContent.(map[string]interface{})["error"].(map[string]interface{})
+		s.Equal("ambiguous_kind", detail["code"])
+		s.GreaterOrEqual(len(detail["candidates"].([]interface{})), 2)
+	})
+}
+
 func (s *ResourcesSuite) TestAPIResourcesList() {
 	s.InitMcpClient()
-	s.Run("api_resources_list without a kind filter returns an error", func() {
-		// kind is mandatory: an unfiltered call would dump every API resource
-		// type on the cluster (core kinds plus every CRD from every installed
-		// operator/service mesh) into the LLM's context, which is both a token
-		// cost and a source of confusion when the model already knows which
-		// kind it's after. Forcing a filter keeps this a targeted lookup.
+	s.Run("api_resources_list without a kind filter returns a bounded inventory", func() {
 		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{})
-		s.Nilf(err, "call tool failed %v", err)
-		s.Truef(toolResult.IsError, "expected an error when kind is omitted, got: %v", toolResult.Content)
-		s.Containsf(toolResult.Content[0].(*mcp.TextContent).Text, "kind",
-			"error message should mention the missing kind parameter, got: %v", toolResult.Content[0].(*mcp.TextContent).Text)
+		s.Require().NoError(err)
+		s.False(toolResult.IsError)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.LessOrEqual(len(text), 16*1024)
+		s.Contains(text, `"resources":`)
+		s.Contains(text, `"remaining":`)
 	})
 	s.Run("api_resources_list with an empty kind filter returns an error", func() {
 		toolResult, err := s.CallTool("api_resources_list", map[string]interface{}{"kind": ""})

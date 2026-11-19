@@ -791,6 +791,8 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 // NewStructuredResult creates an MCP CallToolResult with structured content.
 // The Content field contains the JSON-serialized form of structuredContent
 // for backward compatibility with MCP clients that don't support structuredContent.
+// Errors retain explicitly supplied text and structured content together;
+// otherwise the error message is used as text.
 //
 // Per the MCP specification, structuredContent must marshal to a JSON object.
 // If structuredContent is a slice/array, it is automatically wrapped in
@@ -804,7 +806,7 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 // Use this for tools that return typed/structured data that MCP clients can
 // parse programmatically.
 func NewStructuredResult(content string, structuredContent any, err error) *mcp.CallToolResult {
-	if err != nil {
+	if err != nil && (structuredContent == nil || content == "") {
 		return &mcp.CallToolResult{
 			IsError: true,
 			Content: []mcp.Content{
@@ -815,6 +817,7 @@ func NewStructuredResult(content string, structuredContent any, err error) *mcp.
 		}
 	}
 	result := &mcp.CallToolResult{
+		IsError: err != nil,
 		Content: []mcp.Content{
 			&mcp.TextContent{
 				Text: content,
