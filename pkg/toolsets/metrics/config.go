@@ -19,40 +19,40 @@ type Config struct {
 	// against Prometheus and Alertmanager endpoints.
 	// Valid values: "header" (default) - read from the request context authorization header,
 	//              "kubeconfig" - read from the kubeconfig/REST config.
-	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
+	AuthMode auth.AuthMode `toml:"auth_mode,omitempty" configLog:"value"`
 	// PrometheusURL is the URL of the Prometheus/Thanos Querier endpoint.
 	// This field is required. Example: "https://thanos-querier-openshift-monitoring.apps.example.com"
-	PrometheusURL string `toml:"prometheus_url,omitempty"`
+	PrometheusURL string `toml:"prometheus_url,omitempty" configLog:"url"`
 
 	// AlertmanagerURL is the URL of the Alertmanager endpoint.
 	// This field is optional. Example: "https://alertmanager-main-openshift-monitoring.apps.example.com"
-	AlertmanagerURL string `toml:"alertmanager_url,omitempty"`
+	AlertmanagerURL string `toml:"alertmanager_url,omitempty" configLog:"url"`
 
 	// Insecure is retained for configuration compatibility but rejected when a client is created.
 	// Configure a trusted CA instead of disabling certificate verification.
-	Insecure bool `toml:"insecure,omitempty"`
+	Insecure bool `toml:"insecure,omitempty" configLog:"value"`
 
 	// Guardrails controls which query safety checks are enabled.
 	// Valid values: "all" (default), "none", or comma-separated list of:
 	//   - "disallow-explicit-name-label"
 	//   - "require-label-matcher"
 	//   - "disallow-blanket-regex"
-	Guardrails string `toml:"guardrails,omitempty"`
+	Guardrails string `toml:"guardrails,omitempty" configLog:"value"`
 
 	// MaxMetricCardinality is the maximum allowed series count per metric.
 	// When unset, the default of 20000 is used.
-	MaxMetricCardinality *uint64 `toml:"max_metric_cardinality,omitempty"`
+	MaxMetricCardinality *uint64 `toml:"max_metric_cardinality,omitempty" configLog:"value"`
 
 	// MaxLabelCardinality is the maximum allowed label value count for blanket regex.
 	// Only takes effect if disallow-blanket-regex is enabled.
 	// When unset, the default of 500 is used.
 	// Set to 0 to always disallow blanket regex regardless of cardinality.
-	MaxLabelCardinality *uint64 `toml:"max_label_cardinality,omitempty"`
+	MaxLabelCardinality *uint64 `toml:"max_label_cardinality,omitempty" configLog:"value"`
 
 	// RangeQueryFullResponse controls whether range queries return full data points
 	// instead of summary statistics.
 	// Default: false (return summary statistics)
-	RangeQueryFullResponse bool `toml:"range_query_full_response,omitempty"`
+	RangeQueryFullResponse bool `toml:"range_query_full_response,omitempty" configLog:"value"`
 }
 
 var _ serverconfig.ExtendedConfig = (*Config)(nil)

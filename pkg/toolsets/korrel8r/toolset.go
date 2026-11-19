@@ -44,10 +44,10 @@ const defaultTimeout = 2 * time.Minute
 
 // Config selects the Korrel8r REST server, authentication source and request timeout.
 type Config struct {
-	URL      string        `toml:"url"`
-	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
+	URL      string        `toml:"url" configLog:"url"`
+	AuthMode auth.AuthMode `toml:"auth_mode,omitempty" configLog:"value"`
 	// Timeout bounds a single REST call, e.g. "5m". Defaults to defaultTimeout.
-	Timeout time.Duration `toml:"timeout,omitempty"`
+	Timeout time.Duration `toml:"timeout,omitempty" configLog:"value"`
 }
 
 func (c *Config) getAuthMode() auth.AuthMode {

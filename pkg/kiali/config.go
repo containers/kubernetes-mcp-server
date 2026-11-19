@@ -23,13 +23,13 @@ const (
 
 // Config holds Kiali toolset configuration
 type Config struct {
-	Url                  string `toml:"url"`
-	Insecure             bool   `toml:"insecure,omitempty"`
-	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	Url                  string `toml:"url" configLog:"url"`
+	Insecure             bool   `toml:"insecure,omitempty" configLog:"value"`
+	CertificateAuthority string `toml:"certificate_authority,omitempty" configLog:"value"`
 	// AllowedNamespaces limits in-cluster URL autodiscovery (Kiali CR list and
 	// well-known kiali.<namespace>.svc DNS probes) to these namespaces. Defaults
 	// to istio-system when unset. Use "**" alone for cluster-wide discovery.
-	AllowedNamespaces []string `toml:"allowed_namespaces,omitempty"`
+	AllowedNamespaces []string `toml:"allowed_namespaces,omitempty" configLog:"value"`
 }
 
 var (
