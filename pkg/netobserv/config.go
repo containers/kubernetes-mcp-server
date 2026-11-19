@@ -17,17 +17,17 @@ import (
 // Config holds NetObserv console plugin backend configuration.
 type Config struct {
 	// Url overrides the plugin base URL. When empty, built from namespace, service, and port.
-	Url                  string `toml:"url,omitempty"`
-	Namespace            string `toml:"namespace,omitempty"`
-	Service              string `toml:"service,omitempty"`
-	Port                 int    `toml:"port,omitempty"`
-	Insecure             bool   `toml:"insecure,omitempty"`
-	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	Url                  string `toml:"url,omitempty" configLog:"url"`
+	Namespace            string `toml:"namespace,omitempty" configLog:"value"`
+	Service              string `toml:"service,omitempty" configLog:"value"`
+	Port                 int    `toml:"port,omitempty" configLog:"value"`
+	Insecure             bool   `toml:"insecure,omitempty" configLog:"value"`
+	CertificateAuthority string `toml:"certificate_authority,omitempty" configLog:"value"`
 	// Backend settings are used when FlowCollector autodetection is unavailable.
-	LokiEnabled       *bool  `toml:"loki_enabled,omitempty"`
-	LokiMode          string `toml:"loki_mode,omitempty"`
-	PrometheusEnabled *bool  `toml:"prometheus_enabled,omitempty"`
-	PrometheusMode    string `toml:"prometheus_mode,omitempty"`
+	LokiEnabled       *bool  `toml:"loki_enabled,omitempty" configLog:"value"`
+	LokiMode          string `toml:"loki_mode,omitempty" configLog:"value"`
+	PrometheusEnabled *bool  `toml:"prometheus_enabled,omitempty" configLog:"value"`
+	PrometheusMode    string `toml:"prometheus_mode,omitempty" configLog:"value"`
 }
 
 // ToolsetConfigKey is the stable configuration key, independent of any toolset name override.

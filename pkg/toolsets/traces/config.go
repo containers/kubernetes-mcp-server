@@ -22,15 +22,15 @@ func init() {
 type Config struct {
 	// AuthMode controls where the bearer token is obtained for authenticating against Tempo endpoints.
 	// Valid values: "header" (default), "kubeconfig".
-	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
+	AuthMode auth.AuthMode `toml:"auth_mode,omitempty" configLog:"value"`
 
 	// Insecure is retained for configuration compatibility but rejected when a client is created.
 	// Configure a trusted CA instead of disabling certificate verification.
-	Insecure bool `toml:"insecure,omitempty"`
+	Insecure bool `toml:"insecure,omitempty" configLog:"value"`
 
 	// TempoURL is the URL of the Tempo API endpoint.
 	// When set, it is used directly instead of discovering Tempo instances via Kubernetes.
-	TempoURL string `toml:"tempo_url,omitempty"`
+	TempoURL string `toml:"tempo_url,omitempty" configLog:"url"`
 
 	// UseRoute controls whether to use OpenShift Routes for discovering Tempo endpoints.
 	//
@@ -38,7 +38,7 @@ type Config struct {
 	// automatically during TOML parse and Validate (before handlers run). Prefer
 	// setting Resolver directly for custom discovery; UseRoute remains for
 	// backward-compatible TOML/flag parsing.
-	UseRoute bool `toml:"use_route,omitempty"`
+	UseRoute bool `toml:"use_route,omitempty" configLog:"value"`
 
 	// Resolver performs cluster-based endpoint discovery (e.g., OpenShift Routes).
 	// When nil, plain service DNS is used. Not exposed in TOML; set programmatically
