@@ -11,6 +11,14 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/validation"
+)
+
+const (
+	defaultURLDiscoveryNamespace = "istio-system"
+	// DiscoveryAllNamespacesWildcard enables cluster-wide Kiali CR listing.
+	DiscoveryAllNamespacesWildcard = "**"
 )
 
 // Config holds Kiali toolset configuration
@@ -18,6 +26,10 @@ type Config struct {
 	Url                  string `toml:"url"`
 	Insecure             bool   `toml:"insecure,omitempty"`
 	CertificateAuthority string `toml:"certificate_authority,omitempty"`
+	// AllowedNamespaces limits in-cluster URL autodiscovery (Kiali CR list and
+	// well-known kiali.<namespace>.svc DNS probes) to these namespaces. Defaults
+	// to istio-system when unset. Use "**" alone for cluster-wide discovery.
+	AllowedNamespaces []string `toml:"allowed_namespaces,omitempty"`
 }
 
 var (
@@ -37,7 +49,7 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
 			}
 		}
-		return nil
+		return c.validateAllowedNamespaces()
 	}
 	if u, err := url.Parse(c.Url); err != nil || u.Scheme == "" || u.Host == "" {
 		return errors.New("url must be a valid URL")
@@ -52,7 +64,60 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("certificate_authority must be a valid file path: %w", err)
 		}
 	}
+	return c.validateAllowedNamespaces()
+}
+
+// validateAllowedNamespaces trims, rejects empties, deduplicates preserving
+// first-occurrence order, and writes the canonical allowlist onto c.
+// Unset/empty becomes [defaultURLDiscoveryNamespace]. "**" must stand alone.
+func (c *Config) validateAllowedNamespaces() error {
+	if len(c.AllowedNamespaces) == 0 {
+		c.AllowedNamespaces = []string{defaultURLDiscoveryNamespace}
+		return nil
+	}
+	seen := sets.New[string]()
+	out := make([]string, 0, len(c.AllowedNamespaces))
+	for _, entry := range c.AllowedNamespaces {
+		ns := strings.TrimSpace(entry)
+		if ns == "" {
+			return errors.New("allowed_namespaces entries must not be empty")
+		}
+		if ns == DiscoveryAllNamespacesWildcard {
+			seen.Insert(ns)
+			continue
+		}
+		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
+			return fmt.Errorf("allowed_namespaces entry %q is not a valid namespace name: %s", ns, strings.Join(errs, ", "))
+		}
+		if seen.Has(ns) {
+			continue
+		}
+		seen.Insert(ns)
+		out = append(out, ns)
+	}
+	if seen.Has(DiscoveryAllNamespacesWildcard) && seen.Len() != 1 {
+		return fmt.Errorf("allowed_namespaces must contain only %q when enabling cluster-wide discovery", DiscoveryAllNamespacesWildcard)
+	}
+	if seen.Has(DiscoveryAllNamespacesWildcard) {
+		c.AllowedNamespaces = []string{DiscoveryAllNamespacesWildcard}
+		return nil
+	}
+	c.AllowedNamespaces = out
 	return nil
+}
+
+// URLDiscoveryNamespaces returns namespaces searched for Kiali CRs and
+// well-known in-cluster Service URLs when url is empty.
+func (c *Config) URLDiscoveryNamespaces() []string {
+	if c == nil || len(c.AllowedNamespaces) == 0 {
+		return []string{defaultURLDiscoveryNamespace}
+	}
+	return c.AllowedNamespaces
+}
+
+// DiscoverAllNamespaces reports whether discovery should list Kiali CRs cluster-wide.
+func DiscoverAllNamespaces(namespaces []string) bool {
+	return len(namespaces) == 1 && namespaces[0] == DiscoveryAllNamespacesWildcard
 }
 
 func (c *Config) ValidateRequireTLS(requireTLS bool) error {

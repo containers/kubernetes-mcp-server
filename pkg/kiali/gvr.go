@@ -75,10 +75,11 @@ func evaluateKialiAvailability(ctx context.Context, cfg *config.Config, inspecto
 
 func discoverInjectAndProbe(ctx context.Context, serverCfg *config.Config, kialiCfg *Config, inspector api.ClusterInspector) bool {
 	token := bearerTokenFromInspector(ctx, inspector)
-	url, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
+	url, crs, ok := discoverAndValidateInternalURL(ctx, inspector, kialiCfg, serverCfg, token)
 	if !ok {
 		requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
-		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(requireTLS), kialiCfg, serverCfg, token)
+		configured := urlDiscoveryNamespaces(kialiCfg)
+		url, ok = probeCandidateURLs(ctx, wellKnownInternalURLs(namespacesForServiceDNSProbe(configured, crs), requireTLS), kialiCfg, serverCfg, token)
 	}
 	if !ok {
 		setDiscoveredURL("")
@@ -132,15 +133,18 @@ func bearerTokenFromInspector(ctx context.Context, inspector api.ClusterInspecto
 	return token
 }
 
-func wellKnownInternalURLs(requireTLS bool) []string {
-	schemes := serviceURLSchemes(requireTLS)
-	hosts := []string{
-		"kiali.istio-system.svc",
-		"kiali.kiali.svc",
-		"kiali.openshift-operators.svc",
+func urlDiscoveryNamespaces(kialiCfg *Config) []string {
+	if kialiCfg == nil {
+		return (&Config{}).URLDiscoveryNamespaces()
 	}
-	out := make([]string, 0, len(hosts)*len(schemes)*2)
-	for _, host := range hosts {
+	return kialiCfg.URLDiscoveryNamespaces()
+}
+
+func wellKnownInternalURLs(namespaces []string, requireTLS bool) []string {
+	schemes := serviceURLSchemes(requireTLS)
+	out := make([]string, 0, len(namespaces)*len(schemes)*2)
+	for _, ns := range namespaces {
+		host := "kiali." + ns + ".svc"
 		for _, scheme := range schemes {
 			base := scheme + "://" + host + ":20001"
 			out = append(out, base, base+"/kiali")

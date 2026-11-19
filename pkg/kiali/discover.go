@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -102,26 +103,10 @@ func kialiFromUnstructured(obj *unstructured.Unstructured) (*KialiCR, error) {
 	return &cr, nil
 }
 
-// listKialiCRs returns all Kiali CRs across namespaces. Returns nil when none exist or on error.
-func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiCR {
-	if inspector == nil {
-		return nil
-	}
-	unstructuredAPI := inspector.Unstructured()
-	if unstructuredAPI == nil {
-		return nil
-	}
-	list, err := unstructuredAPI.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
-	if err != nil {
-		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs", "error", err)
-		return nil
-	}
-	if list == nil || len(list.Items) == 0 {
-		return nil
-	}
-	out := make([]*KialiCR, 0, len(list.Items))
-	for i := range list.Items {
-		cr, err := kialiFromUnstructured(&list.Items[i])
+func kialiCRsFromUnstructuredList(ctx context.Context, items []unstructured.Unstructured) []*KialiCR {
+	out := make([]*KialiCR, 0, len(items))
+	for i := range items {
+		cr, err := kialiFromUnstructured(&items[i])
 		if err != nil {
 			klogutil.FromContext(ctx).V(2).Info("failed to decode Kiali CR", "error", err)
 			continue
@@ -131,12 +116,60 @@ func listKialiCRs(ctx context.Context, inspector api.ClusterInspector) []*KialiC
 	return out
 }
 
+// listKialiCRs returns Kiali CRs in the given namespaces. Returns nil when none exist or on error.
+func listKialiCRs(ctx context.Context, inspector api.ClusterInspector, namespaces []string) []*KialiCR {
+	if inspector == nil || len(namespaces) == 0 {
+		return nil
+	}
+	unstructuredAPI := inspector.Unstructured()
+	if unstructuredAPI == nil {
+		return nil
+	}
+	if DiscoverAllNamespaces(namespaces) {
+		return listKialiCRsClusterWide(ctx, unstructuredAPI)
+	}
+	out := make([]*KialiCR, 0)
+	for _, ns := range namespaces {
+		list, err := unstructuredAPI.Resource(KialiGVR).Namespace(ns).List(ctx, metav1.ListOptions{}).Default()
+		if err != nil {
+			klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs", "namespace", ns, "error", err)
+			continue
+		}
+		if list == nil || len(list.Items) == 0 {
+			continue
+		}
+		out = append(out, kialiCRsFromUnstructuredList(ctx, list.Items)...)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func listKialiCRsClusterWide(ctx context.Context, unstructuredAPI api.AggregateUnstructured) []*KialiCR {
+	list, err := unstructuredAPI.Resource(KialiGVR).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}).Default()
+	if err != nil {
+		klogutil.FromContext(ctx).V(2).Info("failed to list Kiali CRs cluster-wide", "error", err)
+		return nil
+	}
+	if list == nil || len(list.Items) == 0 {
+		return nil
+	}
+	out := kialiCRsFromUnstructuredList(ctx, list.Items)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // discoverAndValidateInternalURL finds a Kiali CR, builds in-cluster Service URL candidates,
 // and returns the first base URL that responds successfully to GET /api/status.
-func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, bool) {
-	crs := listKialiCRs(ctx, inspector)
+// Listed CRs are returned when present so DNS fallback can reuse them without a second list.
+func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterInspector, kialiCfg *Config, serverCfg *config.Config, bearerToken string) (string, []*KialiCR, bool) {
+	namespaces := urlDiscoveryNamespaces(kialiCfg)
+	crs := listKialiCRs(ctx, inspector, namespaces)
 	if len(crs) == 0 {
-		return "", false
+		return "", nil, false
 	}
 
 	requireTLS := serverCfg != nil && serverCfg.RequireTLS.Get()
@@ -147,8 +180,50 @@ func discoverAndValidateInternalURL(ctx context.Context, inspector api.ClusterIn
 	url, ok := probeCandidateURLs(ctx, candidates, kialiCfg, serverCfg, bearerToken)
 	if ok {
 		klogutil.FromContext(ctx).V(1).Info("discovered reachable Kiali URL from CR", "url", url)
-		return url, true
+		return url, crs, true
 	}
 	klogutil.FromContext(ctx).V(1).Info("Kiali CR(s) found but no reachable in-cluster URL")
-	return "", false
+	return "", crs, false
+}
+
+// namespacesForServiceDNSProbe returns the namespace list used for kiali.<ns>.svc
+// fallbacks after CR-based discovery. It matches allowed_namespaces (or the default).
+// With "**", namespaces come from deployment namespaces on crs (same CR list as discovery),
+// not from a cluster Namespace list.
+func namespacesForServiceDNSProbe(configured []string, crs []*KialiCR) []string {
+	if !DiscoverAllNamespaces(configured) {
+		return configured
+	}
+	if len(crs) == 0 {
+		return nil
+	}
+	return deploymentNamespacesFromCRs(crs)
+}
+
+func deploymentNamespacesFromCRs(crs []*KialiCR) []string {
+	seen := sets.New[string]()
+	out := make([]string, 0, len(crs))
+	for _, cr := range crs {
+		ns := deploymentNamespaceFromCR(cr)
+		if ns == "" || seen.Has(ns) {
+			continue
+		}
+		seen.Insert(ns)
+		out = append(out, ns)
+	}
+	return out
+}
+
+func deploymentNamespaceFromCR(cr *KialiCR) string {
+	if cr == nil {
+		return ""
+	}
+	ns := cr.Status.Deployment.Namespace
+	if ns == "" {
+		ns = cr.Spec.Deployment.Namespace
+	}
+	if ns == "" {
+		ns = cr.GetNamespace()
+	}
+	return ns
 }

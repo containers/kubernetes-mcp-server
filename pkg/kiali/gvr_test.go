@@ -348,7 +348,7 @@ func TestHasKiali_DiscoverFromCR(t *testing.T) {
 			"metadata":   map[string]any{"name": "kiali", "namespace": "istio-system"},
 		}}
 		inspector := &mockKialiInspectorWithCRs{crs: []unstructured.Unstructured{*cr}}
-		url, ok := discoverAndValidateInternalURL(context.Background(), inspector, &Config{}, nil, "")
+		url, _, ok := discoverAndValidateInternalURL(context.Background(), inspector, &Config{}, nil, "")
 		if ok || url != "" {
 			t.Fatalf("expected discovery to fail for unreachable in-cluster URL, got %q", url)
 		}

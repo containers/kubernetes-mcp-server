@@ -178,6 +178,54 @@ func (s *ConfigSuite) TestValidate() {
 		cfg := &Config{}
 		err := cfg.Validate()
 		s.NoError(err, "empty URL should be allowed so discovery can fill it in")
+		s.Equal([]string{"istio-system"}, cfg.AllowedNamespaces)
+		s.Equal([]string{"istio-system"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("invalid allowed_namespaces returns error", func() {
+		cfg := &Config{AllowedNamespaces: []string{"not a valid ns"}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "allowed_namespaces")
+	})
+	s.Run("empty allowed_namespaces entries returns error", func() {
+		cfg := &Config{AllowedNamespaces: []string{"mesh", " "}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "must not be empty")
+	})
+	s.Run("allowed_namespaces override discovery scope", func() {
+		cfg := &Config{AllowedNamespaces: []string{"openshift-operators", "mesh"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"openshift-operators", "mesh"}, cfg.AllowedNamespaces)
+		s.Equal([]string{"openshift-operators", "mesh"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("allowed_namespaces deduplicates preserving first occurrence order", func() {
+		cfg := &Config{AllowedNamespaces: []string{"mesh", " mesh ", "openshift-operators", "mesh"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"mesh", "openshift-operators"}, cfg.AllowedNamespaces)
+		s.Equal([]string{"mesh", "openshift-operators"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("allowed_namespaces wildcard enables cluster-wide discovery", func() {
+		cfg := &Config{AllowedNamespaces: []string{"**"}}
+		s.NoError(cfg.Validate())
+		s.Equal([]string{"**"}, cfg.AllowedNamespaces)
+		s.Equal([]string{"**"}, cfg.URLDiscoveryNamespaces())
+	})
+	s.Run("allowed_namespaces wildcard cannot be combined with namespace names", func() {
+		cfg := &Config{AllowedNamespaces: []string{"istio-system", "**"}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "**")
+	})
+	s.Run("allowed_namespaces wildcard first still cannot be combined with namespace names", func() {
+		cfg := &Config{AllowedNamespaces: []string{"**", "istio-system"}}
+		err := cfg.Validate()
+		s.Error(err)
+		s.ErrorContains(err, "**")
+	})
+	s.Run("URLDiscoveryNamespaces falls back when unset without Validate", func() {
+		cfg := &Config{}
+		s.Equal([]string{"istio-system"}, cfg.URLDiscoveryNamespaces())
 	})
 	s.Run("invalid URL returns error", func() {
 		cfg := &Config{Url: "://bad-url"}

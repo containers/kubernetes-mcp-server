@@ -13,6 +13,8 @@ toolsets = ["core", "kiali"]
 
 [toolset_configs.kiali]
 url = "https://kiali.example" # Endpoint/route to reach Kiali console
+# allowed_namespaces = ["istio-system", "openshift-operators"]  # optional: scope for CR list + kiali.<ns>.svc probes when url is empty (default istio-system)
+# allowed_namespaces = ["**"]  # optional: cluster-wide Kiali CR listing; kiali.<ns>.svc fallbacks use deployment namespaces from those CRs
 # insecure = true  # optional: allow insecure TLS (not recommended in production)
 # certificate_authority = "/path/to/ca.crt"  # File path to CA certificate
 # When url is https and insecure is false, certificate_authority is required.
@@ -23,7 +25,7 @@ Reachability checks and in-cluster URL discovery run when `enable_target_compati
 When that flag is enabled:
 
 - If `url` is set, the server probes `GET {url}/api/status` and only exposes Kiali tools if that call succeeds.
-- If `url` is unset and a Kiali CR is present, the server tries to discover the in-cluster Service URL (`http://<instance>.<namespace>.svc:<port>[/web_root]`), probes `/api/status`, and injects a working URL into the live config.
+- If `url` is unset and a Kiali CR is present, the server tries to discover the in-cluster Service URL (`http://<instance>.<namespace>.svc:<port>[/web_root]`), probes `/api/status`, and injects a working URL into the live config. Discovery uses the same `allowed_namespaces` list for Kiali CR listing and for `kiali.<namespace>.svc` fallbacks (default `istio-system` when unset). Set `allowed_namespaces = ["**"]` for cluster-wide Kiali CR listing; well-known Service DNS fallbacks then use the deployment namespaces from those CRs only (not a cluster-wide Namespace scan).
 
 When the `kiali` toolset is enabled with an explicit HTTPS URL and `insecure = false`, `certificate_authority` is still required at config load time.
 
