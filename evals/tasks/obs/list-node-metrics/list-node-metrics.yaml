@@ -1,0 +1,22 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "list-node-metrics"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: metrics
+    suite: obs
+    requires: obs
+    toolType: discovery
+  description: |
+    Tests if the agent can discover node-related metrics using the list_metrics tool
+    with a regex filter for node metrics.
+spec:
+  verify:
+    - llmJudge:
+        contains: "node_"
+  prompt:
+    inline: |
+      What node-related metrics are available in Prometheus?

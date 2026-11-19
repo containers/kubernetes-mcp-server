@@ -1,12 +1,36 @@
 [
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "clone.kubevirt.io",
+                  "resource": "virtualmachineclones"
+                }
+              },
+              "verbs": [
+                "create"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": false,
+      "readOnlyHint": false,
       "title": "Virtual Machine: Clone"
     },
-    "description": "Clone a KubeVirt VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
+    "description": "Clone a VirtualMachine on KubeVirt by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the KubeVirt Clone API",
     "inputSchema": {
       "properties": {
         "name": {
@@ -33,13 +57,177 @@
     "title": "Virtual Machine: Clone"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstances"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "vnc/screenshot"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Virtual Machine: Console Screenshot"
+    },
+    "description": "Capture a screenshot of the graphical (VNC) console of a VirtualMachine on KubeVirt as a PNG image. Use this to see what is currently displayed on the VM's screen (for example firmware, a bootloader, or a login prompt). Read-only: it never sends input to the guest.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "The name of the virtual machine",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the virtual machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_console_screenshot",
+    "title": "Virtual Machine: Console Screenshot"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "cdi.kubevirt.io",
+                  "resource": "datasources"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachineclusterpreferences"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachinepreferences"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachineclusterinstancetypes"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "instancetype.kubevirt.io",
+                  "resource": "virtualmachineinstancetypes"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachines"
+                }
+              },
+              "verbs": [
+                "patch"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": false,
+      "readOnlyHint": false,
       "title": "Virtual Machine: Create"
     },
-    "description": "Create a KubeVirt VirtualMachine in the cluster with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
+    "description": "Create a VirtualMachine on KubeVirt with the specified configuration, automatically resolving instance types, preferences, and container disk images. VM will be created in Halted state by default; use autostart parameter to start it immediately.",
     "inputSchema": {
       "properties": {
         "autostart": {
@@ -157,6 +345,167 @@
     "title": "Virtual Machine: Create"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "template_name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.template.kubevirt.io",
+                  "resource": "virtualmachinetemplates",
+                  "subresource": "create"
+                }
+              },
+              "verbs": [
+                "create"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Virtual Machine: Create from Template"
+    },
+    "description": "Create a VirtualMachine from a VirtualMachineTemplate (virt-template) on KubeVirt. Processes the template server-side to substitute parameters (required values, defaults, and auto-generated values like passwords), then creates the resulting VirtualMachine in the same namespace. Cross-namespace template usage is not supported.",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "The namespace of the VirtualMachineTemplate and the resulting VirtualMachine (must be the same)",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Parameter values to substitute in the template. Keys are parameter names (e.g. VM_NAME), values are strings. Required parameters must be provided; optional parameters use their defaults if omitted; parameters with generate/from will be auto-generated if not provided.",
+          "type": "object"
+        },
+        "template_name": {
+          "description": "The name of the VirtualMachineTemplate to create the VM from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "template_name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_create_from_template",
+    "title": "Virtual Machine: Create from Template"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstances"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "guestosinfo"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "filesystemlist"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "userlist"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "interfacelist"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -198,20 +547,87 @@
     "title": "Virtual Machine: Guest Agent Info"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachines"
+                }
+              },
+              "verbs": [
+                "get",
+                "update"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "pause"
+                }
+              },
+              "verbs": [
+                "update"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "subresources.kubevirt.io",
+                  "resource": "virtualmachineinstances",
+                  "subresource": "unpause"
+                }
+              },
+              "verbs": [
+                "update"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
+      "idempotentHint": false,
       "openWorldHint": false,
+      "readOnlyHint": false,
       "title": "Virtual Machine: Lifecycle"
     },
-    "description": "Manage KubeVirt VirtualMachine lifecycle: start, stop, or restart a VM",
+    "description": "Manage KubeVirt VirtualMachine lifecycle: start, stop, restart, pause, or unpause a VM",
     "inputSchema": {
       "properties": {
         "action": {
-          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), or 'restart' (stops then starts the VM)",
+          "description": "The lifecycle action to perform: 'start' (changes runStrategy to Always), 'stop' (changes runStrategy to Halted), 'restart' (stops then starts the VM), 'pause' (suspends the running VMI in-place), or 'unpause' (resumes a paused VMI)",
           "enum": [
             "start",
             "stop",
-            "restart"
+            "restart",
+            "pause",
+            "unpause"
           ],
           "type": "string"
         },
@@ -233,5 +649,170 @@
     },
     "name": "vm_lifecycle",
     "title": "Virtual Machine: Lifecycle"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachines"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstances"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "cdi.kubevirt.io",
+                  "resource": "datavolumes"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "persistentvolumeclaims"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods",
+                  "subresource": "log"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "events"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            },
+            {
+              "target": {
+                "resource": {
+                  "apiGroup": "storage.k8s.io",
+                  "resource": "storageclasses"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "kubevirt.io",
+                  "resource": "virtualmachineinstancemigrations"
+                }
+              },
+              "verbs": [
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Virtual Machine: Troubleshoot"
+    },
+    "description": "Diagnose KubeVirt VirtualMachine issues with automated root-cause detection. Collects VM status, VMI status, volumes, DataVolume/PVC state, cloud-init configuration, pod state, logs, and events, then runs heuristic checks to identify specific problems and suggest fixes. Returns a 'Detected Issues' section with CRITICAL/WARNING findings and actionable remediation steps, followed by raw diagnostic data. Use this tool FIRST whenever a user asks why a VM is not starting, stuck in Provisioning, crashlooping, failing to migrate, or exhibiting unexpected behavior. Automatically detects: missing StorageClasses, invalid PVC specs, dangerous cloud-init commands (shutdown/halt), nodeSelector migration blockers, failed migrations, and pod crashloops. If the user asks to fix or remediate the issue, use the Suggested Fixes from the report with vm_lifecycle (restart) or resources_create_or_update.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "The name of the VirtualMachine to troubleshoot",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "The namespace of the VirtualMachine to troubleshoot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "vm_troubleshoot",
+    "title": "Virtual Machine: Troubleshoot"
   }
 ]

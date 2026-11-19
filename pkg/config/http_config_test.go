@@ -12,14 +12,14 @@ type HTTPConfigSuite struct {
 }
 
 func (s *HTTPConfigSuite) TestDefaults() {
-	cfg := Default()
+	cfg := New()
 
 	s.Run("sets read header timeout for Slowloris protection", func() {
-		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Duration())
+		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
 	})
 
 	s.Run("sets max body bytes to 16MB for large K8s manifests", func() {
-		s.Equal(int64(16<<20), cfg.HTTP.MaxBodyBytes)
+		s.Equal(int64(16<<20), cfg.HTTP.MaxBodyBytes.Get())
 	})
 }
 
@@ -30,22 +30,22 @@ func (s *HTTPConfigSuite) TestTOMLParsing() {
 read_header_timeout = "5s"
 max_body_bytes = 33554432
 `)
-		cfg, err := ReadToml(tomlData)
+		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
-		s.Equal(5*time.Second, cfg.HTTP.ReadHeaderTimeout.Duration())
-		s.Equal(int64(32<<20), cfg.HTTP.MaxBodyBytes)
+		s.Equal(5*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
+		s.Equal(int64(32<<20), cfg.HTTP.MaxBodyBytes.Get())
 	})
 
 	s.Run("uses defaults when not specified", func() {
 		tomlData := []byte(`
 log_level = 1
 `)
-		cfg, err := ReadToml(tomlData)
+		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
-		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Duration())
-		s.Equal(int64(16<<20), cfg.HTTP.MaxBodyBytes)
+		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
+		s.Equal(int64(16<<20), cfg.HTTP.MaxBodyBytes.Get())
 	})
 
 	s.Run("partial config overrides only specified fields", func() {
@@ -53,14 +53,11 @@ log_level = 1
 [http]
 max_body_bytes = 33554432
 `)
-		cfg, err := ReadToml(tomlData)
+		cfg, err := ReadToml(s.T().Context(), tomlData)
 		s.Require().NoError(err)
 
-		// Overridden value
-		s.Equal(int64(32<<20), cfg.HTTP.MaxBodyBytes)
-
-		// Default preserved
-		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Duration())
+		s.Equal(int64(32<<20), cfg.HTTP.MaxBodyBytes.Get())
+		s.Equal(10*time.Second, cfg.HTTP.ReadHeaderTimeout.Get())
 	})
 
 	s.Run("returns error for invalid duration format", func() {
@@ -68,39 +65,54 @@ max_body_bytes = 33554432
 [http]
 read_header_timeout = "invalid"
 `)
-		_, err := ReadToml(tomlData)
+		_, err := ReadToml(s.T().Context(), tomlData)
 		s.Error(err)
+	})
+
+	s.Run("rejects unknown key inside http table", func() {
+		_, err := ReadToml(s.T().Context(), []byte(`
+[http]
+port = "8080"
+`))
+		s.Error(err)
+		s.Contains(err.Error(), "unknown")
 	})
 }
 
 func (s *HTTPConfigSuite) TestValidate() {
 	s.Run("zero RPS is valid (disabled)", func() {
-		cfg := HTTPConfig{RateLimitRPS: 0}
-		s.NoError(cfg.Validate())
+		cfg := New()
+		cfg.HTTP.RateLimitRPS.SetForTest(0)
+		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("positive RPS is valid", func() {
-		cfg := HTTPConfig{RateLimitRPS: 10}
-		s.NoError(cfg.Validate())
+		cfg := New()
+		cfg.HTTP.RateLimitRPS.SetForTest(10)
+		s.NoError(cfg.Validate(s.T().Context()))
 	})
 
 	s.Run("negative RPS is rejected", func() {
-		cfg := HTTPConfig{RateLimitRPS: -1}
-		err := cfg.Validate()
+		cfg := New()
+		cfg.HTTP.RateLimitRPS.SetForTest(-1)
+		err := cfg.Validate(s.T().Context())
 		s.Error(err)
 		s.Contains(err.Error(), "rate_limit_rps must not be negative")
 	})
 
 	s.Run("negative burst is rejected", func() {
-		cfg := HTTPConfig{RateLimitBurst: -5}
-		err := cfg.Validate()
+		cfg := New()
+		cfg.HTTP.RateLimitBurst.SetForTest(-5)
+		err := cfg.Validate(s.T().Context())
 		s.Error(err)
 		s.Contains(err.Error(), "rate_limit_burst must not be negative")
 	})
 
 	s.Run("zero burst is valid (uses default)", func() {
-		cfg := HTTPConfig{RateLimitRPS: 10, RateLimitBurst: 0}
-		s.NoError(cfg.Validate())
+		cfg := New()
+		cfg.HTTP.RateLimitRPS.SetForTest(10)
+		cfg.HTTP.RateLimitBurst.SetForTest(0)
+		s.NoError(cfg.Validate(s.T().Context()))
 	})
 }
 

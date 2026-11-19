@@ -1,0 +1,105 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "troubleshoot-vm-missing-storageclass"
+  difficulty: medium
+  description: "Diagnose a VM stuck in Provisioning due to a non-existent StorageClass"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-troubleshoot-sc
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-troubleshoot-sc
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: broken-sc-vm
+          namespace: vm-test-troubleshoot-sc
+        spec:
+          runStrategy: Always
+          dataVolumeTemplates:
+            - metadata:
+                name: broken-sc-vm-rootdisk
+              spec:
+                storage:
+                  storageClassName: non-existent-sc-xyz
+                  accessModes:
+                    - ReadWriteOnce
+                  resources:
+                    requests:
+                      storage: 10Gi
+                source:
+                  registry:
+                    url: docker://quay.io/containerdisks/fedora:latest
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                    - name: rootdisk
+                      disk:
+                        bus: virtio
+                resources:
+                  requests:
+                    memory: 2Gi
+              terminationGracePeriodSeconds: 0
+              volumes:
+                - name: rootdisk
+                  dataVolume:
+                    name: broken-sc-vm-rootdisk
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          echo "Waiting for VM to enter Provisioning state..."
+          sleep 15
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS="vm-test-troubleshoot-sc"
+
+          echo "=== Verification: Agent identified missing StorageClass ==="
+
+          if ! kubectl get virtualmachine broken-sc-vm -n "$NS" > /dev/null 2>&1; then
+              echo "✗ VirtualMachine broken-sc-vm no longer exists"
+              exit 1
+          fi
+          echo "✓ VirtualMachine broken-sc-vm still exists"
+          exit 0
+    - llmJudge:
+        contains: "non-existent-sc-xyz"
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: broken-sc-vm
+          namespace: vm-test-troubleshoot-sc
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-troubleshoot-sc
+        ignoreNotFound: true
+  prompt:
+    inline: |-
+      A VirtualMachine named "broken-sc-vm" in the vm-test-troubleshoot-sc namespace is not starting.
+      Diagnose why this VM is stuck. Report:
+      - The root cause of the issue
+      - What StorageClass is missing
+      - What alternative StorageClasses are available on the cluster

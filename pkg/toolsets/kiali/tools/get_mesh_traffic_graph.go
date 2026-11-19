@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -11,7 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitGetMeshTrafficGraph() []api.ServerTool {
+func InitGetMeshTrafficGraph(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_mesh_traffic_graph"
 	ret = append(ret, api.ServerTool{
@@ -31,9 +32,9 @@ func InitGetMeshTrafficGraph() []api.ServerTool {
 						Default:     api.ToRawMessage(DefaultGraphType),
 						Enum:        []any{"app", "versionedApp", "service", "workload"},
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional cluster name to include in the graph. Default is the cluster name in the Kiali configuration (KubeConfig).",
+						Description: meshClusterDescription(),
 					},
 				},
 				Required: []string{"namespaces"},
@@ -45,15 +46,18 @@ func InitGetMeshTrafficGraph() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: getMeshGraphHandler,
+		}, RBAC: GraphRBAC(ctx, inspector), Handler: getMeshGraphHandler,
 	})
 	return ret
 }
 
 func getMeshGraphHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiGetMeshTrafficGraphEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiGetMeshTrafficGraphEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh traffic graph: %w", err)), nil
 	}

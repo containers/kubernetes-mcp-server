@@ -1,0 +1,96 @@
+package kubevirt
+
+import (
+	"context"
+	"testing"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type fakeInspector struct {
+	available           bool
+	queriedGroupVersion string
+}
+
+func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
+func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
+}
+func (f *fakeInspector) ServerResourcesForGroup(ctx context.Context, _ string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		list := &metav1.APIResourceList{}
+		if f.available {
+			list.APIResources = []metav1.APIResource{{Kind: VirtualMachineGVK.Kind}, {Kind: VirtualMachineTemplateGVK.Kind}}
+		}
+		return []*metav1.APIResourceList{list}, nil
+	})
+}
+
+func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, groupVersion string) api.Results[*metav1.APIResourceList] {
+	f.queriedGroupVersion = groupVersion
+	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
+		list := &metav1.APIResourceList{}
+		if f.available {
+			list.APIResources = []metav1.APIResource{{Kind: VirtualMachineGVK.Kind}, {Kind: VirtualMachineTemplateGVK.Kind}}
+		}
+		return list, nil
+	})
+}
+func (f *fakeInspector) IsMultiTarget() bool                          { return false }
+func (f *fakeInspector) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+func (f *fakeInspector) GetDefaultTarget() string                     { return "" }
+func (f *fakeInspector) GetTargetParameterName() string               { return "" }
+
+func TestHasVirtualMachineTemplate(t *testing.T) {
+	t.Run("queries for VirtualMachineTemplate GVK", func(t *testing.T) {
+		p := &fakeInspector{available: true}
+		filter := HasVirtualMachineTemplate(p)
+		filter(t.Context())
+
+		if p.queriedGroupVersion != VirtualMachineTemplateGVK.GroupVersion().String() {
+			t.Errorf("expected query for %v, got %v", VirtualMachineTemplateGVK.GroupVersion(), p.queriedGroupVersion)
+		}
+	})
+
+	t.Run("returns true when provider has VirtualMachineTemplate GVK", func(t *testing.T) {
+		filter := HasVirtualMachineTemplate(&fakeInspector{available: true})
+		if !filter(t.Context()) {
+			t.Error("expected HasVirtualMachineTemplate to return true")
+		}
+	})
+
+	t.Run("returns false when provider does not have VirtualMachineTemplate GVK", func(t *testing.T) {
+		filter := HasVirtualMachineTemplate(&fakeInspector{available: false})
+		if filter(t.Context()) {
+			t.Error("expected HasVirtualMachineTemplate to return false")
+		}
+	})
+}
+
+func TestHasVirtualMachine(t *testing.T) {
+	t.Run("queries for VirtualMachine GVK", func(t *testing.T) {
+		p := &fakeInspector{available: true}
+		filter := HasVirtualMachine(p)
+		filter(t.Context())
+
+		if p.queriedGroupVersion != VirtualMachineGVK.GroupVersion().String() {
+			t.Errorf("expected query for %v, got %v", VirtualMachineGVK.GroupVersion(), p.queriedGroupVersion)
+		}
+	})
+
+	t.Run("returns true when provider has VirtualMachine GVK", func(t *testing.T) {
+		filter := HasVirtualMachine(&fakeInspector{available: true})
+		if !filter(t.Context()) {
+			t.Error("expected HasVirtualMachine to return true")
+		}
+	})
+
+	t.Run("returns false when provider does not have VirtualMachine GVK", func(t *testing.T) {
+		filter := HasVirtualMachine(&fakeInspector{available: false})
+		if filter(t.Context()) {
+			t.Error("expected HasVirtualMachine to return false")
+		}
+	})
+}

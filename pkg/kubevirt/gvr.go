@@ -1,12 +1,19 @@
 package kubevirt
 
 import (
+	"context"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
 // Scheme is the runtime scheme for KubeVirt resources
 var Scheme = runtime.NewScheme()
+
+// subresourcesCodec is the codec for encoding/decoding subresources
+var subresourcesCodec = serializer.NewCodecFactory(Scheme)
 
 // KubeVirt core resources
 var (
@@ -100,6 +107,73 @@ var (
 	}
 )
 
+// Migration resources
+var (
+	// VirtualMachineInstanceMigrationGVR is the GroupVersionResource for VirtualMachineInstanceMigration resources
+	VirtualMachineInstanceMigrationGVR = schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "virtualmachineinstancemigrations",
+	}
+)
+
+// virt-template resources
+var (
+	// VirtualMachineTemplateGVK is the GroupVersionKind for VirtualMachineTemplate resources
+	VirtualMachineTemplateGVK = schema.GroupVersionKind{
+		Group:   "template.kubevirt.io",
+		Version: "v1beta1",
+		Kind:    "VirtualMachineTemplate",
+	}
+)
+
+// HasVirtualMachineTemplate returns a TargetCompatibilityFilter that checks whether any
+// target cluster has the VirtualMachineTemplate GVK registered.
+func HasVirtualMachineTemplate(inspector api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return api.AnyTargetHasGVK(ctx, inspector, VirtualMachineTemplateGVK)
+	}
+}
+
+// HCO (HyperConverged Cluster Operator) resources
+var (
+	// HyperConvergedGVR is the GroupVersionResource for HyperConverged resources
+	HyperConvergedGVR = schema.GroupVersionResource{
+		Group:    "hco.kubevirt.io",
+		Version:  "v1",
+		Resource: "hyperconvergeds",
+	}
+
+	// KubeVirtCRGVR is the GroupVersionResource for KubeVirt operator CR resources
+	KubeVirtCRGVR = schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "kubevirts",
+	}
+
+	// CDIGVR is the GroupVersionResource for CDI operator CR resources
+	CDIGVR = schema.GroupVersionResource{
+		Group:    "cdi.kubevirt.io",
+		Version:  "v1beta1",
+		Resource: "cdis",
+	}
+
+	// NetworkAddonsConfigGVR is the GroupVersionResource for NetworkAddonsConfig resources
+	NetworkAddonsConfigGVR = schema.GroupVersionResource{
+		Group:    "networkaddonsoperator.network.kubevirt.io",
+		Version:  "v1",
+		Resource: "networkaddonsconfigs",
+	}
+)
+
+// HasVirtualMachine returns a TargetCompatibilityFilter that checks whether any
+// target cluster has the VirtualMachine GVK registered.
+func HasVirtualMachine(inspector api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return api.AnyTargetHasGVK(ctx, inspector, VirtualMachineGVK)
+	}
+}
+
 // Kubernetes core resources
 var (
 	// PersistentVolumeClaimGVR is the GroupVersionResource for PersistentVolumeClaim resources
@@ -114,5 +188,12 @@ var (
 		Group:    "",
 		Version:  "v1",
 		Resource: "pods",
+	}
+
+	// StorageClassGVR is the GroupVersionResource for StorageClass resources
+	StorageClassGVR = schema.GroupVersionResource{
+		Group:    "storage.k8s.io",
+		Version:  "v1",
+		Resource: "storageclasses",
 	}
 )

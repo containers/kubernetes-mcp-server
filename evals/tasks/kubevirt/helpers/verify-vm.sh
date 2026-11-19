@@ -253,6 +253,23 @@ verify_memory_increased() {
     fi
 }
 
+# verify_no_unresolved_placeholders: Verifies that no ${PARAM} placeholders remain in a VM
+# Usage: verify_no_unresolved_placeholders <vm-name> <namespace>
+verify_no_unresolved_placeholders() {
+    local vm_name="$1"
+    local namespace="$2"
+
+    local vm_yaml
+    vm_yaml=$(kubectl get virtualmachine "$vm_name" -n "$namespace" -o yaml)
+    if echo "$vm_yaml" | grep -q '${'; then
+        echo "✗ VM still contains unresolved parameter placeholders"
+        echo "$vm_yaml" | grep '${' || true
+        return 1
+    fi
+    echo "✓ No unresolved placeholders found"
+    return 0
+}
+
 # verify_multus_secondary_network: Verifies that a VM has a secondary network interface with Multus
 # Usage: verify_multus_secondary_network <vm-name> <namespace> <network-name>
 # Example: verify_multus_secondary_network test-vm vm-test vlan-network

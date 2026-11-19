@@ -1,8 +1,10 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -33,7 +35,28 @@ var (
 		Version:  "v1",
 		Resource: "taskruns",
 	}
+	pacRepositoryGVR = schema.GroupVersionResource{
+		Group:    "pipelinesascode.tekton.dev",
+		Version:  "v1alpha1",
+		Resource: "repositories",
+	}
+	tektonConfigGVR = schema.GroupVersionResource{
+		Group:    "operator.tekton.dev",
+		Version:  "v1alpha1",
+		Resource: "tektonconfigs",
+	}
+	pipelineRunGVK = schema.GroupVersionKind{
+		Group:   "tekton.dev",
+		Version: "v1",
+		Kind:    "PipelineRun",
+	}
 )
+
+func hasPipelineRun(inspector api.ClusterInspector) api.TargetCompatibilityFilter {
+	return func(ctx context.Context) bool {
+		return inspector == nil || api.AnyTargetHasGVK(ctx, inspector, pipelineRunGVK)
+	}
+}
 
 // parseParams converts a map[string]interface{} from a tool call argument into Tekton Params.
 // Each map entry becomes a Param whose value type is inferred from the Go value:

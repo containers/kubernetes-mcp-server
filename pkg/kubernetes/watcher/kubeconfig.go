@@ -2,8 +2,6 @@ package watcher
 
 import (
 	"context"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -30,16 +28,11 @@ type Kubeconfig struct {
 
 var _ Watcher = (*Kubeconfig)(nil)
 
-func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig) *Kubeconfig {
-	debounceWindow := DefaultKubeconfigDebounceWindow
-
-	// Allow override via environment variable for testing
-	if envDebounce := os.Getenv("KUBECONFIG_DEBOUNCE_WINDOW_MS"); envDebounce != "" {
-		if ms, err := strconv.Atoi(envDebounce); err == nil && ms > 0 {
-			debounceWindow = time.Duration(ms) * time.Millisecond
-			klogutil.FromContext(ctx).V(2).Info("Using custom kubeconfig debounce window", "debounce_window", debounceWindow)
-		}
+func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig, debounceWindow time.Duration) *Kubeconfig {
+	if debounceWindow <= 0 {
+		debounceWindow = DefaultKubeconfigDebounceWindow
 	}
+	klogutil.FromContext(ctx).V(2).Info("Using kubeconfig debounce window", "debounce_window", debounceWindow)
 
 	return &Kubeconfig{
 		ClientConfig:   clientConfig,
@@ -55,26 +48,27 @@ func NewKubeconfig(ctx context.Context, clientConfig clientcmd.ClientConfig) *Ku
 func (w *Kubeconfig) Watch(ctx context.Context, onChange func() error) {
 	logger := klogutil.FromContext(ctx)
 
-	w.mu.Lock()
-	if w.started {
-		w.mu.Unlock()
-		return
-	}
-	w.started = true
-	w.mu.Unlock()
-
 	kubeConfigFiles := w.ConfigAccess().GetLoadingPrecedence()
 	if len(kubeConfigFiles) == 0 {
+		logger.V(2).Info("No kubeconfig files to watch")
 		return
 	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
+		logger.Error(err, "Failed to create kubeconfig file watcher")
 		return
 	}
 	for _, file := range kubeConfigFiles {
 		_ = watcher.Add(file)
 	}
 
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		_ = watcher.Close()
+		return
+	}
+	w.started = true
 	go func() {
 		defer close(w.stoppedCh)
 		defer func() { _ = watcher.Close() }()
@@ -109,6 +103,7 @@ func (w *Kubeconfig) Watch(ctx context.Context, onChange func() error) {
 			}
 		}
 	}()
+	w.mu.Unlock()
 }
 
 // Close stops the kubeconfig watcher

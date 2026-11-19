@@ -1,0 +1,90 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "unpause-vm"
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-unpause
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-unpause
+    - k8s.create:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: test-vm
+          namespace: vm-test-unpause
+        spec:
+          runStrategy: Always
+          startStrategy: Paused
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                    - name: containerdisk
+                      disk:
+                        bus: virtio
+                memory:
+                  guest: 2Gi
+              terminationGracePeriodSeconds: 0
+              volumes:
+                - name: containerdisk
+                  containerDisk:
+                    image: quay.io/containerdisks/fedora:latest
+    - k8s.wait:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        metadata:
+          name: test-vm
+          namespace: vm-test-unpause
+        condition: Paused
+        timeout: 60s
+  verify:
+    - k8s.wait:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        metadata:
+          name: test-vm
+          namespace: vm-test-unpause
+        condition: Ready
+        timeout: 120s
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          # The Paused condition is removed entirely when unpaused so
+          # k8s.wait cannot be used. Verify the condition is absent.
+          PAUSED=$(kubectl get vmi test-vm -n vm-test-unpause -o jsonpath='{.status.conditions[?(@.type=="Paused")].status}')
+          if [[ "$PAUSED" == "True" ]]; then
+            echo "✗ VirtualMachineInstance still has Paused=True condition"
+            exit 1
+          fi
+          echo "✓ VirtualMachineInstance is unpaused"
+  cleanup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vm-test-unpause
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      The virtual machine named test-vm in the vm-test-unpause namespace is currently paused. Please unpause it so it resumes running.

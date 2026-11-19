@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync/atomic"
 	"testing"
 
-	"github.com/BurntSushi/toml"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -107,9 +108,38 @@ func (s *McpMetricsSuite) TestPrometheusHandlerReflectsToolCalls() {
 		s.Contains(body, "k8s_mcp_tool_duration")
 	})
 
+	s.Run("contains in-flight requests metric", func() {
+		s.Contains(body, "k8s_mcp_requests_in_flight")
+	})
+
 	s.Run("contains server info metric", func() {
 		s.Contains(body, "k8s_mcp_server_info")
 	})
+}
+
+func (s *McpMetricsSuite) TestPrometheusInFlightRequestsReturnToZero() {
+	s.InitMcpClient()
+
+	_, err := s.CallTool("namespaces_list", map[string]interface{}{})
+	s.Require().Nilf(err, "call tool failed %v", err)
+
+	rec := httptest.NewRecorder()
+	s.mcpServer.GetMetrics().PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := rec.Body.String()
+
+	tests := []struct {
+		name   string
+		method string
+	}{
+		{name: "tools/call is back to zero after the call returns", method: "tools/call"},
+		{name: "initialize is back to zero after the handshake", method: "initialize"},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			pattern := `(?m)^k8s_mcp_requests_in_flight\{[^}]*mcp_method_name="` + regexp.QuoteMeta(tt.method) + `"[^}]*\} 0$`
+			s.Regexp(regexp.MustCompile(pattern), body)
+		})
+	}
 }
 
 func (s *McpMetricsSuite) TestStatsInitializedBeforeCalls() {
@@ -153,11 +183,11 @@ func (s *McpMetricsSuite) TestMetricsExportedToConfigEndpoint() {
 	s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[telemetry]
 		endpoint = "`+server.URL+`"
 		protocol = "http/protobuf"
-	`), s.Cfg))
+	`)
 	s.InitMcpClient()
 
 	_, err := s.CallTool("namespaces_list", map[string]interface{}{})

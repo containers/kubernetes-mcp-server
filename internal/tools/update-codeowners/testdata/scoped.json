@@ -1,0 +1,7 @@
+{
+  "default_approvers": ["@Cali0707"],
+  "areas": [
+    {"paths": ["/pkg/toolsets/helm/"], "approvers": ["@manusa"]},
+    {"paths": ["/pkg/toolsets/kcp/"], "reviewers": ["@manusa", "@mjudeikis"]}
+  ]
+}

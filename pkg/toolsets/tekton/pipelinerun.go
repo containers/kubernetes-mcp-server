@@ -1,61 +1,171 @@
 package tekton
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/google/jsonschema-go/jsonschema"
+	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
-func pipelineRunTools() []api.ServerTool {
+type pipelineRunLifecycleAction string
+
+const (
+	pipelineRunActionRestart pipelineRunLifecycleAction = "restart"
+	pipelineRunActionCancel  pipelineRunLifecycleAction = "cancel"
+)
+
+func pipelineRunTools(_ context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
-				Name:        "tekton_pipelinerun_restart",
-				Description: "Restart a Tekton PipelineRun by creating a new PipelineRun with the same spec",
+				Name:        "tekton_pipelinerun_lifecycle",
+				Description: "Manage a Tekton PipelineRun lifecycle by restarting it with the same spec or cancelling it by setting spec.status to Cancelled.",
+				InputSchema: pipelineRunLifecycleSchema(),
+				Annotations: api.ToolAnnotations{
+					Title:           "Tekton: PipelineRun Lifecycle",
+					ReadOnlyHint:    ptr.To(false),
+					DestructiveHint: ptr.To(true),
+					IdempotentHint:  ptr.To(false),
+					OpenWorldHint:   ptr.To(true),
+				},
+			},
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get", "patch"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"create"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
+			Handler: pipelineRunLifecycle,
+		},
+		{
+			Tool: api.Tool{
+				Name:        "tekton_pipelinerun_logs",
+				Description: "Get logs for all TaskRuns owned by a Tekton PipelineRun. Use this to inspect PipelineRun execution output without locating pods manually.",
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
 						"name": {
 							Type:        "string",
-							Description: "Name of the PipelineRun to restart",
+							Description: "Name of the PipelineRun to get logs from",
 						},
 						"namespace": {
 							Type:        "string",
 							Description: "Namespace of the PipelineRun",
 						},
+						"task": {
+							Type:        "string",
+							Description: "Pipeline task name to filter by (tekton.dev/pipelineTask label)",
+						},
+						"step": {
+							Type:        "string",
+							Description: "Step name to include within matching TaskRuns",
+						},
+						"tail": {
+							Type:        "integer",
+							Description: "Number of lines to retrieve from the end of each container log (default: 100)",
+							Default:     api.ToRawMessage(kubernetes.DefaultTailLines),
+							Minimum:     ptr.To(float64(0)),
+						},
 					},
 					Required: []string{"name"},
 				},
 				Annotations: api.ToolAnnotations{
-					Title:           "Tekton: Restart PipelineRun",
-					ReadOnlyHint:    ptr.To(false),
+					Title:           "Tekton: Get PipelineRun Logs",
+					ReadOnlyHint:    ptr.To(true),
 					DestructiveHint: ptr.To(false),
-					IdempotentHint:  ptr.To(false),
-					OpenWorldHint:   ptr.To(false),
+					IdempotentHint:  ptr.To(true),
+					OpenWorldHint:   ptr.To(true),
 				},
 			},
-			Handler: restartPipelineRun,
+			RBAC: api.RBACBounded(
+				api.RBACRequirement{
+					Verbs:        []string{"get"},
+					Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "pipelineruns"}},
+					Namespace:    &api.RBACNamespace{Argument: "namespace"},
+					ResourceName: &api.RBACResourceName{Argument: "name"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"list"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tekton.dev", Resource: "taskruns"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+				api.RBACRequirement{
+					Verbs:     []string{"get"},
+					Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{Resource: "pods", Subresource: "log"}},
+					Namespace: &api.RBACNamespace{Argument: "namespace"},
+				},
+			),
+			Handler: getPipelineRunLogs,
 		},
+		pipelineRunDiagnoseTool(inspector),
 	}
 }
 
-func restartPipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+func pipelineRunLifecycleSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"name": {
+				Type:        "string",
+				Description: "Name of the PipelineRun to manage",
+			},
+			"namespace": {
+				Type:        "string",
+				Description: "Namespace of the PipelineRun",
+			},
+			"action": {
+				Type:        "string",
+				Enum:        []any{string(pipelineRunActionRestart), string(pipelineRunActionCancel)},
+				Description: "Lifecycle action to perform: 'restart' creates a new PipelineRun with the same spec; 'cancel' sets spec.status to Cancelled.",
+			},
+		},
+		Required: []string{"name", "action"},
+	}
+}
+
+func pipelineRunLifecycle(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	p := api.WrapParams(params)
 	name := p.RequiredString("name")
 	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	action := pipelineRunLifecycleAction(p.RequiredString("action"))
 	if err := p.Err(); err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to restart pipeline run: %w", err)), nil
+		return api.NewToolCallResult("", fmt.Errorf("failed to manage pipeline run lifecycle: %w", err)), nil
 	}
 
-	dynamicClient := params.DynamicClient()
+	switch action {
+	case pipelineRunActionRestart:
+		return restartPipelineRun(params.Context, params.DynamicClient(), namespace, name)
+	case pipelineRunActionCancel:
+		patch := []byte(fmt.Sprintf(`{"spec":{"status":%q}}`, tektonv1.PipelineRunSpecStatusCancelled))
+		if _, err := params.DynamicClient().Resource(pipelineRunGVR).Namespace(namespace).Patch(params.Context, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+			return api.NewToolCallResult("", fmt.Errorf("failed to cancel PipelineRun %s/%s: %w", namespace, name, err)), nil
+		}
+		return api.NewToolCallResult(fmt.Sprintf("PipelineRun '%s' cancelled in namespace '%s'", name, namespace), nil), nil
+	default:
+		return api.NewToolCallResult("", fmt.Errorf("invalid action %q: must be one of %q or %q", action, pipelineRunActionRestart, pipelineRunActionCancel)), nil
+	}
+}
 
-	existingUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Get(params.Context, name, metav1.GetOptions{})
+func restartPipelineRun(ctx context.Context, dynamicClient dynamic.Interface, namespace, name string) (*api.ToolCallResult, error) {
+	existingUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get PipelineRun %s/%s: %w", namespace, name, err)), nil
 	}
@@ -88,11 +198,81 @@ func restartPipelineRun(params api.ToolHandlerParams) (*api.ToolCallResult, erro
 		return api.NewToolCallResult("", fmt.Errorf("failed to convert PipelineRun to unstructured: %w", err)), nil
 	}
 
-	createdUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Create(params.Context, &unstructured.Unstructured{Object: unstructuredObj}, metav1.CreateOptions{})
+	createdUnstructured, err := dynamicClient.Resource(pipelineRunGVR).Namespace(namespace).Create(ctx, &unstructured.Unstructured{Object: unstructuredObj}, metav1.CreateOptions{})
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to create restart PipelineRun for %s/%s: %w", namespace, name, err)), nil
 	}
 
 	createdName := createdUnstructured.GetName()
 	return api.NewToolCallResult(fmt.Sprintf("PipelineRun '%s' restarted as '%s' in namespace '%s'", name, createdName, namespace), nil), nil
+}
+
+func getPipelineRunLogs(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
+	p := api.WrapParams(params)
+	name := p.RequiredString("name")
+	namespace := p.OptionalString("namespace", params.NamespaceOrDefault(""))
+	pipelineTaskName := p.OptionalString("task", "")
+	stepName := p.OptionalString("step", "")
+	tailLines := p.OptionalInt64("tail", kubernetes.DefaultTailLines)
+	if err := p.Err(); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get pipeline run logs: %w", err)), nil
+	}
+
+	if _, err := params.DynamicClient().Resource(pipelineRunGVR).Namespace(namespace).Get(params.Context, name, metav1.GetOptions{}); err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to get PipelineRun %s/%s: %w", namespace, name, err)), nil
+	}
+
+	taskRuns, _, err := pipelineRunTaskRuns(params.Context, params.DynamicClient(), namespace, name, pipelineTaskName, metav1.ListOptions{})
+	if err != nil {
+		return api.NewToolCallResult("", fmt.Errorf("failed to list TaskRuns for PipelineRun %s/%s: %w", namespace, name, err)), nil
+	}
+	if len(taskRuns) == 0 {
+		var msg string
+		if pipelineTaskName != "" {
+			msg = fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s' matching pipeline task '%s'", name, namespace, pipelineTaskName)
+		} else {
+			msg = fmt.Sprintf("No TaskRuns found for PipelineRun '%s' in namespace '%s'", name, namespace)
+		}
+		return api.NewToolCallResult(api.LimitString(params.Context, msg), nil), nil
+	}
+
+	b := api.NewBuilderWithBudget(api.ResultLimit(params.Context))
+	for _, taskRun := range taskRuns {
+		header := fmt.Sprintf("# TaskRun: %s\n", taskRun.Name)
+		if !appendTaskBlock(b, header, "", func(taskLogs *api.BuilderWithBudget) {
+			collectTaskRunLogs(params, taskLogs, namespace, &taskRun, stepName, tailLines)
+		}) {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		b.WriteString(fmt.Sprintf("No logs available for PipelineRun '%s' in namespace '%s'", name, namespace))
+	}
+	return api.NewToolCallResult(b.String(), nil), nil
+}
+
+func pipelineRunTaskRuns(ctx context.Context, dynamicClient dynamic.Interface, namespace, pipelineRunName, pipelineTaskName string, options metav1.ListOptions) ([]tektonv1.TaskRun, string, error) {
+	matchLabels := labels.Set{pipeline.PipelineRunLabelKey: pipelineRunName}
+	if pipelineTaskName != "" {
+		matchLabels[pipeline.PipelineTaskLabelKey] = pipelineTaskName
+	}
+	selector, err := labels.ValidatedSelectorFromSet(matchLabels)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid TaskRun label filter: %w", err)
+	}
+	options.LabelSelector = selector.String()
+	list, err := dynamicClient.Resource(taskRunGVR).Namespace(namespace).List(ctx, options)
+	if err != nil {
+		return nil, "", err
+	}
+
+	taskRuns := make([]tektonv1.TaskRun, 0, len(list.Items))
+	for _, item := range list.Items {
+		var taskRun tektonv1.TaskRun
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &taskRun); err != nil {
+			return nil, "", err
+		}
+		taskRuns = append(taskRuns, taskRun)
+	}
+	return taskRuns, list.GetContinue(), nil
 }

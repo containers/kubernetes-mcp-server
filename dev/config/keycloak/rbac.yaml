@@ -1,7 +1,7 @@
 # RBAC ClusterRoleBinding for mcp user with OIDC authentication
 #
 # IMPORTANT: This requires Kubernetes API server to be configured with OIDC:
-#   --oidc-issuer-url=https://keycloak.127-0-0-1.sslip.io:8443/realms/openshift
+#   --oidc-issuer-url=https://keycloak.keycloak.svc:8443/realms/openshift
 #   --oidc-username-claim=preferred_username
 #
 # Without OIDC configuration, this binding will not work.
@@ -17,4 +17,27 @@ roleRef:
 subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: User
-  name: https://keycloak.127-0-0-1.sslip.io:8443/realms/openshift#mcp
+  name: https://keycloak.keycloak.svc:8443/realms/openshift#mcp
+---
+# Group-based RBAC binding for OIDC users in the "mcp-viewers" group.
+#
+# Requires the API server OIDC groups claim to be configured:
+#   --oidc-groups-claim=groups
+#
+# With the realm's group-membership mapper emitting the bare group name
+# (full.path=false), the "mcp-viewer" user (member of /mcp-viewers) is bound to
+# the built-in "view" ClusterRole — a non-admin identity distinct from the
+# cluster-admin "mcp" user above. Used by the e2e test TestOAuthGroupRBAC to
+# prove the OIDC groups claim drives Kubernetes RBAC.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-mcp-viewers-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: mcp-viewers

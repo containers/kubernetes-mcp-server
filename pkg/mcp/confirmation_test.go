@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/containers/kubernetes-mcp-server/pkg/confirmation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
@@ -26,11 +26,11 @@ func (s *ConfirmationRulesSuite) TestNoRulesConfigured() {
 }
 
 func (s *ConfirmationRulesSuite) TestToolRuleMatchUserAccepts() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 [[confirmation_rules]]
 tool = "pods_list"
 message = "List pods?"
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	s.InitMcpClient(test.WithElicitationHandler(
 		func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 			return &mcp.ElicitResult{Action: "accept"}, nil
@@ -45,11 +45,11 @@ message = "List pods?"
 }
 
 func (s *ConfirmationRulesSuite) TestToolRuleMatchUserDeclines() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 [[confirmation_rules]]
 tool = "pods_list"
 message = "List pods?"
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	s.InitMcpClient(test.WithElicitationHandler(
 		func(_ context.Context, _ *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 			return &mcp.ElicitResult{Action: "decline"}, nil
@@ -65,13 +65,13 @@ message = "List pods?"
 }
 
 func (s *ConfirmationRulesSuite) TestToolRuleNoElicitationSupportFallbackDeny() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 confirmation_fallback = "deny"
 
 [[confirmation_rules]]
 tool = "pods_list"
 message = "List pods?"
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	// No elicitation handler = client does not support elicitation
 	s.InitMcpClient()
 	result, err := s.CallTool("pods_list", map[string]any{})
@@ -84,13 +84,13 @@ message = "List pods?"
 }
 
 func (s *ConfirmationRulesSuite) TestToolRuleNoElicitationSupportFallbackAllow() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 confirmation_fallback = "allow"
 
 [[confirmation_rules]]
 tool = "pods_list"
 message = "List pods?"
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	// No elicitation handler = client does not support elicitation
 	s.InitMcpClient()
 	result, err := s.CallTool("pods_list", map[string]any{})
@@ -102,11 +102,11 @@ message = "List pods?"
 }
 
 func (s *ConfirmationRulesSuite) TestDestructiveRuleMatchesDestructiveTools() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 [[confirmation_rules]]
 destructive = true
 message = "Destructive operation."
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	s.InitMcpClient(test.WithElicitationHandler(
 		func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 			return &mcp.ElicitResult{Action: "accept"}, nil
@@ -122,7 +122,7 @@ message = "Destructive operation."
 }
 
 func (s *ConfirmationRulesSuite) TestMultipleToolRulesMatchMergedPrompt() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 [[confirmation_rules]]
 tool = "pods_list"
 message = "Listing pods."
@@ -130,7 +130,7 @@ message = "Listing pods."
 [[confirmation_rules]]
 tool = "pods_list"
 message = "Are you sure?"
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	var receivedMessage string
 	s.InitMcpClient(test.WithElicitationHandler(
 		func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
@@ -149,13 +149,13 @@ message = "Are you sure?"
 }
 
 func (s *ConfirmationRulesSuite) TestToolRuleDoesNotMatchOtherTools() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 confirmation_fallback = "deny"
 
 [[confirmation_rules]]
 tool = "namespaces_list"
 message = "Listing namespaces."
-`), s.Cfg), "Expected to parse confirmation rules config")
+`)
 	// No elicitation handler = client does not support elicitation
 	s.InitMcpClient()
 	result, err := s.CallTool("pods_list", map[string]any{})

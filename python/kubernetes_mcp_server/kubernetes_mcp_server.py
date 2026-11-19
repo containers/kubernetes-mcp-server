@@ -52,8 +52,9 @@ def download_binary(binary_version="latest", destination=None):
     else:
         release_url = f"{base_url}/download/v{binary_version}/{binary_name}"
 
-    # Download the binary
-    print(f"Downloading {binary_name} from {release_url}")
+    # Download the binary. Report progress on stderr: in stdio mode stdout
+    # carries the MCP JSON-RPC stream, and any other output corrupts it.
+    print(f"Downloading {binary_name} from {release_url}", file=sys.stderr)
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         try:
             with urllib.request.urlopen(release_url) as response:

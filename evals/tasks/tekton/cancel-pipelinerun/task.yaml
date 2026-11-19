@@ -1,0 +1,103 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "cancel-tekton-pipelinerun"
+  difficulty: medium
+  labels:
+    suite: tekton
+    requires: tekton
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/cleanup-namespace.sh
+          cleanup_tekton_namespace
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: sleep-task
+          namespace: tekton-eval
+        spec:
+          steps:
+            - name: sleep
+              image: alpine
+              script: |
+                sleep 600
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: slow-pipeline
+          namespace: tekton-eval
+        spec:
+          tasks:
+            - name: slow
+              taskRef:
+                name: sleep-task
+    - k8s.create:
+        apiVersion: tekton.dev/v1
+        kind: PipelineRun
+        metadata:
+          name: cancel-me
+          namespace: tekton-eval
+        spec:
+          pipelineRef:
+            name: slow-pipeline
+
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          STATUS=$(kubectl get pipelinerun cancel-me -n tekton-eval -o jsonpath='{.spec.status}')
+          if [ "$STATUS" != "Cancelled" ]; then
+            echo "ERROR: expected PipelineRun spec.status=Cancelled, got '$STATUS'"
+            exit 1
+          fi
+          echo "PipelineRun cancel-me is cancelled"
+
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete pipelinerun --all -n tekton-eval --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Pipeline
+        metadata:
+          name: slow-pipeline
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: tekton.dev/v1
+        kind: Task
+        metadata:
+          name: sleep-task
+          namespace: tekton-eval
+        ignoreNotFound: true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: Cancel the Tekton PipelineRun named cancel-me in the tekton-eval namespace.

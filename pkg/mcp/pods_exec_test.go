@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 )
 
 type PodsExecSuite struct {
@@ -25,7 +25,7 @@ func (s *PodsExecSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 }
 
 func (s *PodsExecSuite) TearDownTest() {
@@ -195,9 +195,9 @@ func (s *PodsExecSuite) TestPodsExecDefaultContainer() {
 }
 
 func (s *PodsExecSuite) TestPodsExecDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Pod" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("pods_exec (denied)", func() {
 		toolResult, err := s.CallTool("pods_exec", map[string]interface{}{

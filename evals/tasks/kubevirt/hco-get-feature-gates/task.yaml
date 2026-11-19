@@ -1,0 +1,78 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    requires: kubevirt
+  name: "hco-get-feature-gates"
+  difficulty: easy
+  description: "List the feature gates configured in the HyperConverged CR"
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          # Discover the HCO namespace/name so the eval works on both Kind
+          # (kubevirt-hyperconverged) and OpenShift (openshift-cnv).
+          NS=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          HCO_NAME=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "kubevirt-hyperconverged")
+
+          if ! kubectl get hyperconverged "$HCO_NAME" -n "$NS" > /dev/null 2>&1; then
+              echo "HCO is not deployed — skipping eval"
+              exit 1
+          fi
+
+          echo "Enabling deployKubeSecondaryDNS feature gate..."
+          if [[ $(kubectl get hyperconverged "$HCO_NAME" -n "$NS" -o jsonpath='{.spec.featureGates}') != "" ]]; then
+            kubectl patch hyperconverged "$HCO_NAME" -n "$NS" --type=json \
+                -p '[{"op":"add","path":"/spec/featureGates/-","value":{"name":"deployKubeSecondaryDNS"}}]'
+          else
+            # featureGates is nil — create the array with our entry
+            kubectl patch hyperconverged "$HCO_NAME" -n "$NS" --type=json \
+                -p '[{"op":"add","path":"/spec/featureGates","value":[{"name":"deployKubeSecondaryDNS"}]}]'
+          fi
+
+          echo "Waiting for HCO to reconcile..."
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=Available --timeout=120s
+          echo "Feature gate configured"
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          NS=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          HCO_NAME=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          ACTUAL=$(kubectl get hyperconverged "$HCO_NAME" -n "$NS" \
+              -o jsonpath='{.spec.featureGates[?(@.name=="deployKubeSecondaryDNS")].name}' 2>/dev/null)
+          [[ "$ACTUAL" == "deployKubeSecondaryDNS" ]] || { echo "✗ Feature gate 'deployKubeSecondaryDNS' not found"; exit 1; }
+          echo "All validations passed"
+          exit 0
+    - llmJudge:
+        contains: "deployKubeSecondaryDNS"
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          NS=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "kubevirt-hyperconverged")
+          HCO_NAME=$(kubectl get hyperconverged -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "kubevirt-hyperconverged")
+
+          # Remove only the feature gate we added, finding its index dynamically
+          # so we don't disturb pre-existing gates at other positions.
+          IDX=$(kubectl get hyperconverged "$HCO_NAME" -n "$NS" \
+              -o jsonpath='{range .spec.featureGates[*]}{.name}{"\n"}{end}' 2>/dev/null \
+              | grep -n '^deployKubeSecondaryDNS$' | head -1 | cut -d: -f1)
+          if [ -n "$IDX" ]; then
+            IDX=$((IDX - 1))
+            kubectl patch hyperconverged "$HCO_NAME" -n "$NS" --type=json \
+                -p "[{\"op\":\"test\",\"path\":\"/spec/featureGates/$IDX/name\",\"value\":\"deployKubeSecondaryDNS\"},{\"op\":\"remove\",\"path\":\"/spec/featureGates/$IDX\"}]" 2>/dev/null || true
+          fi
+
+          kubectl wait hyperconverged "$HCO_NAME" -n "$NS" --for condition=Available --timeout=120s 2>/dev/null || true
+          echo "Feature gate reverted"
+  prompt:
+    inline: |-
+      What feature gates are configured in HCO? List them with their current values and
+      identify which ones are enabled.

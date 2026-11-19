@@ -1,9 +1,9 @@
 # Minimal hostPath CSI driver for the eval cluster.
 #
 # Purpose: give the eval cluster a StorageClass that supports volume expansion
-# (allowVolumeExpansion: true) so the core `resize-pvc` task can run. kind's
-# default `standard` StorageClass is rancher.io/local-path, which does not allow
-# expansion, so resize-pvc times out on a plain kind cluster.
+# (allowVolumeExpansion: true) so the core `resize-pvc` task can run. Minikube's
+# default `standard` StorageClass does not allow expansion, so resize-pvc times
+# out on a plain cluster.
 #
 # Trimmed from kubernetes-csi/csi-driver-host-path v1.17.1
 # (deploy/kubernetes-1.30/hostpath). Only the pieces needed to dynamically

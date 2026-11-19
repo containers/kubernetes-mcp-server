@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: k6-tracing
+  name: k6-tracing
+  namespace: tracing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k6-tracing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k6-tracing
+    spec:
+      containers:
+      - name: k6-tracing
+        image: ghcr.io/grafana/xk6-client-tracing:v0.0.5
+        env:
+        - name: ENDPOINT
+          value: otel-collector.tracing:4317

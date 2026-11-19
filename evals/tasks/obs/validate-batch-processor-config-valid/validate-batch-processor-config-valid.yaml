@@ -1,0 +1,29 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "validate-batch-processor-config-valid"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: otelcol
+    suite: obs
+    requires: obs
+    toolType: validation
+  description: |
+    Tests if the agent can validate a valid batch processor configuration.
+spec:
+  verify:
+    - llmJudge:
+        contains: "is valid"
+  prompt:
+    inline: |
+      Validate this OpenTelemetry Collector batch processor configuration for version 0.144.0:
+
+      ```yaml
+      send_batch_size: 8192
+      timeout: 200ms
+      send_batch_max_size: 0
+      ```
+
+      Is this configuration valid?

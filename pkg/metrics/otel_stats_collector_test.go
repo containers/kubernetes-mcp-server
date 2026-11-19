@@ -2,13 +2,17 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"runtime"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
@@ -111,6 +115,38 @@ func (s *OtelStatsCollectorSuite) TestRecordHTTPRequest() {
 		stats := collector.GetStats(s.T().Context())
 		s.Equal(int64(1), stats.HTTPRequestsByStatus["other"])
 	})
+
+	s.Run("sanitizes invalid UTF-8 request paths", func() {
+		ctx := context.Background()
+		collector, err := NewOtelStatsCollector("test-meter-http-invalid-utf8")
+		s.Require().NoError(err)
+
+		// Simulates a path traversal scanner probe: net/http percent-decodes
+		// "/%c0%ae%c0%ae/windows/win.ini" into an overlong UTF-8 encoding of
+		// ".." which is not valid UTF-8.
+		collector.RecordHTTPRequest(ctx, "GET", "/\xc0\xae\xc0\xae/windows/win.ini", 404, 10*time.Millisecond)
+
+		stats := collector.GetStats(s.T().Context())
+		s.Equal(int64(1), stats.TotalHTTPRequests, "Should have 1 total HTTP request")
+		for path := range stats.HTTPRequestsByPath {
+			s.True(utf8.ValidString(path), "Recorded path should be valid UTF-8")
+		}
+	})
+
+	s.Run("prometheus handler keeps serving metrics after invalid UTF-8 paths", func() {
+		ctx := context.Background()
+		collector, err := NewOtelStatsCollector("test-meter-http-prom-utf8")
+		s.Require().NoError(err)
+
+		collector.RecordHTTPRequest(ctx, "GET", "/\xc0\xae\xc0\xae/windows/win.ini", 404, 10*time.Millisecond)
+		collector.RecordHTTPRequest(ctx, "GET", "/\x80../\x80../winnt/win.ini", 404, 10*time.Millisecond)
+
+		rec := httptest.NewRecorder()
+		collector.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		s.Equal(http.StatusOK, rec.Code, "/metrics should not fail with HTTP 500")
+		s.NotContains(rec.Body.String(), "An error has occurred while serving metrics")
+		s.Contains(rec.Body.String(), "k8s_mcp_http_requests_total")
+	})
 }
 
 func (s *OtelStatsCollectorSuite) TestGetStats() {
@@ -209,6 +245,56 @@ func (s *OtelStatsCollectorSuite) TestServerInfoGauge() {
 	})
 }
 
+func (s *OtelStatsCollectorSuite) TestRecordInFlightRequest() {
+	type change struct {
+		method string
+		delta  int64
+	}
+	tests := []struct {
+		name     string
+		changes  []change
+		expected map[string]int64
+	}{
+		{
+			name:     "increment sets the in-flight count for the method",
+			changes:  []change{{"tools/call", 1}, {"tools/call", 1}},
+			expected: map[string]int64{"tools/call": 2},
+		},
+		{
+			name:     "decrement returns the in-flight count to zero",
+			changes:  []change{{"tools/call", 1}, {"tools/call", -1}},
+			expected: map[string]int64{"tools/call": 0},
+		},
+		{
+			name:     "methods are tracked independently",
+			changes:  []change{{"tools/call", 1}, {"resources/read", 1}, {"resources/read", 1}, {"resources/read", -1}},
+			expected: map[string]int64{"tools/call": 1, "resources/read": 1},
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			collector, err := NewOtelStatsCollector("test-meter-in-flight")
+			s.Require().NoError(err)
+			ctx := context.Background()
+			for _, c := range tt.changes {
+				collector.RecordInFlightRequest(ctx, c.method, c.delta)
+			}
+
+			stats := collector.GetStats(s.T().Context())
+			s.Equal(tt.expected, stats.RequestsInFlight, "/stats in-flight requests")
+
+			rec := httptest.NewRecorder()
+			collector.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+			body := rec.Body.String()
+			s.Contains(body, "# TYPE k8s_mcp_requests_in_flight gauge")
+			for method, value := range tt.expected {
+				pattern := fmt.Sprintf(`(?m)^k8s_mcp_requests_in_flight\{[^}]*mcp_method_name="%s"[^}]*\} %d$`, regexp.QuoteMeta(method), value)
+				s.Regexp(regexp.MustCompile(pattern), body, "Prometheus value for %s", method)
+			}
+		})
+	}
+}
+
 func (s *OtelStatsCollectorSuite) TestPrometheusHandler() {
 	s.Run("serves metrics in Prometheus format", func() {
 		collector, err := NewOtelStatsCollectorWithConfig(s.T().Context(), CollectorConfig{
@@ -246,7 +332,9 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "none")
 
-		exporter, err := createMetricsExporter(context.Background(), nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(context.Background(), &cfg.Telemetry)
 		s.NoError(err)
 		s.Nil(exporter)
 	})
@@ -254,7 +342,9 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 	s.Run("returns nil when OTEL_METRICS_EXPORTER is none case-insensitive", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "NONE")
 
-		exporter, err := createMetricsExporter(context.Background(), nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(context.Background(), &cfg.Telemetry)
 		s.NoError(err)
 		s.Nil(exporter)
 	})
@@ -273,9 +363,11 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -289,10 +381,12 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4318",
-			Protocol: "http/protobuf",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4318")
+			c.Protocol.SetForTest("http/protobuf")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -306,10 +400,12 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "grpc",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("grpc")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -323,10 +419,12 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "unknown_protocol",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("unknown_protocol")
+			return c
+		}()
 
 		ctx := context.Background()
 		exporter, err := createMetricsExporter(ctx, cfg)
@@ -335,13 +433,15 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		defer func() { _ = exporter.Shutdown(ctx) }()
 	})
 
-	s.Run("creates exporter from env var endpoint when no config", func() {
+	s.Run("creates exporter from env var endpoint when no config file", func() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
 
 		ctx := context.Background()
-		exporter, err := createMetricsExporter(ctx, nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(ctx, &cfg.Telemetry)
 		s.NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()
@@ -353,7 +453,9 @@ func (s *OtelStatsCollectorSuite) TestCreateMetricsExporter() {
 		s.T().Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 
 		ctx := context.Background()
-		exporter, err := createMetricsExporter(ctx, nil)
+		cfg, err := config.ReadToml(s.T().Context(), nil)
+		s.Require().NoError(err)
+		exporter, err := createMetricsExporter(ctx, &cfg.Telemetry)
 		s.NoError(err)
 		s.NotNil(exporter)
 		defer func() { _ = exporter.Shutdown(ctx) }()

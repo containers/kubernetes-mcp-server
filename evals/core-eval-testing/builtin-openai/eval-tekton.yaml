@@ -1,0 +1,54 @@
+kind: Eval
+metadata:
+  name: "tekton-e2e"
+config:
+  agent:
+    type: "file"
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+  taskSets:
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: core
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: config
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "configuration_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: tekton
+        workflow: pipelinerun-diagnosis
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tekton_pipelinerun_diagnose
+        minToolCalls: 1
+        maxToolCalls: 1
+    # Matching task sets are additive: mcpchecker runs each task once and applies both assertion sets.
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: tekton
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20

@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "prometheus-requests"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: query
+  description: |
+    Tests if the agent can calculate the request rate to Prometheus by discovering
+    and querying the prometheus_http_requests_total metric.
+spec:
+  verify:
+    - llmJudge:
+        contains: "prometheus_http_requests_total"
+  prompt:
+    inline: |
+      How many requests per second are being made to Prometheus?
+      Include the Prometheus metric name and PromQL query you used.

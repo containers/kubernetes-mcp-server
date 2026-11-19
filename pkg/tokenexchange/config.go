@@ -1,15 +1,16 @@
 package tokenexchange
 
 import (
-	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 const (
@@ -40,6 +41,13 @@ type TargetTokenExchangeConfig struct {
 	// For same-realm: "urn:ietf:params:oauth:token-type:access_token"
 	// For cross-realm: "urn:ietf:params:oauth:token-type:jwt"
 	SubjectTokenType string `toml:"subject_token_type"`
+	// RequestedTokenType specifies the requested_token_type form parameter.
+	// RFC 8693 section 2.1 makes this OPTIONAL: when unspecified, the issued token
+	// type is at the discretion of the authorization server. Exchangers send
+	// access_token when this is empty, preserving pre-existing behaviour. Override to
+	// "urn:ietf:params:oauth:token-type:jwt" when the STS expects to mint a
+	// fresh JWT.
+	RequestedTokenType string `toml:"requested_token_type,omitempty"`
 	// SubjectIssuer is the IDP alias for cross-realm token exchange
 	// Only required when exchanging tokens across Keycloak realms
 	SubjectIssuer string `toml:"subject_issuer,omitempty"`
@@ -66,17 +74,19 @@ type TargetTokenExchangeConfig struct {
 	// identity provider (e.g., SPIRE JWT-SVID). Used with AuthStyleFederated.
 	// The file is re-read on each token request to support token rotation.
 	FederatedTokenFile string `toml:"federated_token_file,omitempty"`
+	// TLSMinVersion is the effective global TLS min version.
+	TLSMinVersion string `toml:"-"`
+	// TLSCipherSuites is the effective global TLS cipher suites.
+	TLSCipherSuites []string `toml:"-"`
 
 	// client is a http client configured to work with the IdP for this target
 	client *http.Client `toml:"-"`
 	// clientCAFile tracks which CAFile was used to build the cached client
 	clientCAFile string `toml:"-"`
-	// cachedAssertion stores the most recently generated JWT assertion
-	cachedAssertion string `toml:"-"`
-	// cachedAssertionExpiry is when the cached assertion expires
-	cachedAssertionExpiry time.Time `toml:"-"`
-	// assertionMutex protects assertion caching from race conditions
-	assertionMutex sync.Mutex `toml:"-"`
+	// clientTLSMinVersion tracks the TLS min version used to build the cached client
+	clientTLSMinVersion string `toml:"-"`
+	// clientTLSCipherSuites tracks the TLS cipher suites used to build the cached client
+	clientTLSCipherSuites []string `toml:"-"`
 	// clientMutex protects HTTP client creation from race conditions
 	clientMutex sync.Mutex `toml:"-"`
 
@@ -162,16 +172,16 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
 
-	if c.client != nil && c.clientCAFile == c.CAFile {
+	if c.client != nil && c.clientCAFile == c.CAFile &&
+		c.clientTLSMinVersion == c.TLSMinVersion &&
+		slices.Equal(c.clientTLSCipherSuites, c.TLSCipherSuites) {
 		return c.client, nil
 	}
 
 	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
 
-	// Always set MinVersion for security, regardless of CAFile
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
+	// Build TLS options for outbound client
+	var tlsOpts []tlsutil.TLSConfigOption
 
 	if c.CAFile != "" {
 		caCert, err := os.ReadFile(c.CAFile)
@@ -184,7 +194,13 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 			return nil, fmt.Errorf("failed to parse CA certificate from '%s'", c.CAFile)
 		}
 
-		tlsConfig.RootCAs = caCertPool
+		tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(caCertPool))
+	}
+
+	// Build TLS config from stored min version and cipher suites.
+	tlsConfig, err := tlsutil.BuildTLSConfig(c.TLSMinVersion, c.TLSCipherSuites, tlsOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
 	}
 
 	baseTransport.TLSClientConfig = tlsConfig
@@ -203,6 +219,8 @@ func (c *TargetTokenExchangeConfig) HTTPClient() (*http.Client, error) {
 		Transport: transport,
 	}
 	c.clientCAFile = c.CAFile
+	c.clientTLSMinVersion = c.TLSMinVersion
+	c.clientTLSCipherSuites = append([]string(nil), c.TLSCipherSuites...)
 
 	return c.client, nil
 }

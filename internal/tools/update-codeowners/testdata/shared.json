@@ -1,0 +1,9 @@
+{
+  "default_approvers": ["@Cali0707"],
+  "areas": [
+    {"toolset": "logs", "paths": ["/pkg/obs/logs/", "/pkg/obs/auth/", "/pkg/obs/toolcfg/"], "approvers": ["@manusa"]},
+    {"toolset": "metrics", "paths": ["/pkg/obs/metrics/", "/pkg/obs/auth/", "/pkg/obs/toolcfg/"], "approvers": ["@matzew"]},
+    {"toolset": "otelcol", "paths": ["/pkg/obs/toolcfg/"], "approvers": ["@nader-ziada"]},
+    {"toolset": "traces", "paths": ["/pkg/obs/auth/", "/pkg/obs/toolcfg/"], "approvers": ["@2uasimojo"]}
+  ]
+}

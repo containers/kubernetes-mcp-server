@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,11 +25,11 @@ type WatchKubeConfigSuite struct {
 
 func (s *WatchKubeConfigSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	s.T().Setenv("KUBECONFIG_DEBOUNCE_WINDOW_MS", "10")
+	s.Cfg.KubeconfigDebounceWindow.SetForTest(10 * time.Millisecond)
 	s.mockServer = test.NewMockServer()
 	// Set up default discovery handler for non-OpenShift cluster
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		[[prompts]]
 		name = "test-prompt"
 		title = "Test Prompt"
@@ -43,8 +43,8 @@ func (s *WatchKubeConfigSuite) SetupTest() {
 		[[prompts.messages]]
 		role = "user"
 		content = "Test message with {{test_arg}}"
-	`), s.Cfg), "Expected to parse prompts config")
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	`)
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 }
 
 func (s *WatchKubeConfigSuite) TearDownTest() {
@@ -55,7 +55,7 @@ func (s *WatchKubeConfigSuite) TearDownTest() {
 }
 
 func (s *WatchKubeConfigSuite) WriteKubeconfig() {
-	f, _ := os.OpenFile(s.Cfg.KubeConfig, os.O_APPEND|os.O_WRONLY, 0644)
+	f, _ := os.OpenFile(s.Cfg.KubeConfig.Get(), os.O_APPEND|os.O_WRONLY, 0644)
 	_, _ = f.WriteString("\n")
 	_ = f.Close()
 }
@@ -109,40 +109,87 @@ func (s *WatchKubeConfigSuite) TestNotifiesPromptsChangeMultipleTimes() {
 }
 
 func (s *WatchKubeConfigSuite) TestClearsNoLongerAvailableTools() {
-	s.mockServer.Handle(test.NewInOpenShiftHandler())
-	s.InitMcpClient()
+	s.Run("with target compatibility filtering disabled", func() {
+		// When filtering is disabled, OpenShift tools are always present
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
+		s.mockServer.Handle(test.NewInOpenShiftHandler())
+		s.InitMcpClient()
 
-	s.Run("OpenShift tool is available on OpenShift cluster", func() {
-		tools, err := s.ListTools()
-		s.Require().NoError(err, "call ListTools failed")
-		s.Require().NotNil(tools, "list tools failed")
-		var found bool
-		for _, tool := range tools.Tools {
-			if tool.Name == "projects_list" {
-				found = true
-				break
+		s.Run("OpenShift tool is available on OpenShift cluster", func() {
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			var found bool
+			for _, tool := range tools.Tools {
+				if tool.Name == "projects_list" {
+					found = true
+					break
+				}
 			}
-		}
-		s.Truef(found, "expected OpenShift tool to be available")
+			s.Truef(found, "expected OpenShift tool to be available")
+		})
+
+		s.Run("OpenShift tool remains after switching to non-OpenShift", func() {
+			capture := s.StartCapturingNotifications()
+
+			// Reload Config without OpenShift
+			s.mockServer.ResetHandlers()
+			s.WriteKubeconfig()
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			var found bool
+			for _, tool := range tools.Tools {
+				if tool.Name == "projects_list" {
+					found = true
+					break
+				}
+			}
+			s.Truef(found, "expected OpenShift tool to remain when filtering disabled")
+		})
 	})
 
-	s.Run("OpenShift tool is removed after switching to non-OpenShift", func() {
-		capture := s.StartCapturingNotifications()
+	s.Run("with target compatibility filtering enabled", func() {
+		// When filtering is enabled, OpenShift tools are dynamically filtered
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+		s.mockServer.Handle(test.NewInOpenShiftHandler())
+		s.InitMcpClient()
 
-		// Reload Config without OpenShift
-		s.mockServer.ResetHandlers()
-		// Add back non-OpenShift discovery handler
-		s.mockServer.Handle(test.NewDiscoveryClientHandler())
-		s.WriteKubeconfig()
-		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
-		time.Sleep(serverSettleDelay)
+		s.Run("OpenShift tool is available on OpenShift cluster", func() {
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			var found bool
+			for _, tool := range tools.Tools {
+				if tool.Name == "projects_list" {
+					found = true
+					break
+				}
+			}
+			s.Truef(found, "expected OpenShift tool to be available")
+		})
 
-		tools, err := s.ListTools()
-		s.Require().NoError(err, "call ListTools failed")
-		s.Require().NotNil(tools, "list tools failed")
-		for _, tool := range tools.Tools {
-			s.Require().Falsef(tool.Name == "projects_list", "expected OpenShift tool to be removed after cluster change")
-		}
+		s.Run("OpenShift tool is removed after switching to non-OpenShift", func() {
+			capture := s.StartCapturingNotifications()
+
+			// Reload Config without OpenShift
+			s.mockServer.ResetHandlers()
+			// Add back non-OpenShift discovery handler
+			s.mockServer.Handle(test.NewDiscoveryClientHandler())
+			s.WriteKubeconfig()
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			for _, tool := range tools.Tools {
+				s.Require().Falsef(tool.Name == "projects_list", "expected OpenShift tool to be removed when filtering enabled")
+			}
+		})
 	})
 }
 
@@ -158,13 +205,12 @@ type WatchClusterStateSuite struct {
 
 func (s *WatchClusterStateSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
-	// Configure fast polling for tests
-	s.T().Setenv("CLUSTER_STATE_POLL_INTERVAL_MS", "50")
-	s.T().Setenv("CLUSTER_STATE_DEBOUNCE_WINDOW_MS", "10")
+	s.Cfg.ClusterStatePollInterval.SetForTest(50 * time.Millisecond)
+	s.Cfg.ClusterStateDebounceWindow.SetForTest(10 * time.Millisecond)
 	s.mockServer = test.NewMockServer()
 	s.handler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.handler)
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 }
 
 func (s *WatchClusterStateSuite) TearDownTest() {
@@ -206,39 +252,128 @@ func (s *WatchClusterStateSuite) TestNotifiesToolsChangeMultipleTimes() {
 }
 
 func (s *WatchClusterStateSuite) TestDetectsOpenShiftClusterStateChange() {
-	s.InitMcpClient()
+	s.Run("with target compatibility filtering disabled", func() {
+		// When filtering is disabled, OpenShift tools are always present
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
+		s.InitMcpClient()
 
-	s.Run("OpenShift tool is not available initially", func() {
-		tools, err := s.ListTools()
-		s.Require().NoError(err, "call ListTools failed")
-		s.Require().NotNil(tools, "list tools failed")
-		for _, tool := range tools.Tools {
-			s.Require().Falsef(tool.Name == "projects_list", "expected OpenShift tool to not be available initially")
-		}
+		s.Run("OpenShift tool is available even on non-OpenShift", func() {
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			var found bool
+			for _, tool := range tools.Tools {
+				if tool.Name == "projects_list" {
+					found = true
+					break
+				}
+			}
+			s.Truef(found, "expected OpenShift tool to be available when filtering disabled")
+		})
 	})
 
-	s.Run("OpenShift tool is added after cluster becomes OpenShift", func() {
-		capture := s.StartCapturingNotifications()
+	s.Run("with target compatibility filtering enabled", func() {
+		// When filtering is enabled, OpenShift tools are dynamically filtered
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+		s.InitMcpClient()
 
-		// Simulate cluster becoming OpenShift by adding OpenShift API groups
-		s.mockServer.ResetHandlers()
-		s.mockServer.Handle(test.NewInOpenShiftHandler())
-
-		capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
-		time.Sleep(serverSettleDelay)
-
-		tools, err := s.ListTools()
-		s.Require().NoError(err, "call ListTools failed")
-		s.Require().NotNil(tools, "list tools failed")
-
-		var found bool
-		for _, tool := range tools.Tools {
-			if tool.Name == "projects_list" {
-				found = true
-				break
+		s.Run("OpenShift tool is not available initially", func() {
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			for _, tool := range tools.Tools {
+				s.Require().Falsef(tool.Name == "projects_list", "expected OpenShift tool to not be available initially")
 			}
-		}
-		s.Truef(found, "expected OpenShift tool to be available after cluster state change")
+		})
+
+		s.Run("OpenShift tool is added after cluster becomes OpenShift", func() {
+			capture := s.StartCapturingNotifications()
+
+			// Simulate cluster becoming OpenShift by adding OpenShift API groups
+			s.mockServer.ResetHandlers()
+			s.mockServer.Handle(test.NewInOpenShiftHandler())
+
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+
+			var found bool
+			for _, tool := range tools.Tools {
+				if tool.Name == "projects_list" {
+					found = true
+					break
+				}
+			}
+			s.Truef(found, "expected OpenShift tool to be available after cluster state change")
+		})
+	})
+}
+
+func (s *WatchClusterStateSuite) TestDetectsMetricsServerClusterStateChange() {
+	s.Run("with target compatibility filtering enabled", func() {
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+		s.InitMcpClient()
+
+		s.Run("metrics tools are not available initially", func() {
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			for _, tool := range tools.Tools {
+				s.Require().NotEqual("pods_top", tool.Name, "expected pods_top to not be available initially")
+				s.Require().NotEqual("nodes_top", tool.Name, "expected nodes_top to not be available initially")
+			}
+		})
+
+		s.Run("metrics tools are added after metrics API becomes available", func() {
+			capture := s.StartCapturingNotifications()
+
+			s.handler.AddAPIResourceList(metav1.APIResourceList{
+				GroupVersion: "metrics.k8s.io/v1beta1",
+				APIResources: []metav1.APIResource{
+					{Name: "nodes", Kind: "NodeMetrics", Namespaced: false, Verbs: metav1.Verbs{"get", "list"}},
+					{Name: "pods", Kind: "PodMetrics", Namespaced: true, Verbs: metav1.Verbs{"get", "list"}},
+				},
+			})
+
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+
+			found := map[string]bool{}
+			for _, tool := range tools.Tools {
+				if tool.Name == "pods_top" || tool.Name == "nodes_top" {
+					found[tool.Name] = true
+				}
+			}
+			s.True(found["pods_top"], "expected pods_top to be available after metrics API is added")
+			s.True(found["nodes_top"], "expected nodes_top to be available after metrics API is added")
+		})
+
+		s.Run("metrics tools are removed after metrics API becomes unavailable", func() {
+			capture := s.StartCapturingNotifications()
+
+			// Replace discovery with a handler that has no metrics API
+			s.mockServer.ResetHandlers()
+			s.handler = test.NewDiscoveryClientHandler()
+			s.mockServer.Handle(s.handler)
+
+			capture.RequireNotification(s.T(), 5*time.Second, "notifications/tools/list_changed")
+			time.Sleep(serverSettleDelay)
+
+			tools, err := s.ListTools()
+			s.Require().NoError(err, "call ListTools failed")
+			s.Require().NotNil(tools, "list tools failed")
+			for _, tool := range tools.Tools {
+				s.Require().NotEqual("pods_top", tool.Name, "expected pods_top to be removed when metrics API is gone")
+				s.Require().NotEqual("nodes_top", tool.Name, "expected nodes_top to be removed when metrics API is gone")
+			}
+		})
 	})
 }
 

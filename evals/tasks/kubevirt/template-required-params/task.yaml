@@ -1,0 +1,147 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "template-required-params"
+  difficulty: hard
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-params
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-params
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: template.kubevirt.io/v1beta1
+          kind: VirtualMachineTemplate
+          metadata:
+            name: secure-vm-template
+            namespace: vmt-test-params
+          spec:
+            parameters:
+              - name: VM_NAME
+                displayName: "Virtual Machine Name"
+                description: "Name of the virtual machine to create"
+                required: true
+              - name: SSH_KEY
+                displayName: "SSH Public Key"
+                description: "SSH public key for VM access"
+                required: true
+              - name: MEMORY
+                displayName: "Memory Size"
+                description: "Amount of memory for the VM"
+                value: "2Gi"
+              - name: ROOT_PASSWORD
+                displayName: "Root Password"
+                description: "Root password (auto-generated if not provided)"
+                generate: "expression"
+                from: "[a-zA-Z0-9]{12}"
+            virtualMachine:
+              metadata:
+                name: ${VM_NAME}
+              spec:
+                runStrategy: Halted
+                template:
+                  spec:
+                    domain:
+                      memory:
+                        guest: ${MEMORY}
+                      devices:
+                        disks:
+                          - name: containerdisk
+                            disk:
+                              bus: virtio
+                          - name: cloudinitdisk
+                            disk:
+                              bus: virtio
+                    volumes:
+                      - name: containerdisk
+                        containerDisk:
+                          image: quay.io/containerdisks/fedora:latest
+                      - name: cloudinitdisk
+                        cloudInitNoCloud:
+                          userData: |
+                            #cloud-config
+                            password: ${ROOT_PASSWORD}
+                            chpasswd:
+                              expire: false
+                            ssh_authorized_keys:
+                              - ${SSH_KEY}
+          EOF
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vmt-test-params"
+
+          verify_vm_exists "secure-server" "$NS" || exit 1
+          verify_container_disk "secure-server" "$NS" "fedora" || exit 1
+
+          # Verify memory is 2Gi (the default)
+          MEMORY=$(kubectl get virtualmachine secure-server -n "$NS" -o jsonpath='{.spec.template.spec.domain.memory.guest}')
+          if [ "$MEMORY" != "2Gi" ]; then
+            echo "ERROR: Expected memory '2Gi' (default), got '$MEMORY'"
+            exit 1
+          fi
+          echo "Memory correctly set to 2Gi (default)"
+
+          verify_no_unresolved_placeholders "secure-server" "$NS" || exit 1
+
+          # Verify the SSH key was substituted into cloud-init
+          VM_YAML=$(kubectl get virtualmachine secure-server -n "$NS" -o yaml)
+          if echo "$VM_YAML" | grep -q "ssh-rsa"; then
+            echo "SSH key was correctly substituted"
+          else
+            echo "ERROR: SSH key not found in VM spec"
+            exit 1
+          fi
+
+          echo "All validations passed"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: secure-server
+          namespace: vmt-test-params
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete virtualmachinetemplate.template.kubevirt.io/v1beta1 secure-vm-template -n vmt-test-params --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-params
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      A VirtualMachineTemplate named secure-vm-template exists in the vmt-test-params namespace.
+
+      Create a VirtualMachine from this template with the following values:
+      - VM_NAME: secure-server
+      - SSH_KEY: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7example test@example.com
+
+      Use default values for all other parameters. For any auto-generated parameters, generate an appropriate value.
+      The VM should be created in the vmt-test-params namespace.

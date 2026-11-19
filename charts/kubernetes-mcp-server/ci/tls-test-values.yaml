@@ -1,0 +1,9 @@
+# Exercise tls.enabled so the chart writes tls_cert / tls_key into the ConfigMap
+# instead of passing removed --tls-cert / --tls-key flags.
+
+ingress:
+  host: localhost
+
+tls:
+  enabled: true
+  secretName: mcp-tls

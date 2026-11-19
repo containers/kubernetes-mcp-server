@@ -86,6 +86,11 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 		s.Equal(clientID, claims.Subject)
 		s.True(claims.Audience.Contains(tokenURL))
 		s.NotEmpty(claims.ID)
+		// iat must be present: strict validators (e.g. Keycloak's client-jwt
+		// authenticator) reject an assertion without it, since they cannot bound
+		// the token's age and refuse the expiry as "too far in the future".
+		s.Require().NotNil(claims.IssuedAt, "iat claim must be set")
+		s.InDelta(time.Now().Unix(), claims.IssuedAt.Time().Unix(), 5)
 	})
 
 	s.Run("includes x5t#S256 header", func() {
@@ -140,8 +145,8 @@ func (s *AssertionTestSuite) TestBuildClientAssertion() {
 	})
 }
 
-func (s *AssertionTestSuite) TestGetOrBuildAssertion() {
-	s.Run("caches assertion", func() {
+func (s *AssertionTestSuite) TestBuildAssertion() {
+	s.Run("mints a fresh assertion with a unique jti each call", func() {
 		cfg := &TargetTokenExchangeConfig{
 			TokenURL:       "https://token.url",
 			ClientID:       "test-client",
@@ -149,13 +154,26 @@ func (s *AssertionTestSuite) TestGetOrBuildAssertion() {
 			ClientKeyFile:  s.keyFile,
 		}
 
-		assertion1, err := cfg.GetOrBuildAssertion(s.T().Context())
+		assertion1, err := cfg.BuildAssertion(s.T().Context())
 		s.Require().NoError(err)
 
-		assertion2, err := cfg.GetOrBuildAssertion(s.T().Context())
+		assertion2, err := cfg.BuildAssertion(s.T().Context())
 		s.Require().NoError(err)
 
-		s.Equal(assertion1, assertion2, "should return cached assertion")
+		// Assertions must not be cached/reused: OIDC private_key_jwt requires a
+		// single-use jti, and strict providers (e.g. Keycloak) reject a reused
+		// assertion with "Token reuse detected".
+		s.NotEqual(assertion1, assertion2, "each call must mint a fresh assertion")
+
+		var claims1, claims2 jwt.Claims
+		token1, err := jwt.ParseSigned(assertion1, []jose.SignatureAlgorithm{jose.RS256})
+		s.Require().NoError(err)
+		s.Require().NoError(token1.UnsafeClaimsWithoutVerification(&claims1))
+		token2, err := jwt.ParseSigned(assertion2, []jose.SignatureAlgorithm{jose.RS256})
+		s.Require().NoError(err)
+		s.Require().NoError(token2.UnsafeClaimsWithoutVerification(&claims2))
+		s.NotEmpty(claims1.ID)
+		s.NotEqual(claims1.ID, claims2.ID, "jti must differ between assertions")
 	})
 
 	s.Run("returns error for missing files", func() {
@@ -166,7 +184,7 @@ func (s *AssertionTestSuite) TestGetOrBuildAssertion() {
 			ClientKeyFile:  "/nonexistent/key.pem",
 		}
 
-		_, err := cfg.GetOrBuildAssertion(s.T().Context())
+		_, err := cfg.BuildAssertion(s.T().Context())
 		s.Error(err)
 	})
 }

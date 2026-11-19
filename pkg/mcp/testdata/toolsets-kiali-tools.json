@@ -1,7 +1,61 @@
 [
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "name"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods",
+                  "subresource": "log"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Workload: Logs"
@@ -9,10 +63,6 @@
     "description": "Get the logs of a Kubernetes Pod (or workload name that will be resolved to a pod) in a namespace. Output is plain text, matching kubernetes-mcp-server pods_log. The line_count field tells you the total number of log lines returned. Analyze ALL of them, but summarize the results unless the user explicitly asks for the raw output. Do not omit any error or warning lines.",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional. Name of the cluster to get the logs from. If not provided, will use the default cluster name in the Kiali KubeConfig",
-          "type": "string"
-        },
         "container": {
           "description": "Optional. Name of the Pod container to get the logs from.",
           "type": "string"
@@ -23,6 +73,10 @@
             "codeblock",
             "plain"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "name": {
@@ -62,8 +116,17 @@
     "title": "Workload: Logs"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Mesh status aggregates control-plane, data-plane, and observability backends through Kiali; the Kubernetes API checks Kiali performs cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Get Mesh Status"
@@ -77,8 +140,117 @@
     "title": "Get Mesh Status"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "resource": "services"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "deployments"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "statefulsets"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "daemonsets"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "replicasets"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true,
       "readOnlyHint": true,
       "title": "Get Mesh Traffic Graph"
@@ -86,10 +258,6 @@
     "description": "Returns service-to-service traffic topology, dependencies, and network metrics (throughput, response time, mTLS) for the specified namespaces. Use this to diagnose routing issues, latency, or find upstream/downstream dependencies.",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional cluster name to include in the graph. Default is the cluster name in the Kiali configuration (KubeConfig).",
-          "type": "string"
-        },
         "graphType": {
           "default": "versionedApp",
           "description": "Granularity of the graph. 'app' aggregates by app name, 'versionedApp' separates by versions, 'workload' maps specific pods/deployments. Default: versionedApp.",
@@ -99,6 +267,10 @@
             "service",
             "workload"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespaces": {
@@ -115,6 +287,39 @@
     "title": "Get Mesh Traffic Graph"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "resourceName": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -129,10 +334,6 @@
           "description": "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
           "type": "string"
         },
-        "clusterName": {
-          "description": "Cluster name to get metrics from. Optional, defaults to the cluster name in the Kiali configuration (KubeConfig)",
-          "type": "string"
-        },
         "direction": {
           "default": "outbound",
           "description": "Traffic direction. Optional, defaults to 'outbound'",
@@ -140,6 +341,10 @@
             "inbound",
             "outbound"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {
@@ -195,6 +400,39 @@
     "title": "Get Metrics for a Resource"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "resourceName": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -205,8 +443,8 @@
     "description": "Returns a human-readable text summary with current Pod CPU/memory usage (from Prometheus) compared to Kubernetes requests/limits (from the Pod spec). Useful to answer questions like 'Is this workload using too much memory?'",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {
@@ -240,6 +478,173 @@
     "title": "Get Pod Performance"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "resource": "services"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "resource": "pods"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "resource": "replicationcontrollers"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "deployments"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "statefulsets"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "daemonsets"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "apps",
+                  "resource": "replicasets"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "batch",
+                  "resource": "jobs"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "batch",
+                  "resource": "cronjobs"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "argoproj.io",
+                  "resource": "applications"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -255,8 +660,8 @@
         ]
       },
       "properties": {
-        "clusterName": {
-          "description": "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespaces": {
@@ -288,6 +693,26 @@
     "title": "List or Resource Details"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -312,6 +737,63 @@
     "title": "Get Trace Details"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "unbounded": {
+          "reason": "Mesh cluster listing is resolved by Kiali from its multi-cluster configuration; the Kubernetes API checks Kiali performs cannot be derived from this capability's arguments"
+        },
+        "version": "v1alpha1"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List Mesh Clusters"
+    },
+    "description": "Returns the list of Istio mesh clusters that Kiali can access. Each entry includes its name and whether it is the home cluster (where Kiali is deployed). Call this tool before using meshCluster on other Kiali tools when the target cluster is unknown.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "kiali_list_mesh_clusters",
+    "title": "List Mesh Clusters"
+  },
+  {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "resourceName": {
+                "argument": "namespace"
+              },
+              "target": {
+                "resource": {
+                  "resource": "namespaces"
+                }
+              },
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
@@ -322,10 +804,6 @@
     "description": "Lists distributed traces for a service in a namespace. Returns a summary (namespace, service, total_found, avg_duration_ms) and a list of traces with id, duration_ms, spans_count, root_op, slowest_service, has_errors. Use get_trace_details with a trace id to get full hierarchy.",
     "inputSchema": {
       "properties": {
-        "clusterName": {
-          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
-          "type": "string"
-        },
         "errorOnly": {
           "default": false,
           "description": "If true, only consider traces that contain errors. Default false.",
@@ -340,6 +818,10 @@
           "default": 600,
           "description": "How far back to search. Default 600 (10m).",
           "type": "integer"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+          "type": "string"
         },
         "namespace": {
           "description": "Kubernetes namespace of the service.",
@@ -360,13 +842,384 @@
     "title": "List Traces by Service Name"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "virtualservices"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "destinationrules"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "gateways"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "serviceentries"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "sidecars"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "workloadentries"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "workloadgroups"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "envoyfilters"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "security.istio.io",
+                  "resource": "authorizationpolicies"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "security.istio.io",
+                  "resource": "peerauthentications"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "security.istio.io",
+                  "resource": "requestauthentications"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "gateways"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "httproutes"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "grpcroutes"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "referencegrants"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "tcproutes"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "tlsroutes"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "gatewayclasses"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            },
+            {
+              "namespace": {
+                "argument": "namespace"
+              },
+              "resourceName": {
+                "argument": "object"
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "inference.networking.k8s.io",
+                  "resource": "inferencepools"
+                }
+              },
+              "verbs": [
+                "create",
+                "patch",
+                "delete"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true,
-      "title": "Manage Istio Config: Create, Patch, Delete"
+      "readOnlyHint": false,
+      "title": "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete"
     },
-    "description": "Create, patch, or delete Istio config. For list and get (read-only) use manage_istio_config_read.",
+    "description": "Create, patch, or delete Istio, Gateway API, and Inference API config. Supports Istio resources (networking.istio.io, security.istio.io), Gateway API resources (gateway.networking.k8s.io), and Inference API resources (inference.networking.k8s.io) when installed on the cluster. For list and get (read-only) use manage_istio_config_read.",
     "inputSchema": {
       "properties": {
         "action": {
@@ -378,19 +1231,17 @@
           ],
           "type": "string"
         },
-        "clusterName": {
-          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
-          "type": "string"
-        },
         "data": {
-          "description": "Complete JSON or YAML data to apply or create the object. Required for create and patch actions. You MUST provide a COMPLETE and VALID manifest with ALL required fields for the resource type. Arrays (like servers, http, etc.) are REPLACED entirely, so you must include ALL required fields within each array element.",
+          "description": "JSON or YAML data for the resource. Required for create and patch actions. For create, you can provide partial content (e.g. only spec) and it will be merged onto a valid template with defaults. Arrays (like servers, http, etc.) are REPLACED entirely, so include ALL elements you want.",
           "type": "string"
         },
         "group": {
-          "description": "API group of the Istio object",
+          "description": "API group of the Istio object. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
           "enum": [
             "networking.istio.io",
-            "security.istio.io"
+            "security.istio.io",
+            "gateway.networking.k8s.io",
+            "inference.networking.k8s.io"
           ],
           "type": "string"
         },
@@ -407,20 +1258,30 @@
             "EnvoyFilter",
             "AuthorizationPolicy",
             "PeerAuthentication",
-            "RequestAuthentication"
+            "RequestAuthentication",
+            "HTTPRoute",
+            "GRPCRoute",
+            "ReferenceGrant",
+            "TCPRoute",
+            "TLSRoute",
+            "InferencePool"
           ],
           "type": "string"
         },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+          "type": "string"
+        },
         "namespace": {
-          "description": "Namespace containing the Istio object",
+          "description": "Namespace containing the Istio object.",
           "type": "string"
         },
         "object": {
-          "description": "Name of the Istio object",
+          "description": "Name of the Istio object.",
           "type": "string"
         },
         "version": {
-          "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway.",
+          "description": "API version. Use 'v1' for all resource types.",
           "type": "string"
         }
       },
@@ -435,17 +1296,311 @@
       "type": "object"
     },
     "name": "kiali_manage_istio_config",
-    "title": "Manage Istio Config: Create, Patch, Delete"
+    "title": "Manage Istio, Gateway API, and Inference API Config: Create, Patch, Delete"
   },
   {
+    "_meta": {
+      "io.kubernetes-mcp-server/rbac": {
+        "bounded": {
+          "requirements": [
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "virtualservices"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "destinationrules"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "gateways"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "serviceentries"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "sidecars"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "workloadentries"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "workloadgroups"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "networking.istio.io",
+                  "resource": "envoyfilters"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "security.istio.io",
+                  "resource": "authorizationpolicies"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "security.istio.io",
+                  "resource": "peerauthentications"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "security.istio.io",
+                  "resource": "requestauthentications"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "gateways"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "httproutes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "grpcroutes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "referencegrants"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "tcproutes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "tlsroutes"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "gateway.networking.k8s.io",
+                  "resource": "gatewayclasses"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "namespace": {
+                "all": true
+              },
+              "target": {
+                "resource": {
+                  "apiGroup": "inference.networking.k8s.io",
+                  "resource": "inferencepools"
+                }
+              },
+              "verbs": [
+                "get",
+                "list"
+              ]
+            }
+          ]
+        },
+        "version": "v1alpha1"
+      }
+    },
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": true,
-      "title": "Manage Istio Config: List or Get"
+      "title": "Manage Istio, Gateway API, and Inference API Config: List or Get"
     },
-    "description": "Read-only Istio config: list or get objects. For action 'list', returns an array of objects with {name, namespace, type, validation}. For create, patch, or delete use manage_istio_config.",
+    "description": "Read Istio, Gateway API, and Inference API config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names; omit group/kind to retrieve ALL config types in a single call. Supports Istio (networking.istio.io, security.istio.io), Gateway API (gateway.networking.k8s.io), and Inference API (inference.networking.k8s.io) when installed. 'get' returns full YAML. For writes use manage_istio_config.",
     "inputSchema": {
       "dependentRequired": {
         "object": [
@@ -464,20 +1619,18 @@
           ],
           "type": "string"
         },
-        "clusterName": {
-          "description": "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
-          "type": "string"
-        },
         "group": {
-          "description": "API group of the Istio object. Required for 'get' action.",
+          "description": "API group of the Istio object. Required ONLY for 'get' action. For 'list', OMIT group and kind to retrieve ALL config types in a single call. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
           "enum": [
             "networking.istio.io",
-            "security.istio.io"
+            "security.istio.io",
+            "gateway.networking.k8s.io",
+            "inference.networking.k8s.io"
           ],
           "type": "string"
         },
         "kind": {
-          "description": "Kind of the Istio object. Required for 'get' action.",
+          "description": "Kind of the Istio object. Required ONLY for 'get' action. For 'list', OMIT to return all kinds at once — do NOT call separately for each kind.",
           "enum": [
             "VirtualService",
             "DestinationRule",
@@ -489,8 +1642,18 @@
             "EnvoyFilter",
             "AuthorizationPolicy",
             "PeerAuthentication",
-            "RequestAuthentication"
+            "RequestAuthentication",
+            "HTTPRoute",
+            "GRPCRoute",
+            "ReferenceGrant",
+            "TCPRoute",
+            "TLSRoute",
+            "InferencePool"
           ],
+          "type": "string"
+        },
+        "meshCluster": {
+          "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
           "type": "string"
         },
         "namespace": {
@@ -506,7 +1669,7 @@
           "type": "string"
         },
         "version": {
-          "description": "API version. Use 'v1' for VirtualService, DestinationRule, and Gateway. Required for 'get' action.",
+          "description": "API version. Use 'v1' for all resource types. Required for 'get' action.",
           "type": "string"
         }
       },
@@ -516,6 +1679,6 @@
       "type": "object"
     },
     "name": "kiali_manage_istio_config_read",
-    "title": "Manage Istio Config: List or Get"
+    "title": "Manage Istio, Gateway API, and Inference API Config: List or Get"
   }
 ]

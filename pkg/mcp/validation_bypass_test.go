@@ -1,14 +1,11 @@
 package mcp
 
 import (
-	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // ValidationBypassSuite verifies that the validation_enabled config flag
@@ -29,13 +26,12 @@ type ValidationBypassSuite struct {
 }
 
 func (s *ValidationBypassSuite) TestValidationDisabledPassesToAPIServer() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		validation_enabled = false
-	`), s.Cfg), "Expected to parse validation config")
+	`)
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("API server rejects with 403 Forbidden", func() {
 		result, err := s.CallTool("namespaces_list", map[string]any{})
@@ -50,13 +46,12 @@ func (s *ValidationBypassSuite) TestValidationDisabledPassesToAPIServer() {
 }
 
 func (s *ValidationBypassSuite) TestValidationEnabledCatchesRBACDenial() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		validation_enabled = true
-	`), s.Cfg), "Expected to parse validation config")
+	`)
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("RBAC validator rejects before reaching API server", func() {
 		result, err := s.CallTool("namespaces_list", map[string]any{})

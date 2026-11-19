@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
@@ -37,7 +39,7 @@ func (s *ConfigurationSuite) SetupTest() {
 		kubeconfig.Contexts[name].Cluster = name + "-cluster"
 		kubeconfig.Contexts[name].AuthInfo = name + "-auth"
 	}
-	s.Cfg.KubeConfig = test.KubeconfigFile(s.T(), kubeconfig)
+	s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
 }
 
 func (s *ConfigurationSuite) TestContextsList() {
@@ -84,6 +86,99 @@ func (s *ConfigurationSuite) TestContextsList() {
 			s.Regexp(`^https?://(127\.0\.0\.1|localhost):\d+$`, lastServer, "expected real server URL for fake-context, got %v", lastServer)
 		})
 	})
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewHiddenOverHTTPByDefault() {
+	s.Cfg.Port.SetForTest("8080")
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.False(slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "configuration_view"
+	}))
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewExplicitlyEnabledOverHTTP() {
+	s.Cfg.Port.SetForTest("8080")
+	s.Cfg.EnabledTools.SetForTest([]string{"configuration_view"})
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.True(slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "configuration_view"
+	}))
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewOptInOverHTTP() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		port = "8080"
+		opt_in_tools = ["configuration_view"]
+	`)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	names := make([]string, 0, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		names = append(names, tool.Name)
+	}
+	s.Contains(names, "configuration_view")
+	s.Contains(names, "pods_list", "opting in must preserve the default tools")
+	result, err := s.CallTool("configuration_view", map[string]interface{}{})
+	s.Require().NoError(err)
+	s.False(result.IsError)
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewOptInWithAllowlist() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		port = "8080"
+		enabled_tools = ["pods_list"]
+		opt_in_tools = ["configuration_view"]
+	`)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	names := make([]string, 0, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		names = append(names, tool.Name)
+	}
+	s.ElementsMatch([]string{"pods_list", "configuration_view"}, names)
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewDisabledOverridesOptIn() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		port = "8080"
+		opt_in_tools = ["configuration_view"]
+		disabled_tools = ["configuration_view"]
+	`)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.False(slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "configuration_view"
+	}))
+	_, err = s.CallTool("configuration_view", map[string]interface{}{})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "unknown tool")
+}
+
+func (s *ConfigurationSuite) TestConfigurationViewOptInRequiresToolset() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		port = "8080"
+		toolsets = ["core"]
+		opt_in_tools = ["configuration_view"]
+	`)
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.False(slices.ContainsFunc(tools.Tools, func(tool *mcp.Tool) bool {
+		return tool.Name == "configuration_view"
+	}))
 }
 
 func (s *ConfigurationSuite) TestConfigurationView() {
@@ -162,7 +257,7 @@ func (s *ConfigurationSuite) TestConfigurationView() {
 }
 
 func (s *ConfigurationSuite) TestConfigurationViewInCluster() {
-	s.Cfg.KubeConfig = "" // Force in-cluster
+	s.Cfg.KubeConfig.SetForTest("") // Force in-cluster
 	kubernetes.InClusterConfig = func() (*rest.Config, error) {
 		return &rest.Config{
 			Host:        "https://kubernetes.default.svc",

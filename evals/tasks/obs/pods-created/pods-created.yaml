@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "pods-created"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: range-query
+  description: |
+    Tests if the agent can find recently created pods using a time-based filter
+    on a pod timestamp metric (kube_pod_start_time or kube_pod_created) over a
+    5-minute window.
+spec:
+  verify:
+    - llmJudge:
+        contains: "a Kubernetes pod timestamp metric (such as kube_pod_start_time or kube_pod_created) used with a time filter to count pods created in the last 5 minutes"
+  prompt:
+    inline: |
+      How many pods were created in the last 5 minutes?
+      Include the Prometheus metric name and PromQL query you used.

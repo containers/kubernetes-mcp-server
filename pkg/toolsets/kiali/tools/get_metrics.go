@@ -30,9 +30,9 @@ func InitGetMetrics() []api.ServerTool {
 						Type:        "string",
 						Description: "Namespace to get metrics from",
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Cluster name to get metrics from. Optional, defaults to the cluster name in the Kiali configuration (KubeConfig)",
+						Description: meshClusterDescription(),
 					},
 					"resourceName": {
 						Type:        "string",
@@ -82,16 +82,19 @@ func InitGetMetrics() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: resourceMetricsHandler,
+		}, RBAC: NamespaceAccessRBAC("namespace"), Handler: resourceMetricsHandler,
 	})
 
 	return ret
 }
 
 func resourceMetricsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiGetMetricsEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiGetMetricsEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve metrics: %w", err)), nil
 	}

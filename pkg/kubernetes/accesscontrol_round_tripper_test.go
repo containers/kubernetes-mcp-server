@@ -4,14 +4,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/kubernetes"
@@ -20,11 +22,15 @@ import (
 )
 
 type mockRoundTripper struct {
+	mu        sync.Mutex
 	called    *bool
 	onRequest func(w http.ResponseWriter, r *http.Request)
 }
 
 func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	*m.called = true
 	rec := httptest.NewRecorder()
 	m.onRequest(rec, req)
@@ -61,9 +67,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForNonAPIResources() {
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:                mockDelegate,
-		deniedResourcesProvider: nil,
-		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+		delegate:           mockDelegate,
+		deniedResources:    nil,
+		restMapperProvider: func() meta.RESTMapper { return s.restMapper },
 	}
 
 	testCases := []string{"healthz", "readyz", "livez", "metrics", "version"}
@@ -93,9 +99,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripWithNilRestMapper() {
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:                mockDelegate,
-		deniedResourcesProvider: nil,
-		restMapperProvider:      func() meta.RESTMapper { return nil }, // nil restMapper
+		delegate:           mockDelegate,
+		deniedResources:    nil,
+		restMapperProvider: func() meta.RESTMapper { return nil }, // nil restMapper
 	}
 
 	s.Run("resource API call fails when restMapper is nil", func() {
@@ -137,9 +143,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDiscoveryRequests()
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:                mockDelegate,
-		deniedResourcesProvider: nil,
-		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+		delegate:           mockDelegate,
+		deniedResources:    nil,
+		restMapperProvider: func() meta.RESTMapper { return s.restMapper },
 	}
 
 	testCases := []string{"/api", "/apis", "/api/v1", "/api/v1/", "/apis/apps", "/apis/apps/v1", "/apis/batch/v1"}
@@ -165,8 +171,8 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForPrefixedDiscoveryRe
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:                mockDelegate,
-		deniedResourcesProvider: nil,
+		delegate:        mockDelegate,
+		deniedResources: nil,
 		restMapperProvider: func() meta.RESTMapper {
 			s.Fail("restMapper should not be consulted for discovery requests behind a path prefix")
 			return nil
@@ -205,9 +211,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForAllowedAPIResources
 	}
 
 	rt := &AccessControlRoundTripper{
-		delegate:                mockDelegate,
-		deniedResourcesProvider: nil, // nil config allows all resources
-		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+		delegate:           mockDelegate,
+		deniedResources:    nil, // nil config allows all resources
+		restMapperProvider: func() meta.RESTMapper { return s.restMapper },
 	}
 
 	s.Run("List all pods is allowed", func() {
@@ -338,15 +344,15 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 		},
 	}
 	rt := &AccessControlRoundTripper{
-		delegate:                mockDelegate,
-		deniedResourcesProvider: config.Default(),
-		restMapperProvider:      func() meta.RESTMapper { return s.restMapper },
+		delegate:           mockDelegate,
+		deniedResources:    nil,
+		restMapperProvider: func() meta.RESTMapper { return s.restMapper },
 	}
 
 	s.Run("Specific resource kind is denied", func() {
-		s.Require().NoError(toml.Unmarshal([]byte(`
+		rt.deniedResources = configtest.MustReadTOML(s.T(), `
 			denied_resources = [ { version = "v1", kind = "Pod" } ]
-		`), rt.deniedResourcesProvider), "Expected to parse denied resources config")
+		`).DeniedResources.Get()
 
 		s.Run("List pods is denied", func() {
 			delegateCalled = false
@@ -388,9 +394,9 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	})
 
 	s.Run("Entire group/version is denied", func() {
-		s.Require().NoError(toml.Unmarshal([]byte(`
+		rt.deniedResources = configtest.MustReadTOML(s.T(), `
 			denied_resources = [ { version = "v1", kind = "" } ]
-		`), rt.deniedResourcesProvider), "Expected to v1 denied resources config")
+		`).DeniedResources.Get()
 
 		s.Run("Pods in core/v1 are denied", func() {
 			delegateCalled = false
@@ -404,7 +410,7 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 	})
 
 	s.Run("RESTMapper error for unknown resource", func() {
-		rt.deniedResourcesProvider = nil
+		rt.deniedResources = nil
 		delegateCalled = false
 		req := httptest.NewRequest("GET", "/api/v1/unknownresources", nil)
 		resp, err := rt.RoundTrip(req)
@@ -413,6 +419,77 @@ func (s *AccessControlRoundTripperTestSuite) TestRoundTripForDeniedAPIResources(
 		s.False(delegateCalled, "Expected delegate not to be called when RESTMapper fails")
 		s.Contains(err.Error(), "RESOURCE_NOT_FOUND")
 		s.Contains(err.Error(), "does not exist in the cluster")
+	})
+}
+
+func (s *AccessControlRoundTripperTestSuite) TestRoundTripLiveConfigProvider() {
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	s.Run("denied_resources is read live", func() {
+		cfg := config.New()
+		rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+			Delegate:           mockDelegate,
+			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+			ConfigProvider:     func() *config.Config { return cfg },
+		})
+
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/api/v1/pods", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled)
+
+		cfg.DeniedResources.SetForTest([]config.GroupVersionKind{{Version: "v1", Kind: "Pod"}})
+		delegateCalled = false
+		resp, err = rt.RoundTrip(req)
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled)
+		s.Contains(err.Error(), "resource not allowed")
+	})
+
+	s.Run("validation_enabled is read live from a new config pointer", func() {
+		s.mockServer.Handle(newOpenAPISchemaHandler())
+		clientSet, err := kubernetes.NewForConfig(s.mockServer.Config())
+		s.Require().NoError(err)
+
+		off := config.New()
+		off.ValidationEnabled.SetForTest(false)
+		on := config.New()
+		on.ValidationEnabled.SetForTest(true)
+		live := off
+		rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+			Delegate:           mockDelegate,
+			RestMapperProvider: func() meta.RESTMapper { return s.restMapper },
+			DiscoveryProvider:  func() discovery.DiscoveryInterface { return clientSet.Discovery() },
+			AuthClientProvider: func() authv1client.AuthorizationV1Interface { return clientSet.AuthorizationV1() },
+			ConfigProvider:     func() *config.Config { return live },
+		})
+
+		req := httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
+		delegateCalled = false
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(delegateCalled)
+
+		live = on
+		delegateCalled = false
+		req = httptest.NewRequest("POST", "/api/v1/namespaces/default/pods", strings.NewReader(`{"apiVersion":"v1","kind":"Pod","specTypo":"bad"}`))
+		resp, err = rt.RoundTrip(req)
+		s.Error(err)
+		s.Nil(resp)
+		s.False(delegateCalled)
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeInvalidField, ve.Code)
 	})
 }
 
@@ -470,4 +547,140 @@ func TestAccessControlRoundTripper(t *testing.T) {
 
 func TestStripAPIPathPrefix(t *testing.T) {
 	suite.Run(t, new(StripAPIPathPrefixTestSuite))
+}
+
+// SubresourceOnlyAPIGroupSuite tests the AccessControlRoundTripper behavior
+// with API groups that only expose subresource entries (all with empty Kind).
+// This reproduces the problem where subresources.kubevirt.io/v1 is rejected
+// with RESOURCE_NOT_FOUND because the REST mapper cannot build GVR→GVK
+// mappings from entries that have no Kind set.
+type SubresourceOnlyAPIGroupSuite struct {
+	suite.Suite
+	mockServer       *test.MockServer
+	discoveryHandler *test.DiscoveryClientHandler
+	restMapper       *restmapper.DeferredDiscoveryRESTMapper
+	discoveryClient  discovery.DiscoveryInterface
+}
+
+func (s *SubresourceOnlyAPIGroupSuite) SetupTest() {
+	s.mockServer = test.NewMockServer()
+	// Register subresources.kubevirt.io/v1 with subresource-only entries.
+	// All entries have zero-value Kind ("") and nil Verbs — this matches
+	// what KubeVirt actually advertises for its subresource API group.
+	// The REST mapper will see these during discovery but cannot build
+	// GVR→GVK mappings, so KindFor() returns NoMatchError.
+	s.discoveryHandler = test.NewDiscoveryClientHandler(metav1.APIResourceList{
+		GroupVersion: "subresources.kubevirt.io/v1",
+		APIResources: []metav1.APIResource{
+			{Name: "virtualmachineinstances/pause", Namespaced: true},
+			{Name: "virtualmachineinstances/unpause", Namespaced: true},
+			{Name: "virtualmachineinstances/guestosinfo", Namespaced: true},
+			{Name: "virtualmachineinstances/userlist", Namespaced: true},
+			{Name: "virtualmachineinstances/filesystemlist", Namespaced: true},
+			{Name: "virtualmachines/start", Namespaced: true},
+			{Name: "virtualmachines/stop", Namespaced: true},
+			{Name: "virtualmachines/restart", Namespaced: true},
+		},
+	})
+	s.mockServer.Handle(s.discoveryHandler)
+
+	clientSet, err := kubernetes.NewForConfig(s.mockServer.Config())
+	s.Require().NoError(err, "Expected no error creating clientset")
+
+	s.discoveryClient = clientSet.Discovery()
+	s.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(s.discoveryClient))
+}
+
+func (s *SubresourceOnlyAPIGroupSuite) TearDownTest() {
+	s.mockServer.Close()
+}
+
+func (s *SubresourceOnlyAPIGroupSuite) TestRoundTripForSubresourceOnlyAPIGroups() {
+	delegateCalled := false
+	mockDelegate := &mockRoundTripper{
+		called: &delegateCalled,
+		onRequest: func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		},
+	}
+
+	rt := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+		Delegate:             mockDelegate,
+		RestMapperProvider:   func() meta.RESTMapper { return s.restMapper },
+		RawDiscoveryProvider: func() discovery.DiscoveryInterface { return s.discoveryClient },
+	})
+
+	s.Run("subresource-only API group passes through for pause action", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/pause", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err, "Expected request to subresources.kubevirt.io to pass through")
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for subresource-only API group")
+	})
+
+	s.Run("subresource-only API group passes through for guest agent query", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/guestosinfo", nil)
+		resp, err := rt.RoundTrip(req)
+		s.NoError(err, "Expected request to subresources.kubevirt.io guest agent subresource to pass through")
+		s.NotNil(resp)
+		s.True(delegateCalled, "Expected delegate to be called for guest agent subresource")
+	})
+
+	s.Run("non-existent API group is still rejected", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/totally.fake.io/v1/namespaces/default/things", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected error for non-existent API group")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-existent API group")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	})
+
+	s.Run("non-existent resource in discoverable group is still rejected", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("GET", "/apis/subresources.kubevirt.io/v1/namespaces/default/totallynotreal/foo", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected error for non-existent resource in discoverable group")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-existent resource in discoverable group")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	})
+
+	s.Run("non-existent subresource on valid resource is still rejected", func() {
+		delegateCalled = false
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/bogusaction", nil)
+		resp, err := rt.RoundTrip(req)
+		s.Error(err, "Expected error for non-existent subresource")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for non-existent subresource")
+		var ve *api.ValidationError
+		s.ErrorAs(err, &ve)
+		s.Equal(api.ErrorCodeResourceNotFound, ve.Code)
+	})
+
+	s.Run("denied group/version is blocked even for discoverable subresource-only API groups", func() {
+		delegateCalled = false
+		deniedRT := NewAccessControlRoundTripper(s.T().Context(), AccessControlRoundTripperConfig{
+			Delegate:             mockDelegate,
+			DeniedResources:      []config.GroupVersionKind{{Group: "subresources.kubevirt.io", Version: "v1"}},
+			RestMapperProvider:   func() meta.RESTMapper { return s.restMapper },
+			RawDiscoveryProvider: func() discovery.DiscoveryInterface { return s.discoveryClient },
+		})
+		req := httptest.NewRequest("PUT", "/apis/subresources.kubevirt.io/v1/namespaces/default/virtualmachineinstances/test-vm/pause", nil)
+		resp, err := deniedRT.RoundTrip(req)
+		s.Error(err, "Expected error for denied group/version in discovery fallback path")
+		s.Nil(resp)
+		s.False(delegateCalled, "Expected delegate not to be called for denied group/version")
+		s.Contains(err.Error(), "resource not allowed")
+	})
+}
+
+func TestSubresourceOnlyAPIGroup(t *testing.T) {
+	suite.Run(t, new(SubresourceOnlyAPIGroupSuite))
 }

@@ -12,12 +12,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func Tools() []api.ServerTool {
+func Tools(inspector api.ClusterInspector) []api.ServerTool {
 	return []api.ServerTool{
 		{
 			Tool: api.Tool{
 				Name:        "vm_clone",
-				Description: fmt.Sprintf("Clone a %s VirtualMachine by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the %s Clone API", defaults.ProductName(), defaults.ProductName()),
+				Description: fmt.Sprintf("Clone a VirtualMachine on %s by creating a VirtualMachineClone resource. This creates a copy of the source VM with a new name using the %s Clone API", defaults.ProductName(), defaults.ProductName()),
 				InputSchema: &jsonschema.Schema{
 					Type: "object",
 					Properties: map[string]*jsonschema.Schema{
@@ -44,7 +44,15 @@ func Tools() []api.ServerTool {
 					OpenWorldHint:   ptr.To(false),
 				},
 			},
+			RBAC: api.RBACBounded(api.RBACRequirement{
+				Verbs:     []string{"create"},
+				Target:    api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "clone.kubevirt.io", Resource: "virtualmachineclones"}},
+				Namespace: &api.RBACNamespace{Argument: "namespace"},
+			}),
 			Handler: cloneVM,
+			TargetCompatibilityFilters: []api.TargetCompatibilityFilter{
+				kubevirt.HasVirtualMachine(inspector),
+			},
 		},
 	}
 }

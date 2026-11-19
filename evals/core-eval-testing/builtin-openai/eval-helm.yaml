@@ -10,17 +10,34 @@ config:
     kubernetes:
       package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
   llmJudge:
-    env:
-      baseUrlKey: JUDGE_BASE_URL
-      apiKeyKey: JUDGE_API_KEY
-      modelNameKey: JUDGE_MODEL_NAME
+    ref:
+      type: file
+      path: agent.yaml
   taskSets:
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: core
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: config
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "configuration_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
     - glob: ../../tasks/*/*/*.yaml
       labelSelector:
         suite: helm
       assertions:
         toolsUsed:
           - server: kubernetes
-            toolPattern: ".*"
+            toolPattern: "helm_.*"
         minToolCalls: 1
         maxToolCalls: 10

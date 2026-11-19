@@ -13,10 +13,8 @@ log_level = 2
 log_file = "/var/log/kubernetes-mcp-server.log"
 ```
 
-Or via CLI flag:
-
 ```bash
-kubernetes-mcp-server --log-file /var/log/kubernetes-mcp-server.log --log-level 2
+kubernetes-mcp-server --config /path/to/config.toml
 ```
 
 | Setting | Description |
@@ -138,7 +136,7 @@ mcplog.SendMCPLog(ctx, mcplog.LevelError, "Operation failed - check permissions"
 ## Security
 
 - Authentication failures send generic messages to clients (no security info leaked)
-- Sensitive data is automatically redacted before being sent to clients, covering:
+- MCP log notifications apply best-effort redaction for known patterns before being sent to clients. This does not sanitize tool results or guarantee removal of arbitrary sensitive data. Covered patterns include:
   - Generic fields (password, token, secret, api_key, etc.)
   - Authorization headers (Bearer, Basic)
   - Cloud credentials (AWS, GCP, Azure)

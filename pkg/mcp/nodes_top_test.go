@@ -1,11 +1,12 @@
 package mcp
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +21,7 @@ type NodesTopSuite struct {
 func (s *NodesTopSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 
 	s.discoveryHandler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.discoveryHandler)
@@ -160,6 +161,18 @@ func (s *NodesTopSuite) TestNodesTop() {
 			s.Contains(content, "CPU(cores)", "expected header with CPU column")
 			s.Contains(content, "MEMORY(bytes)", "expected header with MEMORY column")
 		})
+		s.Run("returns structured CPU and memory quantities", func() {
+			encoded, err := json.Marshal(toolResult.StructuredContent)
+			s.Require().NoError(err)
+			var payload struct {
+				Items []map[string]any `json:"items"`
+			}
+			s.Require().NoError(json.Unmarshal(encoded, &payload))
+			s.ElementsMatch([]map[string]any{
+				{"Name": "node-1", "CPU": "500m", "Memory": "2Gi"},
+				{"Name": "node-2", "CPU": "1", "Memory": "4Gi"},
+			}, payload.Items)
+		})
 	})
 
 	s.Run("nodes_top(name=node-1) - specific node", func() {
@@ -214,9 +227,9 @@ func (s *NodesTopSuite) TestNodesTopMetricsUnavailable() {
 }
 
 func (s *NodesTopSuite) TestNodesTopDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { group = "metrics.k8s.io", version = "v1beta1" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.WithMetricsServer()
 	s.InitMcpClient()
 	s.Run("nodes_top (denied)", func() {

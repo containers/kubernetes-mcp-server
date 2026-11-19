@@ -52,10 +52,6 @@ spec:
           args:
             - "--config"
             - "{{ .Values.configFilePath }}"
-          {{- if .Values.tls.enabled }}
-            - "--tls-cert={{ .Values.tls.mountPath }}/{{ .Values.tls.certFile }}"
-            - "--tls-key={{ .Values.tls.mountPath }}/{{ .Values.tls.keyFile }}"
-          {{- end }}
           {{- with .Values.extraArgs }}
             {{- toYaml . | nindent 12 }}
           {{- end }}

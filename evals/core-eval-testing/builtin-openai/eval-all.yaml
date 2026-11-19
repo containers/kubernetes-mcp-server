@@ -1,0 +1,106 @@
+kind: Eval
+metadata:
+  name: "all-e2e"
+config:
+  agent:
+    type: "file"
+    path: agent.yaml
+  mcpConfigFile: ../../mcp-config.yaml
+  extensions:
+    kubernetes:
+      package: https://github.com/mcpchecker/kubernetes-extension@v0.0.4
+  llmJudge:
+    ref:
+      type: file
+      path: agent.yaml
+  taskSets:
+    # Core + Config tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: core
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: config
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "configuration_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
+    # Helm tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: helm
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "helm_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
+    # KubeVirt tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: kubevirt
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    # Kiali tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: kiali
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    # Tekton tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: tekton
+        workflow: pipelinerun-diagnosis
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            tool: tekton_pipelinerun_diagnose
+        minToolCalls: 1
+        maxToolCalls: 1
+    # Matching task sets are additive: mcpchecker runs each task once and applies both assertion sets.
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: tekton
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20
+    # NetObserv tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: netobserv
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: "netobserv_.*"
+        minToolCalls: 1
+        maxToolCalls: 10
+    # ArgoCD tasks
+    - glob: ../../tasks/*/*/*.yaml
+      labelSelector:
+        suite: argocd
+      assertions:
+        toolsUsed:
+          - server: kubernetes
+            toolPattern: ".*"
+        minToolCalls: 1
+        maxToolCalls: 20

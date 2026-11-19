@@ -11,12 +11,10 @@ and others), so agents can be compared on an identical benchmark.
 evals/
 ├── README.md                       # This file
 ├── mcp-config.yaml                 # Shared MCP server connection (http://localhost:8080/mcp)
-├── claude-code/                    # Claude Code agent config (ACP) + top-level eval.yaml
-├── openai-agent/                   # OpenAI-compatible agent config + top-level eval.yaml
-├── core-eval-testing/              # Extra agent/provider combinations for core tasks
+├── core-eval-testing/              # Agent configs and per-suite eval configs (see below)
 ├── results/                        # Committed eval results (baselines)
 └── tasks/                          # Shared task library, grouped by suite (see tasks/README.md)
-    └── <suite>/                    # core, config, helm, kiali, kubevirt, tekton
+    └── <suite>/                    # core, config, helm, kiali, kubevirt, tekton, netobserv, obs
         └── <task-name>/
             ├── <task-name>.yaml    # Task definition (prompt, verify, labels). kubevirt/tekton use task.yaml
             ├── setup.sh            # Optional pre-task cluster setup
@@ -26,7 +24,12 @@ evals/
 ```
 
 Tasks are grouped into suites via a `suite: <name>` label. The available suites are
-`core`, `config`, `helm`, `kiali`, `kubevirt`, and `tekton`.
+`core`, `config`, `helm`, `kiali`, `kubevirt`, `tekton`, `netobserv`, and `obs`.
+
+A second, orthogonal `readonly: "true"` label marks tasks that are safe to run
+against a server started with `read_only = true`. It cuts across the `suite:` label
+rather than replacing it — see [Read-only suite](#read-only-suite-core-readonly)
+below.
 
 ## Prerequisites
 
@@ -35,23 +38,22 @@ Tasks are grouped into suites via a `suite: <name>` label. The available suites 
 - `mcpchecker`: `make mcpchecker` installs it under `_output/tools/bin/`. The
   `make run-evals` target calls that path directly; to run the bare `mcpchecker …`
   commands shown below by hand, add `_output/tools/bin` to your `PATH`.
-- For the **Claude Code** agent only:
+- For the **`acp-anthropic`** agent only:
   - The `claude` CLI (Claude Code) installed, on your `PATH`, and **signed in**.
     The agent runs through your existing Claude Code session, so your Claude
     subscription (or an `ANTHROPIC_API_KEY`) covers the agent and no separate key
     is needed. Run `claude` once interactively to log in if you have not already.
   - The `claude-agent-acp` adapter, which bridges mcpchecker to that `claude` CLI,
-    installed with `make claude-agent-acp` (runs
-    `npm install -g @agentclientprotocol/claude-agent-acp`, so it needs Node.js/npm).
-    Without it, `mcpchecker check` fails at agent-spec load with
-    `'claude-agent-acp' binary not found in PATH`.
+    installed with `make claude-agent-acp` (installs locally under
+    `_output/tools/node_modules/`, so it needs Node.js/npm). `make run-evals`
+    prepends `_output/tools/node_modules/.bin` to `PATH` automatically.
 
-## Quickstart: run one suite locally with Claude Code
+## Quickstart: run one suite locally with Claude Code (ACP)
 
-This runs the `kubevirt` suite end to end with the Claude Code agent on a Sonnet
-model, with **no OpenAI key required**. With the Claude Code agent both the agent
-and the LLM judge run on your Claude subscription, so every suite is keyless (see
-[Eval configs](#eval-configs-top-level-vs-per-suite) below).
+This runs the `kubevirt` suite end to end with the `acp-anthropic` agent on a
+Sonnet model, with **no OpenAI key required**. With this agent both the agent and
+the LLM judge run on your Claude subscription, so every suite is keyless (see
+[Eval configs](#eval-configs) below).
 
 ```bash
 # 1. Build the server and install the eval tooling
@@ -60,7 +62,7 @@ make build mcpchecker claude-agent-acp
 # 2. Create a cluster and point KUBECONFIG at it.
 #    KUBECONFIG must be EXPORTED so both the kubernetes extension's setup steps
 #    and each task's verify.sh kubectl target the same cluster.
-kind create cluster --name mcp-eval-cluster --kubeconfig "$PWD/_output/kubeconfig"
+make minikube-create-cluster MINIKUBE_PROFILE=mcp-eval-cluster
 export KUBECONFIG="$PWD/_output/kubeconfig"
 
 # 3. Install KubeVirt (only needed for the kubevirt suite).
@@ -72,130 +74,170 @@ make kubevirt-install
 make run-server TOOLSETS=core,config,kubevirt
 
 # 5. Run the suite. AGENT selects the agent, SUITE selects the tasks, MODEL sets
-#    ANTHROPIC_MODEL for the Claude Code agent. Add EVAL_TASK_FILTER=<name> to run one task.
-make run-evals SUITE=kubevirt AGENT=claude-code MODEL=sonnet
+#    ANTHROPIC_MODEL for ACP agents. Add EVAL_TASK_FILTER=<name> to run one task.
+make run-evals SUITE=kubevirt AGENT=acp-anthropic MODEL=sonnet
 
 # 6. Tear down
 make stop-server
-kind delete cluster --name mcp-eval-cluster
+make minikube-delete-cluster MINIKUBE_PROFILE=mcp-eval-cluster
 ```
 
-> A bare `kind create cluster` is enough for kubevirt and most toolset suites.
-> `make kind-create-cluster` also installs nginx-ingress, cert-manager, and a
-> Keycloak hosts entry, which toolset evals do not need (and which pull from
-> registries that are not always reachable).
+> A bare `make minikube-create-cluster` is enough for kubevirt and most toolset suites.
+> `make local-env-setup` also installs cert-manager and Keycloak, which toolset
+> evals do not need (and which pull from registries that are not always reachable).
 
 The make-target invocation in step 5 is equivalent to the underlying command:
 
 ```bash
 KUBECONFIG="$PWD/_output/kubeconfig" ANTHROPIC_MODEL=sonnet mcpchecker check \
-  evals/tasks/kubevirt/claude-code/eval.yaml \
+  evals/core-eval-testing/acp-anthropic/eval-kubevirt.yaml \
   --label-selector suite=kubevirt --output json
 ```
 
 ### Model selection
 
-The model for the Claude Code agent is chosen with the `ANTHROPIC_MODEL`
+The model for the `acp-anthropic` agent is chosen with the `ANTHROPIC_MODEL`
 environment variable (for example `ANTHROPIC_MODEL=sonnet`), which
 `claude-agent-acp` reads as its first-priority model source. It **forces** that
 model for the run, overriding whatever default your Claude Code session would
 otherwise use, and it runs on your existing Claude subscription (no API key
 needed). `make run-evals` sets it for you from the `MODEL` variable, so
 `make run-evals ... MODEL=sonnet` is how you pin the eval to Sonnet. The same
-variable also drives the Claude Code judge (see [Eval configs](#eval-configs-top-level-vs-per-suite)),
-so agent and judge share the model.
+variable also drives the judge (see [Eval configs](#eval-configs)), so agent and
+judge share the model.
 
-The OpenAI-compatible agent instead takes its model from
-`evals/openai-agent/agent.yaml` plus the `MODEL_BASE_URL` and `MODEL_KEY`
-environment variables.
+The `builtin-*` agents instead take their model from their `agent.yaml` plus the
+`MODEL_BASE_URL` and `MODEL_KEY` environment variables.
 
-## Running with the OpenAI-compatible agent
+## Running with a builtin agent
 
 ```bash
 # Set your model credentials
 export MODEL_BASE_URL='https://your-api-endpoint.com/v1'
 export MODEL_KEY='your-api-key'
 
-# Run the core suite (this is what CI runs)
-make run-evals SUITE=core AGENT=openai-agent
+# Run the core suite with builtin-openai (this is what CI runs)
+make run-evals SUITE=core AGENT=builtin-openai
 # equivalently:
-mcpchecker check evals/openai-agent/eval.yaml --label-selector suite=core
+mcpchecker check evals/core-eval-testing/builtin-openai/eval-core.yaml --label-selector suite=core
+
+# Or use a different builtin agent:
+make run-evals SUITE=core AGENT=builtin-anthropic
+make run-evals SUITE=core AGENT=builtin-google
 ```
 
 Different models may pick different tools (`pods_*` or `resources_*`) for the same
 task. The assertions accept either, for example `toolPattern: "(pods_.*|resources_.*)"`.
 
-## Eval configs: top-level vs per-suite
+## Eval configs
 
-There are two top-level eval configs, one per agent:
+`make run-evals` resolves the eval config in priority order:
 
-- **`evals/claude-code/eval.yaml`** (Claude Code): the agent runs via
-  `claude-agent-acp`, and the LLM judge is also `builtin.claude-code`, so **both
-  agent and judge run on your Claude subscription — fully keyless, for every
-  suite**. Judge-backed tasks are really evaluated (semantic), not skipped. This
-  is the recommended local path.
-- **`evals/openai-agent/eval.yaml`** (OpenAI-compatible, what **CI** runs): the
-  agent uses `MODEL_BASE_URL`/`MODEL_KEY` and the judge is `openai:gpt-5`, so its
-  judge-backed tasks need an OpenAI key.
+1. **Per-suite override** (`evals/tasks/<suite>/<agent>/eval.yaml`) — takes
+   precedence when present. No suite currently ships one; this is a hook for
+   dropping in a one-off local override.
+2. **Core-eval-testing** (`evals/core-eval-testing/<agent>/eval-<suite>.yaml`) —
+   the canonical per-suite config for each agent, and what every suite resolves to
+   today. **CI** runs `builtin-openai` here. Available agents: `builtin-openai`,
+   `builtin-anthropic`, `builtin-google`, `acp-anthropic`, `acp-google` (not all
+   have eval configs yet).
+
+Each eval config's `llmJudge` references the same `agent.yaml` used by the agent
+itself, so the judge reuses the agent's model and credentials — no separate judge
+setup is needed.
 
 A task is "judge-backed" when its verify phase has an `llmJudge` step —
 **including the legacy `verify: contains:` short form, which is judge-evaluated
 (semantic), not a literal string match.** Judge-backed task counts per suite:
-`helm` 0, `core` 4, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. With the
-OpenAI agent those tasks need a key; with the Claude Code agent none do. Filter
-either config to one suite with `--label-selector suite=<name>`.
-
-**Per-suite** configs (`evals/tasks/<suite>/{claude-code,openai-agent}/eval.yaml`,
-currently only `kubevirt`) are scoped to a single suite. The claude-code one
-judges with claude-code (keyless); the openai-agent one declares no judge, so its
-judge steps degrade to a no-op pass (mcpchecker's `noopLLMJudge`). `make run-evals`
-prefers a per-suite config when one exists for the chosen `SUITE`/`AGENT`, and
-otherwise falls back to the agent's top-level config.
+`helm` 0, `core` 5, `kubevirt` 4, `tekton` 5, `config` 3, `kiali` 18. Filter
+any config to one suite with `--label-selector suite=<name>`.
 
 ## Agent configuration
 
-### Claude Code (`claude-code/agent.yaml`)
+Agent configs live in `evals/core-eval-testing/<agent>/agent.yaml`. There are two
+kinds:
 
-The Claude Code agent runs over the Agent Client Protocol (ACP) through the
-`claude-agent-acp` adapter:
+**ACP agents** run through an external CLI adapter:
 
-```yaml
-kind: Agent
-metadata:
-  name: "claude-code-acp"
-acp:
-  cmd: "claude-agent-acp"
-```
+- **`acp-anthropic`** — uses `claude-agent-acp` (Claude Code via ACP, keyless)
+- **`acp-google`** — uses `gemini --experimental-acp`
 
-### OpenAI-compatible agent (`openai-agent/agent.yaml`)
+**Builtin agents** use mcpchecker's built-in LLM agent:
 
-The OpenAI-compatible agent uses mcpchecker's built-in LLM agent:
-
-```yaml
-builtin:
-  type: "llm-agent"
-  model: "openai:gpt-5"
-```
+- **`builtin-openai`** — `openai:gpt-6-luna` (what CI runs)
+- **`builtin-anthropic`** — `anthropic:claude-sonnet-4-6`
+- **`builtin-google`** — `google:gemini-3.1-pro-preview`
 
 ## Filtering tasks by suite
 
 The `--label-selector` flag (or the `SUITE` make variable) chooses which tasks run.
 
 ```bash
-# core tasks
-make run-evals SUITE=core AGENT=claude-code MODEL=sonnet
+# core tasks (builtin-openai is the default AGENT)
+make run-evals SUITE=core
 
 # kiali tasks (needs Istio + Kiali installed; see `make setup-kiali`)
-make run-evals SUITE=kiali AGENT=claude-code MODEL=sonnet
+make run-evals SUITE=kiali AGENT=acp-anthropic MODEL=sonnet
+
+# netobserv tasks (needs mock plugin or real NetObserv; see tasks/netobserv/README.md)
+make run-evals SUITE=netobserv AGENT=builtin-openai
+
+# obs tasks (needs Prometheus, Tempo, Loki + port-forwards; see tasks/obs/README.md)
+make run-obs-evals
 ```
 
 If you omit `--label-selector`, the eval config's own `labelSelector` settings in
 each `taskSets` entry determine which tasks run.
 
-Note: with `AGENT=claude-code` every suite is keyless (agent and judge both run on
-your Claude subscription). With `AGENT=openai-agent` the judge-backed tasks need an
-OpenAI key — `core` 4, `config` 3, `kiali` 18, `tekton` 5, `kubevirt` 4, `helm` 0
-(see [Eval configs](#eval-configs-top-level-vs-per-suite)).
+Note: with `AGENT=acp-anthropic` every suite is keyless (agent and judge both run
+on your Claude subscription). With `builtin-*` agents the judge-backed tasks need
+the provider's API key (see [Eval configs](#eval-configs)).
+
+## Read-only suite (`core-readonly`)
+
+Proves that a model using only the tools exposed by a server started with
+`read_only=true` can still complete real read-only diagnostic workflows (log
+inspection, event filtering, metrics). It reuses the read-only-compatible
+tasks already in `core`/`config` via the `readonly: "true"` label (see
+[Filtering tasks by suite](#filtering-tasks-by-suite) above) instead of
+duplicating them into a new suite.
+
+As a suite-level safety net, every task also asserts `toolsNotUsed` for
+`resources_create_or_update|resources_delete|resources_scale|pods_delete|pods_exec|pods_run`
+(see `evals/core-eval-testing/builtin-openai/eval-core-readonly.yaml`). `pods_exec`
+is included even though it isn't a CRUD write tool because it's annotated
+`DestructiveHint: true` in `pkg/toolsets/core/pods.go` -- depending on the pod's
+entrypoint, an executed command can kill the pod.
+
+Note this suite intentionally does **not** cover write-blocking itself:
+whether `read_only=true` actually rejects a write attempt (as opposed to just
+hiding write tools from the tool list) is a deterministic property of the
+server, not of model behavior, so it's covered by
+`TestReadOnlyBlocksWriteToolInvocation` in `pkg/mcp/mcp_tools_test.go` instead
+of an eval task — see [`docs/dev/testing.md`](../docs/dev/testing.md). Using a
+live LLM to verify a property that doesn't depend on the model would just add
+cost and non-determinism for no extra assurance.
+
+The MCP server **must** be started in read-only mode for this suite — its
+tasks assume write tools are unavailable. With `SUITE=core-readonly`,
+`run-server` defaults `READ_ONLY` to `true` and adds `read_only = true` as the
+last drop-in of its generated config dir, so it overrides the `read_only = false`
+in `dev/config/mcp-configs`. The suite does not check the server's mode itself,
+so against a server without read-only mode it would still pass without proving
+anything. Likewise, `EVAL_LABEL_SELECTOR` defaults to `readonly=true` instead of
+`suite=$(SUITE)`:
+
+```bash
+make run-server SUITE=core-readonly TOOLSETS=core,config
+make run-evals SUITE=core-readonly
+```
+
+`READ_ONLY=true|false` can still be passed explicitly to override the default.
+
+The weekly mcpchecker CI workflow runs `core-readonly` with `core,config`
+toolsets and `READ_ONLY=true`. It can also be selected through the workflow's
+manual suite input or a maintainer's `/run-mcpchecker core-readonly` review.
+Other suites retain their normal read-write server mode.
 
 ## Versions
 
@@ -206,7 +248,7 @@ pin the binary with `make mcpchecker MCPCHECKER_VERSION=<version>`.
 
 `make claude-agent-acp` likewise installs `@agentclientprotocol/claude-agent-acp@latest`;
 pin it with `make claude-agent-acp CLAUDE_AGENT_ACP_VERSION=<version>` for local
-reproducibility. CI never installs the adapter (it runs the OpenAI agent), so this
+reproducibility. CI never installs the adapter (it runs `builtin-openai`), so this
 knob is purely local.
 
 ## Expected results

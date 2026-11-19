@@ -1,0 +1,130 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "create-vm-from-template"
+  difficulty: hard
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-create-vm
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-create-vm
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: template.kubevirt.io/v1beta1
+          kind: VirtualMachineTemplate
+          metadata:
+            name: app-server-template
+            namespace: vmt-test-create-vm
+          spec:
+            parameters:
+              - name: VM_NAME
+                displayName: "Virtual Machine Name"
+                description: "Name of the virtual machine to create"
+                required: true
+              - name: MEMORY
+                displayName: "Memory Size"
+                description: "Amount of memory for the VM"
+                value: "2Gi"
+              - name: CPU_CORES
+                displayName: "CPU Cores"
+                description: "Number of CPU cores"
+                value: "1"
+            virtualMachine:
+              metadata:
+                name: ${VM_NAME}
+              spec:
+                runStrategy: Halted
+                template:
+                  spec:
+                    domain:
+                      cpu:
+                        cores: ${CPU_CORES}
+                      memory:
+                        guest: ${MEMORY}
+                      devices:
+                        disks:
+                          - name: containerdisk
+                            disk:
+                              bus: virtio
+                    volumes:
+                      - name: containerdisk
+                        containerDisk:
+                          image: quay.io/containerdisks/fedora:latest
+          EOF
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          source ../helpers/verify-vm.sh
+          NS="vmt-test-create-vm"
+
+          verify_vm_exists "my-app-server" "$NS" || exit 1
+          verify_container_disk "my-app-server" "$NS" "fedora" || exit 1
+
+          # Verify memory was set to 4Gi (the overridden value)
+          MEMORY=$(kubectl get virtualmachine my-app-server -n "$NS" -o jsonpath='{.spec.template.spec.domain.memory.guest}')
+          if [ "$MEMORY" != "4Gi" ]; then
+            echo "ERROR: Expected memory '4Gi', got '$MEMORY'"
+            exit 1
+          fi
+          echo "Memory correctly set to 4Gi"
+
+          # Verify CPU was set to 1 (the default)
+          CPU=$(kubectl get virtualmachine my-app-server -n "$NS" -o jsonpath='{.spec.template.spec.domain.cpu.cores}')
+          if [ "$CPU" != "1" ]; then
+            echo "ERROR: Expected 1 CPU core (default), got '$CPU'"
+            exit 1
+          fi
+          echo "CPU cores correctly set to 1 (default)"
+
+          verify_no_unresolved_placeholders "my-app-server" "$NS" || exit 1
+
+          echo "All validations passed"
+          exit 0
+  cleanup:
+    - k8s.delete:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: my-app-server
+          namespace: vmt-test-create-vm
+        ignoreNotFound: true
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete virtualmachinetemplate.template.kubevirt.io/v1beta1 app-server-template -n vmt-test-create-vm --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-create-vm
+        ignoreNotFound: true
+  prompt:
+    inline: |
+      A VirtualMachineTemplate named app-server-template exists in the vmt-test-create-vm namespace.
+
+      Please create a new VirtualMachine from this template with the following parameter values:
+      - VM_NAME: my-app-server
+      - MEMORY: 4Gi
+
+      Use the default value for CPU_CORES. The VM should be created in the vmt-test-create-vm namespace.

@@ -1,0 +1,259 @@
+package netobserv
+
+import (
+	"context"
+	"crypto/x509"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
+)
+
+// NetObserv is an HTTP client for the NetObserv console plugin backend API.
+type NetObserv struct {
+	cfg                  *config.Config
+	bearerToken          string
+	bearerTokenFile      string
+	pluginURL            string
+	insecure             bool
+	certificateAuthority string
+	tlsMinVersion        string
+	tlsCipherSuites      []string
+	requireTLS           func() bool
+}
+
+// NewNetObserv creates a client using toolset config, cluster detection, and the Kubernetes REST config.
+func NewNetObserv(ctx context.Context, cfg *config.Config, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface, detected ...EffectiveConfig) (*NetObserv, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+	if restConfig == nil {
+		return nil, fmt.Errorf("kubernetes rest config is required")
+	}
+	client := &NetObserv{
+		cfg:             cfg,
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
+		tlsMinVersion:   cfg.TLSMinVersion.Get(),
+		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
+		bearerToken:     strings.TrimSpace(restConfig.BearerToken),
+		bearerTokenFile: strings.TrimSpace(restConfig.BearerTokenFile),
+	}
+	var shared *Config
+	if tc, ok := cfg.GetToolsetConfig(ToolsetConfigKey); ok {
+		if parsed, ok := tc.(*Config); ok && parsed != nil {
+			shared = parsed
+		}
+	}
+	resolved := Config{}
+	if shared != nil {
+		resolved = *shared
+	}
+	if len(detected) > 0 && detected[0].Found {
+		resolved.ApplyDetectedEndpoint(detected[0])
+	}
+	isOpenShift := clusterIsOpenShiftFromDiscovery(discoveryClient)
+	resolved.applyDefaults(ctx, isOpenShift)
+	client.pluginURL = resolved.ResolvedURL(isOpenShift)
+	client.insecure = resolved.Insecure
+	client.certificateAuthority = resolved.CertificateAuthority
+	return client, nil
+}
+
+func (n *NetObserv) validateAndGetURL(endpoint string) (string, error) {
+	if n == nil || n.pluginURL == "" {
+		return "", fmt.Errorf("netobserv client not initialized")
+	}
+	baseStr := strings.TrimSpace(n.pluginURL)
+	if baseStr == "" {
+		return "", fmt.Errorf("netobserv plugin URL not configured")
+	}
+	baseURL, err := url.Parse(baseStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid netobserv base URL: %w", err)
+	}
+	if endpoint == "" {
+		return baseURL.String(), nil
+	}
+	endpoint = strings.TrimSpace(endpoint)
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("invalid endpoint path: %w", err)
+	}
+	if endpointURL.Scheme != "" || endpointURL.Host != "" {
+		return "", fmt.Errorf("endpoint must be a relative path, not an absolute URL")
+	}
+	resultURL, err := url.JoinPath(baseURL.String(), endpointURL.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to join netobserv base URL with endpoint path: %w", err)
+	}
+	u, err := url.Parse(resultURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse joined URL: %w", err)
+	}
+	u.RawQuery = endpointURL.RawQuery
+	u.Fragment = endpointURL.Fragment
+	return u.String(), nil
+}
+
+var errRedirectsNotAllowed = errors.New("redirects are not allowed for netobserv API requests")
+
+func (n *NetObserv) createHTTPClient(ctx context.Context) (*http.Client, error) {
+	logger := klogutil.FromContext(ctx)
+	var tlsOpts []tlsutil.TLSConfigOption
+
+	if n.insecure {
+		tlsOpts = append(tlsOpts, tlsutil.WithInsecureSkipVerify(true))
+	}
+
+	if caValue := strings.TrimSpace(n.certificateAuthority); caValue != "" {
+		caPEM, err := os.ReadFile(caValue)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read certificate authority %q: %w", caValue, err)
+		}
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("failed to parse certificate authority %q", caValue)
+		}
+		tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(certPool))
+	}
+
+	tlsConfig, err := tlsutil.BuildTLSConfig(n.tlsMinVersion, n.tlsCipherSuites, tlsOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig:       tlsConfig,
+			ResponseHeaderTimeout: DefaultPluginHTTPTimeout,
+		},
+		Timeout: DefaultPluginHTTPTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return errRedirectsNotAllowed
+		},
+	}
+	if n.insecure {
+		klogutil.LogInfo(logger.V(1), "NetObserv plugin TLS verification disabled")
+	}
+	return n.wrapWithTLSEnforcement(client), nil
+}
+
+func (n *NetObserv) wrapWithTLSEnforcement(client *http.Client) *http.Client {
+	if n.requireTLS == nil {
+		return client
+	}
+	return config.NewTLSEnforcingClient(client, n.requireTLS)
+}
+
+func (n *NetObserv) authorizationHeader(ctx context.Context) string {
+	if n == nil {
+		return ""
+	}
+	token := strings.TrimSpace(n.bearerToken)
+	if token == "" && n.bearerTokenFile != "" {
+		data, err := os.ReadFile(n.bearerTokenFile)
+		if err != nil {
+			klogutil.FromContext(ctx).Error(err, "failed to read bearer token file", "path", n.bearerTokenFile)
+			return ""
+		}
+		token = strings.TrimSpace(string(data))
+	}
+	if token == "" {
+		return ""
+	}
+	if strings.HasPrefix(token, "Bearer ") {
+		return token
+	}
+	return "Bearer " + token
+}
+
+func (n *NetObserv) backendLimit() (int64, error) {
+	// Unreachable today: NewNetObserv rejects a nil config and stores it. The
+	// error is defense against a future bug that builds a NetObserv without one.
+	if n == nil {
+		return kubernetes.BackendLimit(nil)
+	}
+	return kubernetes.BackendLimit(n.cfg)
+}
+
+// ExecuteGet performs a GET request against the plugin API with query parameters derived from arguments.
+func (n *NetObserv) ExecuteGet(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
+	response, err := n.executeGet(ctx, endpoint, arguments, "application/json", false)
+	if err != nil {
+		return "", err
+	}
+	return response.Body, nil
+}
+
+func (n *NetObserv) executeGet(ctx context.Context, endpoint string, arguments map[string]any, accept string, truncate bool) (GetResponse, error) {
+	requestURL, err := n.validateAndGetURL(endpoint)
+	if err != nil {
+		return GetResponse{}, err
+	}
+	return n.executeGetAbsolute(ctx, requestURL, arguments, accept, truncate)
+}
+
+func (n *NetObserv) executeGetAbsolute(ctx context.Context, requestURL string, arguments map[string]any, accept string, truncate bool) (GetResponse, error) {
+	limit, err := n.backendLimit()
+	if err != nil {
+		return GetResponse{}, err
+	}
+	u, err := url.Parse(requestURL)
+	if err != nil {
+		return GetResponse{}, fmt.Errorf("failed to parse request URL: %w", err)
+	}
+	query := ArgumentsToValues(PrepareQueryArguments(arguments))
+	u.RawQuery = query.Encode()
+	klogutil.LogInfo(klogutil.FromContext(ctx).V(0), "netobserv API call", klogutil.Field("url", u.Redacted()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return GetResponse{}, err
+	}
+	if authHeader := n.authorizationHeader(ctx); authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	req.Header.Set("X-Kubernetes-MCP-Server", "true")
+	client, err := n.createHTTPClient(ctx)
+	if err != nil {
+		return GetResponse{}, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return GetResponse{}, fmt.Errorf("netobserv API call canceled or timed out waiting for %s: %w", u.Redacted(), err)
+		}
+		return GetResponse{}, fmt.Errorf("netobserv API call to %s failed: %w", u.Redacted(), err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, readErr := kubernetes.ReadLimited(resp.Body, limit)
+	if readErr != nil && !kubernetes.IsResponseTooLarge(readErr) {
+		return GetResponse{}, fmt.Errorf("failed to read response body: %w", readErr)
+	}
+	// Flow export keeps the prefix. JSON calls still fail closed.
+	if kubernetes.IsResponseTooLarge(readErr) && !truncate {
+		return GetResponse{}, readErr
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if len(respBody) > 0 {
+			return GetResponse{}, fmt.Errorf("netobserv API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		}
+		return GetResponse{}, fmt.Errorf("netobserv API error: status %d", resp.StatusCode)
+	}
+	if kubernetes.IsResponseTooLarge(readErr) {
+		text, _, err := kubernetes.AcceptTruncated(respBody, readErr)
+		return GetResponse{Body: text}, err
+	}
+	return GetResponse{Body: string(respBody)}, nil
+}

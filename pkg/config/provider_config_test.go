@@ -8,12 +8,11 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 )
 
 type ProviderConfigSuite struct {
-	BaseConfigSuite
+	ConfigFileSuite
 	originalProviderConfigRegistry *extendedConfigRegistry
 }
 
@@ -32,7 +31,7 @@ type ProviderConfigForTest struct {
 	IntProp  int    `toml:"int_prop"`
 }
 
-var _ api.ExtendedConfig = (*ProviderConfigForTest)(nil)
+var _ ExtendedConfig = (*ProviderConfigForTest)(nil)
 
 func (p *ProviderConfigForTest) Validate() error {
 	if p.StrProp == "force-error" {
@@ -41,7 +40,7 @@ func (p *ProviderConfigForTest) Validate() error {
 	return nil
 }
 
-func providerConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func providerConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 	var providerConfigForTest ProviderConfigForTest
 	if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {
 		return nil, err
@@ -85,6 +84,9 @@ func (s *ProviderConfigSuite) TestReadConfigValid() {
 		s.Equal("a string", testProviderConfig.StrProp, "Expected StrProp to be 'a string'")
 		s.Equal(42, testProviderConfig.IntProp, "Expected IntProp to be 42")
 	})
+	s.Run("records cluster_provider_configs source from the file", func() {
+		s.Equal(Source(validConfigPath), config.clusterProviderConfigsSource)
+	})
 }
 
 func (s *ProviderConfigSuite) TestReadConfigInvalidProviderConfig() {
@@ -117,20 +119,18 @@ func (s *ProviderConfigSuite) TestReadConfigUnregisteredProviderConfig() {
 	`)
 
 	config, err := Read(s.T().Context(), invalidConfigPath, "")
-	s.Run("returns no error for unregistered provider config", func() {
-		s.Require().NoError(err, "Expected no error for unregistered provider config, got %v", err)
+	s.Run("returns error for unregistered provider config", func() {
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "cluster_provider_configs.unregistered")
 	})
-	s.Run("returns config for unregistered provider config", func() {
-		s.Require().NotNil(config, "Expected non-nil config for unregistered provider config")
-	})
-	s.Run("does not parse unregistered provider config", func() {
-		_, ok := config.GetProviderConfig("unregistered")
-		s.Require().False(ok, "Expected no provider config for unregistered strategy")
+	s.Run("returns nil config for unregistered provider config", func() {
+		s.Nil(config)
 	})
 }
 
 func (s *ProviderConfigSuite) TestReadConfigParserError() {
-	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 		return nil, errors.New("parser error forced by test")
 	})
 	invalidConfigPath := s.writeConfig(`
@@ -153,7 +153,7 @@ func (s *ProviderConfigSuite) TestReadConfigParserError() {
 
 func (s *ProviderConfigSuite) TestConfigDirPathInContext() {
 	var capturedDirPath string
-	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var providerConfigForTest ProviderConfigForTest
 		if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {
@@ -218,7 +218,7 @@ func (s *ProviderConfigSuite) TestExtendedConfigMergingAcrossDropIns() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -268,7 +268,7 @@ func (s *ProviderConfigSuite) TestExtendedConfigFromDropInOnly() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -329,7 +329,7 @@ func (s *ProviderConfigSuite) TestStandaloneConfigDirWithExtendedConfig() {
 func (s *ProviderConfigSuite) TestConfigDirPathInContextStandalone() {
 	// Test that configDirPath is correctly set in context for standalone --config-dir
 	var capturedDirPath string
-	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+	RegisterProviderConfig("test", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var providerConfigForTest ProviderConfigForTest
 		if err := md.PrimitiveDecode(primitive, &providerConfigForTest); err != nil {
@@ -357,6 +357,60 @@ func (s *ProviderConfigSuite) TestConfigDirPathInContextStandalone() {
 		s.Require().NoError(err)
 		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")
 		s.Equal(absTempDir, capturedDirPath, "Expected directory path to match config-dir")
+	})
+}
+
+func (s *ProviderConfigSuite) TestRejectNonReloadableProviderConfigs() {
+	RegisterProviderConfig("test", providerConfigForTestParser)
+	prevPath := s.writeConfig(`
+		[cluster_provider_configs.test]
+		str_prop = "old"
+		int_prop = 1
+	`)
+	nextPath := s.writeConfig(`
+		[cluster_provider_configs.test]
+		str_prop = "new"
+		int_prop = 2
+	`)
+	prev, err := Read(s.T().Context(), prevPath, "")
+	s.Require().NoError(err)
+	_, err = Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "non-reloadable option cluster_provider_configs changed")
+}
+
+func (s *ProviderConfigSuite) TestReloadRejectsInvalidProviderConfigs() {
+	RegisterProviderConfig("test", providerConfigForTestParser)
+	prevPath := s.writeConfig(`
+		log_level = 1
+		[cluster_provider_configs.test]
+		str_prop = "old"
+		int_prop = 1
+	`)
+	prev, err := Read(s.T().Context(), prevPath, "")
+	s.Require().NoError(err)
+
+	s.Run("fails the load when new table fails validation", func() {
+		nextPath := s.writeConfig(`
+			log_level = 2
+			[cluster_provider_configs.test]
+			str_prop = "force-error"
+			int_prop = 2
+		`)
+		_, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "failed to validate extended config")
+	})
+
+	s.Run("fails the load when new table is unregistered", func() {
+		nextPath := s.writeConfig(`
+			log_level = 3
+			[cluster_provider_configs.unregistered]
+			str_prop = "new"
+		`)
+		_, err := Read(s.T().Context(), nextPath, "", WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "cluster_provider_configs.unregistered")
 	})
 }
 

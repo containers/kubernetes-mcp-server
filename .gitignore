@@ -1,4 +1,8 @@
 _output/
+
+# Generated-on-demand D4 STS-assertion keypair (never commit private keys)
+test/e2e/testdata/generated/
+
 .idea/
 .vscode/
 .docusaurus/
@@ -28,7 +32,6 @@ kubernetes-mcp-server-windows-amd64.exe
 kubernetes-mcp-server-windows-arm64.exe
 
 python/.venv/
-test/e2e/.venv/
 __pycache__/
 python/build/
 python/dist/

@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    multicluster: "true"
+    suite: kiali
+  name: "Inspect Remote Cluster Workload"
+  category: "Resource Inspection"
+  description: "Retrieves workload details from a remote mesh cluster using the meshCluster parameter."
+  difficulty: medium
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  verify:
+    - llmJudge:
+        contains: "reviews-v2"
+    - llmJudge:
+        contains: "west"
+  prompt:
+    inline: |
+      Discover which mesh clusters Kiali can access.
+      Inspect the reviews-v2 workload in the bookinfo namespace on the remote mesh cluster (not Kiali's home cluster).
+      Summarize its status and health, and indicate which mesh cluster it is on.

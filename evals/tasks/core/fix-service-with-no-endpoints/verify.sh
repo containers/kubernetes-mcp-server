@@ -7,9 +7,10 @@ if ! kubectl get deployment web-app-deployment -n webshop-frontend &>/dev/null; 
   exit 1
 fi
 
-# Check if pods are being created successfully
+# Check if pods are being created successfully.
+# Environments can override via VERIFY_TIMEOUT
 echo "Waiting for pods to become ready..."
-TIMEOUT="120s"
+TIMEOUT="${VERIFY_TIMEOUT:-120s}"
 if ! kubectl wait --for=condition=Ready pods -l app=web-app -n webshop-frontend --timeout=$TIMEOUT; then
   echo "Pods are not reaching Ready state after fixing the node selector"
   exit 1

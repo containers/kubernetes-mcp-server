@@ -6,7 +6,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ToolsetsSuite struct {
@@ -35,75 +34,27 @@ func (t *TestToolset) GetName() string { return t.name }
 
 func (t *TestToolset) GetDescription() string { return t.description }
 
-func (t *TestToolset) GetTools(_ api.FilteringProvider) []api.ServerTool { return nil }
+func (t *TestToolset) GetTools(context.Context, api.ToolsetContext) []api.ServerTool { return nil }
 
-func (t *TestToolset) GetPrompts() []api.ServerPrompt { return nil }
+func (t *TestToolset) GetPrompts(context.Context, api.ToolsetContext) []api.ServerPrompt {
+	return nil
+}
 
-func (t *TestToolset) GetResources() []api.ServerResource { return nil }
+func (t *TestToolset) GetResources(context.Context, api.ToolsetContext) []api.ServerResource {
+	return nil
+}
 
-func (t *TestToolset) GetResourceTemplates() []api.ServerResourceTemplate { return nil }
+func (t *TestToolset) GetResourceTemplates(context.Context, api.ToolsetContext) []api.ServerResourceTemplate {
+	return nil
+}
 
 var _ api.Toolset = (*TestToolset)(nil)
-
-type fakeProvider struct{}
-
-func (f *fakeProvider) IsMultiTarget() bool { return false }
-
-func (f *fakeProvider) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
-
-func (f *fakeProvider) GetDefaultTarget() string { return "" }
-
-func (f *fakeProvider) GetTargetParameterName() string { return "" }
-
-func (f *fakeProvider) AnyTargetHasGVKs(_ context.Context, _ []schema.GroupVersionKind) bool {
-	return true
-}
 
 func (s *ToolsetsSuite) TestRegisterPanicsOnDuplicate() {
 	Register(&TestToolset{name: "duplicate"})
 	s.Panics(func() {
 		Register(&TestToolset{name: "duplicate"})
 	}, "Expected panic on duplicate toolset registration")
-}
-
-func (s *ToolsetsSuite) TestUniqueToolNames() {
-	toolNames := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, tool := range toolset.GetTools(&fakeProvider{}) {
-			s.Falsef(toolNames[tool.Tool.Name], "duplicate tool name: %s", tool.Tool.Name)
-			toolNames[tool.Tool.Name] = true
-		}
-	}
-}
-
-func (s *ToolsetsSuite) TestUniquePromptNames() {
-	promptNames := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, prompt := range toolset.GetPrompts() {
-			s.Falsef(promptNames[prompt.Prompt.Name], "duplicate prompt name: %s", prompt.Prompt.Name)
-			promptNames[prompt.Prompt.Name] = true
-		}
-	}
-}
-
-func (s *ToolsetsSuite) TestUniqueResourceURIs() {
-	resourceURIs := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, resource := range toolset.GetResources() {
-			s.Falsef(resourceURIs[resource.Resource.URI], "duplicate resource URI: %s", resource.Resource.URI)
-			resourceURIs[resource.Resource.URI] = true
-		}
-	}
-}
-
-func (s *ToolsetsSuite) TestUniqueResourceTemplateURITemplates() {
-	uriTemplates := make(map[string]bool)
-	for _, toolset := range s.originalToolsets {
-		for _, template := range toolset.GetResourceTemplates() {
-			s.Falsef(uriTemplates[template.ResourceTemplate.URITemplate], "duplicate resource template URI template: %s", template.ResourceTemplate.URITemplate)
-			uriTemplates[template.ResourceTemplate.URITemplate] = true
-		}
-	}
 }
 
 func (s *ToolsetsSuite) TestToolsetNames() {
@@ -158,6 +109,13 @@ func (s *ToolsetsSuite) TestValidate() {
 		err := Validate([]string{"valid", "invalid"})
 		s.NotNil(err, "Expected error if any toolset name is invalid")
 		s.Contains(err.Error(), "invalid toolset name: invalid", "Expected error message to contain invalid toolset name")
+	})
+	s.Run("Reports every invalid toolset name", func() {
+		err := Validate([]string{"bogus-a", "valid", "bogus-b"})
+		s.Require().Error(err)
+		s.Contains(err.Error(), "bogus-a")
+		s.Contains(err.Error(), "bogus-b")
+		s.NotContains(err.Error(), "bogus-a, valid")
 	})
 }
 

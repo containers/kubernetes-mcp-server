@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 type PromptMutator func(prompt api.ServerPrompt) api.ServerPrompt
@@ -16,7 +17,7 @@ func WithPromptTargetParameter(defaultTarget, targetParameterName string, isMult
 		}
 
 		if isMultiTarget {
-			prompt.Prompt.Arguments = append(prompt.Prompt.Arguments, api.PromptArgument{
+			prompt.Prompt.Arguments = append(prompt.Prompt.Arguments, config.PromptArgument{
 				Name: targetParameterName,
 				Description: fmt.Sprintf(
 					"Optional parameter selecting which %s to run the prompt in. Defaults to %s if not set",

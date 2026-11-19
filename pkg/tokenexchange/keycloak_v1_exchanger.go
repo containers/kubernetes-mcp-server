@@ -21,10 +21,15 @@ func (e *keycloakV1Exchanger) Exchange(ctx context.Context, cfg *TargetTokenExch
 		return nil, fmt.Errorf("failed to acquire http client to talk to IdP for target: %w", err)
 	}
 
+	subjectTokenType := cfg.SubjectTokenType
+	if subjectTokenType == "" {
+		subjectTokenType = TokenTypeAccessToken
+	}
+
 	data := url.Values{}
 	data.Set(FormKeyGrantType, GrantTypeTokenExchange)
 	data.Set(FormKeySubjectToken, subjectToken)
-	data.Set(FormKeySubjectTokenType, cfg.SubjectTokenType)
+	data.Set(FormKeySubjectTokenType, subjectTokenType)
 	data.Set(FormKeyAudience, cfg.Audience)
 
 	if cfg.SubjectIssuer != "" {

@@ -2,10 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
@@ -29,7 +33,8 @@ const (
 	OAuthAuthorizationHeader  = HeaderKey("Authorization")
 	UserAgentHeader           = HeaderKey("User-Agent")
 
-	CustomUserAgent = "kubernetes-mcp-server/bearer-token-auth"
+	CustomUserAgent         = "kubernetes-mcp-server/bearer-token-auth"
+	defaultDiscoveryTimeout = 10 * time.Second
 )
 
 type CloseWatchKubeConfig func() error
@@ -42,28 +47,50 @@ var ParameterCodec = runtime.NewParameterCodec(Scheme)
 // apiVersion and kinds are checked for allowed access
 type Kubernetes struct {
 	kubernetes.Interface
-	config          api.BaseConfig
-	clientCmdConfig clientcmd.ClientConfig
-	restConfig      *rest.Config
-	httpClient      *http.Client
-	restMapper      meta.ResettableRESTMapper
-	discoveryClient discovery.CachedDiscoveryInterface
-	dynamicClient   dynamic.Interface
-	metricsV1beta1  *metricsv1beta1.MetricsV1beta1Client
+	cfg                *atomic.Pointer[config.Config]
+	clientCmdConfig    clientcmd.ClientConfig
+	restConfig         *rest.Config
+	httpClient         *http.Client
+	restMapper         meta.ResettableRESTMapper
+	discoveryClient    discovery.CachedDiscoveryInterface
+	rawDiscoveryClient discovery.DiscoveryInterface
+	dynamicClient      dynamic.Interface
+	metricsV1beta1     *metricsv1beta1.MetricsV1beta1Client
+	schemaCache        *openAPISchemaCache
 }
 
 var _ api.KubernetesClient = (*Kubernetes)(nil)
 
 func NewKubernetes(
 	ctx context.Context,
-	baseConfig api.BaseConfig,
+	cfg *config.Config,
 	clientCmdConfig clientcmd.ClientConfig,
 	restConfig *rest.Config,
 ) (*Kubernetes, error) {
+	live := &atomic.Pointer[config.Config]{}
+	live.Store(cfg)
+	return newKubernetesFromLive(ctx, live, clientCmdConfig, restConfig, nil)
+}
+
+func newKubernetesFromLive(
+	ctx context.Context,
+	live *atomic.Pointer[config.Config],
+	clientCmdConfig clientcmd.ClientConfig,
+	restConfig *rest.Config,
+	schemaCache *openAPISchemaCache,
+) (*Kubernetes, error) {
+	if live == nil || live.Load() == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+	if schemaCache == nil {
+		schemaCache = newOpenAPISchemaCache()
+	}
+	cfg := live.Load()
 	k := &Kubernetes{
-		config:          baseConfig,
+		cfg:             live,
 		clientCmdConfig: clientCmdConfig,
 		restConfig:      rest.CopyConfig(restConfig),
+		schemaCache:     schemaCache,
 	}
 	if k.restConfig.UserAgent == "" {
 		k.restConfig.UserAgent = rest.DefaultKubernetesUserAgent()
@@ -71,28 +98,46 @@ func NewKubernetes(
 
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return NewAccessControlRoundTripper(ctx, AccessControlRoundTripperConfig{
-			Delegate:                  original,
-			DeniedResourcesProvider:   baseConfig,
-			RestMapperProvider:        func() meta.RESTMapper { return k.restMapper },
-			HostURL:                   k.restConfig.Host,
-			DiscoveryProvider:         func() discovery.DiscoveryInterface { return k.discoveryClient },
-			AuthClientProvider:        func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
-			ValidationEnabled:         baseConfig.IsValidationEnabled(),
-			ConfirmationRulesProvider: baseConfig,
+			Delegate:             original,
+			ConfigProvider:       k.Config,
+			DeniedResources:      cfg.DeniedResources.Get(),
+			RestMapperProvider:   func() meta.RESTMapper { return k.restMapper },
+			HostURL:              k.restConfig.Host,
+			DiscoveryProvider:    func() discovery.DiscoveryInterface { return k.discoveryClient },
+			RawDiscoveryProvider: func() discovery.DiscoveryInterface { return k.rawDiscoveryClient },
+			AuthClientProvider:   func() authv1client.AuthorizationV1Interface { return k.AuthorizationV1() },
+			ValidationEnabled:    cfg.ValidationEnabled.Get(),
+			ConfirmationRules:    cfg.ConfirmationRules.Get(),
+			ConfirmationFallback: cfg.ConfirmationFallback.Get(),
+			SchemaCache:          k.schemaCache,
 		})
 	})
 	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
 		return &UserAgentRoundTripper{delegate: original}
+	})
+	k.restConfig.Wrap(func(original http.RoundTripper) http.RoundTripper {
+		// Read the live config on each request. newKubernetesFromLive stores
+		// one before this client serves traffic.
+		return NewBackendResponseRoundTripper(original, func() (int64, error) {
+			return BackendLimit(k.Config())
+		})
 	})
 	var err error
 	k.httpClient, err = rest.HTTPClientFor(k.restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
-	discoveryClient, err := discovery.NewDiscoveryClientForConfigAndClient(k.restConfig, k.httpClient)
+	// Discovery runs synchronously while tools are registered. Use a client copy
+	// so an unreachable cluster cannot block startup without timing out watches or execs.
+	discoveryHTTPClient := *k.httpClient
+	if discoveryHTTPClient.Timeout <= 0 {
+		discoveryHTTPClient.Timeout = defaultDiscoveryTimeout
+	}
+	discoveryClient, err := discovery.NewDiscoveryClientForConfigAndClient(k.restConfig, &discoveryHTTPClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discovery client: %w", err)
 	}
+	k.rawDiscoveryClient = discoveryClient
 	k.discoveryClient = memory.NewMemCacheClient(discoveryClient)
 	k.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(k.discoveryClient)
 	k.Interface, err = kubernetes.NewForConfigAndClient(k.restConfig, k.httpClient)
@@ -121,6 +166,13 @@ func (k *Kubernetes) close() {
 	utilnet.CloseIdleConnectionsFor(k.httpClient.Transport)
 }
 
+func (k *Kubernetes) Config() *config.Config {
+	if k == nil || k.cfg == nil {
+		return nil
+	}
+	return k.cfg.Load()
+}
+
 func (k *Kubernetes) RESTConfig() *rest.Config {
 	return k.restConfig
 }
@@ -131,6 +183,10 @@ func (k *Kubernetes) RESTMapper() meta.ResettableRESTMapper {
 
 func (k *Kubernetes) DiscoveryClient() discovery.CachedDiscoveryInterface {
 	return k.discoveryClient
+}
+
+func (k *Kubernetes) RawDiscoveryClient() discovery.DiscoveryInterface {
+	return k.rawDiscoveryClient
 }
 
 func (k *Kubernetes) DynamicClient() dynamic.Interface {

@@ -2,10 +2,14 @@ package metrics
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -31,10 +35,12 @@ func (s *MetricsSuite) TestNew() {
 		s.T().Setenv("OTEL_METRICS_EXPORTER", "")
 		s.T().Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
-		cfg := &config.TelemetryConfig{
-			Endpoint: "http://localhost:4317",
-			Protocol: "grpc",
-		}
+		cfg := func() *config.TelemetryConfig {
+			c := configtest.NewTelemetry()
+			c.Endpoint.SetForTest("http://localhost:4317")
+			c.Protocol.SetForTest("grpc")
+			return c
+		}()
 
 		m, err := New(s.T().Context(), Config{
 			TracerName:     "test",
@@ -68,6 +74,28 @@ func (s *MetricsSuite) TestRecordHTTPRequest() {
 		s.Equal(int64(1), stats.HTTPRequestsByPath["/test"])
 		s.Equal(int64(1), stats.HTTPRequestsByMethod["GET"])
 		s.Equal(int64(1), stats.HTTPRequestsByStatus["2xx"])
+	})
+}
+
+func (s *MetricsSuite) TestRecordInFlightRequest() {
+	s.Run("fans out to all collectors", func() {
+		m, err := New(s.T().Context(), Config{
+			TracerName:     "test",
+			ServiceName:    "test-service",
+			ServiceVersion: "1.0.0",
+		})
+		s.Require().NoError(err)
+		ctx := context.Background()
+
+		m.RecordInFlightRequest(ctx, "tools/call", 1)
+		m.RecordInFlightRequest(ctx, "tools/call", 1)
+		m.RecordInFlightRequest(ctx, "tools/call", -1)
+
+		s.Equal(int64(1), m.GetStats(s.T().Context()).RequestsInFlight["tools/call"])
+
+		rec := httptest.NewRecorder()
+		m.PrometheusHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		s.Regexp(regexp.MustCompile(`(?m)^k8s_mcp_requests_in_flight\{[^}]*mcp_method_name="tools/call"[^}]*\} 1$`), rec.Body.String())
 	})
 }
 

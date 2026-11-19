@@ -55,7 +55,7 @@ func (s *ElicitationSuite) registerElicitingToolset(handler api.ToolHandlerFunc)
 
 	toolsets.Clear()
 	toolsets.Register(testToolset)
-	s.Cfg.Toolsets = []string{"elicit-test"}
+	s.Cfg.Toolsets.SetForTest([]string{"elicit-test"})
 }
 
 func (s *ElicitationSuite) TestElicitationAccepted() {
@@ -273,19 +273,19 @@ func (m *mockElicitToolset) GetDescription() string {
 	return "Test toolset for elicitation"
 }
 
-func (m *mockElicitToolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (m *mockElicitToolset) GetTools(context.Context, api.ToolsetContext) []api.ServerTool {
 	return m.tools
 }
 
-func (m *mockElicitToolset) GetPrompts() []api.ServerPrompt {
+func (m *mockElicitToolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
 	return nil
 }
 
-func (m *mockElicitToolset) GetResources() []api.ServerResource {
+func (m *mockElicitToolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
-func (m *mockElicitToolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (m *mockElicitToolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package tekton
 
 import (
+	"context"
 	"slices"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -17,27 +18,27 @@ func (t *Toolset) GetName() string {
 }
 
 func (t *Toolset) GetDescription() string {
-	return "Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns."
+	return "Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting."
 }
 
-func (t *Toolset) GetTools(_ api.FilteringProvider) []api.ServerTool {
+func (t *Toolset) GetTools(ctx context.Context, toolsetContext api.ToolsetContext) []api.ServerTool {
 	return slices.Concat(
 		pipelineTools(),
-		pipelineRunTools(),
+		pipelineRunTools(ctx, toolsetContext.Inspector),
 		taskTools(),
 		taskRunTools(),
 	)
 }
 
-func (t *Toolset) GetPrompts() []api.ServerPrompt {
+func (t *Toolset) GetPrompts(_ context.Context, _ api.ToolsetContext) []api.ServerPrompt {
+	return pipelineTroubleshootPrompts()
+}
+
+func (t *Toolset) GetResources(_ context.Context, _ api.ToolsetContext) []api.ServerResource {
 	return nil
 }
 
-func (t *Toolset) GetResources() []api.ServerResource {
-	return nil
-}
-
-func (t *Toolset) GetResourceTemplates() []api.ServerResourceTemplate {
+func (t *Toolset) GetResourceTemplates(_ context.Context, _ api.ToolsetContext) []api.ServerResourceTemplate {
 	return nil
 }
 

@@ -126,6 +126,8 @@ service:
   port: 8080
   # -- Target port for the service. Useful when deploying with a proxy sidecar or exposing a different port. Set this to the sidecar's port to route traffic through the proxy before reaching the main container.
   targetPort: http
+  # -- This sets the node port of the service. Only applicable when service.type is NodePort. More information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport
+  # nodePort:
   # -- Annotations to add to the service
   annotations: {}
 
@@ -207,7 +209,7 @@ initContainers: []
 
 # -- TLS configuration for the MCP server.
 # -- When enabled, the server will serve HTTPS and health probes will use the HTTPS scheme.
-# -- This is the recommended way to enable TLS instead of using extraArgs.
+# -- Certificate paths are written to the ConfigMap as tls_cert / tls_key.
 tls:
   # -- Enable TLS for the MCP server
   enabled: false
@@ -222,8 +224,7 @@ tls:
   keyFile: tls.key
 
 # -- Extra arguments to pass to the kubernetes-mcp-server command line.
-# -- Useful for passing additional configuration options. It can also be configured using ConfigMap.
-# -- Note: For TLS configuration, use the tls section above instead of extraArgs.
+# -- Only bootstrap flags exist (`--config`, `--config-dir`, `--version`). Runtime settings go in `config` or the `tls` section.
 extraArgs: []
 
 # -- Additional containers to add to the pod (sidecars).

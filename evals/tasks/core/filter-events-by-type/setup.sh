@@ -17,10 +17,22 @@ metadata:
   name: bad-pod
   namespace: ${NAMESPACE}
 spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: bad
     image: quay.io/this-image-does-not-exist:latest
     imagePullPolicy: Always
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
 EOF
 
 # Create a healthy pod to generate Normal events
@@ -31,9 +43,21 @@ metadata:
   name: good-pod
   namespace: ${NAMESPACE}
 spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: good
     image: quay.io/nginx/nginx-unprivileged:latest
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
 EOF
 
 # Wait for the good-pod to be ready (will generate a Normal event)

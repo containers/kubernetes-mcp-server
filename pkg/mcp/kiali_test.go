@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	kialiToolset "github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 type KialiSuite struct {
@@ -28,19 +31,20 @@ func (s *KialiSuite) SetupTest() {
 	s.toolsetName = (&kialiToolset.Toolset{}).GetName()
 	// toolset_configs requires the two-phase parsing performed by config.ReadToml,
 	// so we replace s.Cfg and restore the runtime fields the suite already set.
-	kubeConfig := s.Cfg.KubeConfig
-	listOutput := s.Cfg.ListOutput
-	readOnly := s.Cfg.ReadOnly
-	cfg, err := config.ReadToml([]byte(fmt.Sprintf(`
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
+	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
 		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
 		[toolset_configs.kiali]
 		url = "%s"
 	`, s.toolsetName, s.mockServer.Config().Host)))
 	s.Require().NoError(err, "failed to parse kiali toolset config")
 	s.Cfg = cfg
-	s.Cfg.KubeConfig = kubeConfig
-	s.Cfg.ListOutput = listOutput
-	s.Cfg.ReadOnly = readOnly
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
 }
 
 func (s *KialiSuite) TearDownTest() {
@@ -132,6 +136,32 @@ func (s *KialiSuite) TestGetMeshStatus() {
 		})
 		s.Run("response contains status", func() {
 			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "healthy", "Response should contain status")
+		})
+	})
+}
+
+func (s *KialiSuite) TestListClusters() {
+	var capturedURL *url.URL
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		capturedURL = &u
+		_, _ = w.Write([]byte(`[{"name":"cluster-east","isHomeCluster":true},{"name":"cluster-west","isHomeCluster":false}]`))
+	}))
+	s.InitMcpClient()
+
+	s.Run("list_mesh_clusters", func() {
+		toolResult, err := s.CallTool(fmt.Sprintf("%s_list_mesh_clusters", s.toolsetName), map[string]interface{}{})
+		s.Run("no error", func() {
+			s.Nilf(err, "call tool failed %v", err)
+			s.Falsef(toolResult.IsError, "call tool failed")
+		})
+		s.Run("sends POST to MCP endpoint", func() {
+			s.Equal("/api/chat/mcp/list_clusters", capturedURL.Path, "Unexpected path")
+		})
+		s.Run("response contains cluster names", func() {
+			text := toolResult.Content[0].(*mcp.TextContent).Text
+			s.Contains(text, "cluster-east", "Response should contain home cluster name")
+			s.Contains(text, "cluster-west", "Response should contain remote cluster name")
 		})
 	})
 }
@@ -621,6 +651,211 @@ func (s *KialiSuite) TestTraceAnalysisPrompt() {
 	s.Run("result contains user and assistant messages", func() {
 		s.Require().Len(result.Messages, 2)
 		s.Equal("user", string(result.Messages[0].Role))
+	})
+}
+
+func (s *KialiSuite) TestKialiToolsNotClusterAware() {
+	kubeconfig := s.mockServer.Kubeconfig()
+	for i := range 10 {
+		kubeconfig.Contexts[strconv.Itoa(i)] = clientcmdapi.NewContext()
+	}
+	s.Cfg.KubeConfig.SetForTest(test.KubeconfigFile(s.T(), kubeconfig))
+	s.InitMcpClient()
+
+	tools, err := s.ListTools()
+	s.Require().NoError(err)
+	s.Require().NotEmpty(tools.Tools)
+
+	for _, tool := range tools.Tools {
+		s.Run(tool.Name, func() {
+			schema, ok := tool.InputSchema.(map[string]any)
+			s.Require().True(ok, "expected InputSchema map for tool %s", tool.Name)
+			properties, ok := schema["properties"].(map[string]any)
+			s.Require().True(ok, "expected properties map for tool %s", tool.Name)
+			s.NotContains(properties, "context", "kiali tool %s must not expose context parameter", tool.Name)
+		})
+	}
+}
+
+func (s *KialiSuite) TestToolsFilteredByStatusProbe() {
+	s.Run("tools visible when configured URL passes /api/status", func() {
+		statusSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"status":{"Kiali state":"running"}}`))
+		}))
+		defer statusSrv.Close()
+
+		kubeConfig := s.Cfg.KubeConfig.Get()
+		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+			toolsets = ["%s"]
+			enable_target_compatibility_tool_filters = true
+			read_only = false
+			disable_destructive = false
+			[toolset_configs.kiali]
+			url = "%s"
+			insecure = true
+		`, s.toolsetName, statusSrv.URL)))
+		s.Require().NoError(err)
+		s.Cfg = cfg
+		s.Cfg.KubeConfig.SetForTest(kubeConfig)
+		s.InitMcpClient()
+
+		tools, err := s.ListTools()
+		s.Require().NoError(err)
+		s.Require().NotNil(tools)
+		present := make(map[string]bool, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			present[tool.Name] = true
+		}
+		for _, name := range s.kialiToolNames() {
+			s.Truef(present[name], "expected %s when status probe succeeds", name)
+		}
+	})
+
+	s.Run("tools hidden when configured URL fails /api/status", func() {
+		kubeConfig := s.Cfg.KubeConfig.Get()
+		cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+			toolsets = ["%s"]
+			enable_target_compatibility_tool_filters = true
+			[toolset_configs.kiali]
+			url = "http://127.0.0.1:1"
+			insecure = true
+		`, s.toolsetName)))
+		s.Require().NoError(err)
+		s.Cfg = cfg
+		s.Cfg.KubeConfig.SetForTest(kubeConfig)
+		s.InitMcpClient()
+
+		tools, err := s.ListTools()
+		s.Require().NoError(err)
+		s.Require().NotNil(tools)
+		for _, tool := range tools.Tools {
+			for _, name := range s.kialiToolNames() {
+				s.Require().NotEqual(name, tool.Name, "expected %s hidden when status probe fails", name)
+			}
+		}
+	})
+}
+
+func (s *KialiSuite) kialiToolNames() []string {
+	return []string{
+		s.toolsetName + "_get_logs",
+		s.toolsetName + "_get_mesh_status",
+		s.toolsetName + "_get_mesh_traffic_graph",
+		s.toolsetName + "_get_metrics",
+		s.toolsetName + "_get_pod_performance",
+		s.toolsetName + "_get_resource_details",
+		s.toolsetName + "_get_trace_details",
+		s.toolsetName + "_list_mesh_clusters",
+		s.toolsetName + "_list_traces",
+		s.toolsetName + "_manage_istio_config",
+		s.toolsetName + "_manage_istio_config_read",
+	}
+}
+
+func (s *KialiSuite) applyDeniedVirtualServiceConfig() {
+	kubeConfig := s.Cfg.KubeConfig.Get()
+	listOutput := s.Cfg.ListOutput.Get()
+	readOnly := s.Cfg.ReadOnly.Get()
+	cfg, err := config.ReadToml(s.T().Context(), []byte(fmt.Sprintf(`
+		toolsets = ["%s"]
+		enable_target_compatibility_tool_filters = false
+		read_only = false
+		disable_destructive = false
+		[[denied_resources]]
+		group = "networking.istio.io"
+		version = "v1"
+		kind = "VirtualService"
+		[toolset_configs.kiali]
+		url = "%s"
+	`, s.toolsetName, s.mockServer.Config().Host)))
+	s.Require().NoError(err, "failed to parse kiali denied_resources config")
+	s.Cfg = cfg
+	s.Cfg.KubeConfig.SetForTest(kubeConfig)
+	s.Cfg.ListOutput.SetForTest(listOutput)
+	s.Cfg.ReadOnly.SetForTest(readOnly)
+}
+
+func (s *KialiSuite) TestDeniedResourcesEnforcedOnIstioConfigTools() {
+	var (
+		mu         sync.Mutex
+		kialiCalls int
+	)
+	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		kialiCalls++
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"cluster":"home","namespaces":{"cve-lab":{"networking.istio.io/v1/VirtualService":{"valid":["routing-proof"],"invalid":[]},"networking.istio.io/v1/DestinationRule":{"valid":["details"],"invalid":[]}}}}`))
+	}))
+	s.applyDeniedVirtualServiceConfig()
+	s.InitMcpClient()
+
+	s.Run("get denied VirtualService is rejected before Kiali", func() {
+		mu.Lock()
+		before := kialiCalls
+		mu.Unlock()
+		toolResult, err := s.CallTool(s.toolsetName+"_manage_istio_config_read", map[string]interface{}{
+			"action":    "get",
+			"namespace": "cve-lab",
+			"group":     "networking.istio.io",
+			"version":   "v1",
+			"kind":      "VirtualService",
+			"object":    "routing-proof",
+		})
+		s.Require().NoError(err)
+		s.Require().True(toolResult.IsError)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "resource not allowed")
+		mu.Lock()
+		after := kialiCalls
+		mu.Unlock()
+		s.Equal(before, after, "denied get must not call Kiali")
+	})
+
+	s.Run("patch denied VirtualService is rejected before Kiali", func() {
+		mu.Lock()
+		before := kialiCalls
+		mu.Unlock()
+		toolResult, err := s.CallTool(s.toolsetName+"_manage_istio_config", map[string]interface{}{
+			"action":    "patch",
+			"namespace": "cve-lab",
+			"group":     "networking.istio.io",
+			"version":   "v1",
+			"kind":      "VirtualService",
+			"object":    "routing-proof",
+			"data":      `{"metadata":{"annotations":{"x":"y"}}}`,
+		})
+		s.Require().NoError(err)
+		s.Require().True(toolResult.IsError)
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "resource not allowed")
+		mu.Lock()
+		after := kialiCalls
+		mu.Unlock()
+		s.Equal(before, after, "denied patch must not call Kiali")
+	})
+
+	s.Run("list filters denied VirtualService names", func() {
+		toolResult, err := s.CallTool(s.toolsetName+"_manage_istio_config_read", map[string]interface{}{
+			"action":    "list",
+			"namespace": "cve-lab",
+		})
+		s.Require().NoError(err)
+		s.Require().False(toolResult.IsError)
+		text := toolResult.Content[0].(*mcp.TextContent).Text
+		s.NotContains(text, "routing-proof")
+		s.NotContains(text, "VirtualService")
+		s.Contains(text, "details")
+		s.Contains(text, "DestinationRule")
+	})
+
+	s.Run("list-istio-config prompt filters denied VirtualService", func() {
+		result, err := s.GetPrompt("list-istio-config", map[string]string{
+			"namespace": "cve-lab",
+		})
+		s.Require().NoError(err)
+		s.Require().NotEmpty(result.Messages)
+		textContent, ok := result.Messages[0].Content.(*mcp.TextContent)
+		s.Require().True(ok, "expected TextContent")
+		s.NotContains(textContent.Text, "routing-proof")
+		s.Contains(textContent.Text, "DestinationRule")
 	})
 }
 

@@ -1,0 +1,7 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel
+spec:
+  # when using upstream OpenTelemetry Operator, the default image does not contain the k8sattributesprocessor
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.146.0

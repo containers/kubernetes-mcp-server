@@ -64,7 +64,7 @@ func injectClientAuth(ctx context.Context, cfg *TargetTokenExchangeConfig, data 
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
 		header.Set(HeaderAuthorization, "Basic "+base64.StdEncoding.EncodeToString([]byte(credentials)))
 	case AuthStyleAssertion:
-		assertion, err := cfg.GetOrBuildAssertion(ctx)
+		assertion, err := cfg.BuildAssertion(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to build client assertion: %w", err)
 		}

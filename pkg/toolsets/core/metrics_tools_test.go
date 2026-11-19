@@ -1,0 +1,135 @@
+package core
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/suite"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery/cached/memory"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/api"
+)
+
+type fakeInspector struct {
+	available bool
+	err       error
+}
+
+func (f *fakeInspector) Discovery() api.AggregateDiscovery       { return f }
+func (f *fakeInspector) Unstructured() api.AggregateUnstructured { return nil }
+func (f *fakeInspector) BearerToken(ctx context.Context) api.Results[string] {
+	return api.NewResults(ctx, f, func(context.Context, string) (string, error) { return "", nil })
+}
+func (f *fakeInspector) ServerResourcesForGroup(ctx context.Context, _ string) api.Results[[]*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) ([]*metav1.APIResourceList, error) {
+		if f.err != nil {
+			return nil, f.err
+		}
+		list := &metav1.APIResourceList{}
+		if f.available {
+			list.APIResources = []metav1.APIResource{{Kind: "NodeMetrics"}, {Kind: "PodMetrics"}}
+		}
+		return []*metav1.APIResourceList{list}, nil
+	})
+}
+
+func (f *fakeInspector) ServerResourcesForGroupVersion(ctx context.Context, _ string) api.Results[*metav1.APIResourceList] {
+	return api.NewResults(ctx, f, func(context.Context, string) (*metav1.APIResourceList, error) {
+		if f.err != nil {
+			return nil, f.err
+		}
+		list := &metav1.APIResourceList{}
+		if f.available {
+			list.APIResources = []metav1.APIResource{{Kind: "NodeMetrics"}, {Kind: "PodMetrics"}}
+		}
+		return list, nil
+	})
+}
+func (f *fakeInspector) IsMultiTarget() bool                          { return false }
+func (f *fakeInspector) GetTargets(context.Context) ([]string, error) { return []string{""}, nil }
+func (f *fakeInspector) GetDefaultTarget() string                     { return "" }
+func (f *fakeInspector) GetTargetParameterName() string               { return "" }
+
+type MetricsToolsSuite struct {
+	suite.Suite
+}
+
+func (s *MetricsToolsSuite) findTool(tools []api.ServerTool, name string) *api.ServerTool {
+	for i := range tools {
+		if tools[i].Tool.Name == name {
+			return &tools[i]
+		}
+	}
+	return nil
+}
+
+func (s *MetricsToolsSuite) TestNodesTopRegistration() {
+	s.Run("nodes_top has TargetCompatibilityFilter", func() {
+		tool := s.findTool(initNodes(&fakeInspector{available: true}), "nodes_top")
+		s.Require().NotNil(tool, "expected nodes_top tool")
+		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
+		s.True(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return true when metrics GVK is available")
+	})
+
+	s.Run("nodes_top declares get and list on core nodes", func() {
+		tool := s.findTool(initNodes(&fakeInspector{available: true}), "nodes_top")
+		s.Require().NotNil(tool)
+		s.Require().NotNil(tool.RBAC)
+		s.Require().NotNil(tool.RBAC.Bounded)
+		var verbs []string
+		for _, req := range tool.RBAC.Bounded.Requirements {
+			if req.Target.Resource != nil && req.Target.Resource.APIGroup == "" && req.Target.Resource.Resource == "nodes" {
+				verbs = req.Verbs
+			}
+		}
+		s.ElementsMatch([]string{"get", "list"}, verbs)
+	})
+
+	s.Run("nodes_top filter returns false without metrics GVK", func() {
+		tool := s.findTool(initNodes(&fakeInspector{available: false}), "nodes_top")
+		s.Require().NotNil(tool, "expected nodes_top tool")
+		s.Require().Len(tool.TargetCompatibilityFilters, 1)
+		s.False(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return false when metrics GVK is unavailable")
+	})
+
+	s.Run("nodes_top fails open when discovery is unavailable", func() {
+		tool := s.findTool(initNodes(&fakeInspector{err: errors.New("discovery unavailable")}), "nodes_top")
+		s.Require().NotNil(tool)
+		s.True(tool.TargetCompatibilityFilters[0](s.T().Context()))
+	})
+
+	s.Run("nodes_top stays unavailable when discovery confirms absence", func() {
+		for _, err := range []error{
+			apierrors.NewNotFound(schema.GroupResource{Resource: "metrics.k8s.io"}, "v1beta1"),
+			memory.ErrCacheNotFound,
+		} {
+			tool := s.findTool(initNodes(&fakeInspector{err: err}), "nodes_top")
+			s.Require().NotNil(tool)
+			s.False(tool.TargetCompatibilityFilters[0](s.T().Context()))
+		}
+	})
+}
+
+func (s *MetricsToolsSuite) TestPodsTopRegistration() {
+	s.Run("pods_top has TargetCompatibilityFilter", func() {
+		tool := s.findTool(initPods(&fakeInspector{available: true}), "pods_top")
+		s.Require().NotNil(tool, "expected pods_top tool")
+		s.Require().Len(tool.TargetCompatibilityFilters, 1, "Expected 1 TargetCompatibilityFilter")
+		s.True(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return true when metrics GVK is available")
+	})
+
+	s.Run("pods_top filter returns false without metrics GVK", func() {
+		tool := s.findTool(initPods(&fakeInspector{available: false}), "pods_top")
+		s.Require().NotNil(tool, "expected pods_top tool")
+		s.Require().Len(tool.TargetCompatibilityFilters, 1)
+		s.False(tool.TargetCompatibilityFilters[0](s.T().Context()), "Filter should return false when metrics GVK is unavailable")
+	})
+}
+
+func TestMetricsTools(t *testing.T) {
+	suite.Run(t, new(MetricsToolsSuite))
+}

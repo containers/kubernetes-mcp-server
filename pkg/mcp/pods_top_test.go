@@ -1,12 +1,13 @@
 package mcp
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +22,7 @@ type PodsTopSuite struct {
 func (s *PodsTopSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 
 	s.discoveryHandler = test.NewDiscoveryClientHandler()
 	s.mockServer.Handle(s.discoveryHandler)
@@ -116,6 +117,18 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 
 		expectedTotal := regexp.MustCompile(`(?m)^\s+600m\s+900Mi\s+92Mi\s*$`)
 		s.Regexpf(expectedTotal, textContent, "expected total row '%s' not found in output:\n%s", expectedTotal.String(), textContent)
+		s.Run("structured metrics aggregate all containers per pod", func() {
+			encoded, err := json.Marshal(result.StructuredContent)
+			s.Require().NoError(err)
+			var payload struct {
+				Items []map[string]any `json:"items"`
+			}
+			s.Require().NoError(json.Unmarshal(encoded, &payload))
+			s.ElementsMatch([]map[string]any{
+				{"Name": "pod-1", "Namespace": "default", "CPU": "300m", "Memory": "500Mi"},
+				{"Name": "pod-2", "Namespace": "ns-1", "CPU": "300m", "Memory": "400Mi"},
+			}, payload.Items)
+		})
 	})
 
 	s.Run("pods_top(allNamespaces=false) returns pod metrics from configured namespace", func() {
@@ -190,9 +203,9 @@ func (s *PodsTopSuite) TestPodsTopMetricsAvailable() {
 }
 
 func (s *PodsTopSuite) TestPodsTopDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { group = "metrics.k8s.io", version = "v1beta1" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.discoveryHandler.AddAPIResourceList(metav1.APIResourceList{
 		GroupVersion: "metrics.k8s.io/v1beta1",
 		APIResources: []metav1.APIResource{

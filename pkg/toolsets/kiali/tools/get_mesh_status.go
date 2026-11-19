@@ -29,13 +29,16 @@ func InitGetMeshStatus() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: getMeshStatusHandler,
+		}, RBAC: MeshStatusRBAC(), Handler: getMeshStatusHandler,
 	})
 	return ret
 }
 
 func getMeshStatusHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	content, err := kiali.ExecuteRequest(params.Context, KialiGetMeshStatusEndpoint, nil)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve mesh status: %w", err)), nil

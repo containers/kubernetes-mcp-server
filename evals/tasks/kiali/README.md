@@ -21,10 +21,16 @@ The `update_tasks` target runs `scripts/update_tasks.sh`, which parses every sce
 ## Tasks defined
 <!-- TASKS-START -->
 - Configuration Management
+  - [easy] gateway-api-list-httproutes (List Gateway API HTTPRoutes)
+        **Prompt:** *|*
+  - [easy] inference-api-list-pools (List Inference API Pools)
+        **Prompt:** *|*
   - [easy] istio-list (List and Validate VirtualServices)
         **Prompt:** *|*
   - [easy] istio-list-destination-rules (List and Validate DestinationRules)
         **Prompt:** *"List all DestinationRules in the 'bookinfo' namespace and report if any of them have validation errors."*
+  - [medium] gateway-api-create-httproute (Create Gateway API HTTPRoute)
+        **Prompt:** *|*
   - [medium] istio-create (Create Istio Gateway)
         **Prompt:** *"Create a new Istio Gateway named 'my-gateway' in the 'istio-system' namespace."*
   - [medium] istio-delete (Remove Fault Injection)

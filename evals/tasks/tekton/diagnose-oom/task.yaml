@@ -1,0 +1,48 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "diagnose-tekton-oom-failure"
+  difficulty: hard
+  labels:
+    suite: tekton
+    requires: tekton
+    workflow: pipelinerun-diagnosis
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+
+  setup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          source ../helpers/cleanup-namespace.sh
+          source ../helpers/diagnosis-scenario.sh
+          setup_diagnosis_scenario oom
+
+  verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          source ../helpers/require-output.sh
+          require 'failed-run'
+          require 'OOMKilled'
+          require 'memory'
+    - llmJudge:
+        contains: "The response diagnoses the failed step as terminated for exceeding its memory limit (OOMKilled), based on observed runtime evidence."
+
+  cleanup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: tekton-eval
+        ignoreNotFound: true
+
+  prompt:
+    inline: |-
+      The Tekton PipelineRun named failed-run in the tekton-eval namespace failed. Use the observed runtime evidence to explain which task and step failed and why.

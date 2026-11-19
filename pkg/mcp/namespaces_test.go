@@ -2,19 +2,18 @@ package mcp
 
 import (
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"regexp"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 )
 
@@ -66,9 +65,9 @@ func (s *NamespacesSuite) TestNamespacesListWithoutArguments() {
 }
 
 func (s *NamespacesSuite) TestNamespacesListDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Namespace" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("namespaces_list (denied)", func() {
 		toolResult, err := s.CallTool("namespaces_list", map[string]interface{}{})
@@ -89,9 +88,7 @@ func (s *NamespacesSuite) TestNamespacesListDenied() {
 func (s *NamespacesSuite) TestNamespacesListForbidden() {
 	s.InitMcpClient()
 	defer restoreAuth(s.T().Context())
-	client := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
-	// Remove all permissions - user will have forbidden access
-	_ = client.RbacV1().ClusterRoles().Delete(s.T().Context(), "allow-all", metav1.DeleteOptions{})
+	revokeAllowAll(s.T())
 
 	s.Run("namespaces_list (forbidden)", func() {
 		capture := s.StartCapturingLogNotifications()
@@ -110,7 +107,7 @@ func (s *NamespacesSuite) TestNamespacesListForbidden() {
 }
 
 func (s *NamespacesSuite) TestNamespacesListAsTable() {
-	s.Cfg.ListOutput = "table"
+	s.Cfg.ListOutput.SetForTest("table")
 	s.InitMcpClient()
 	s.Run("namespaces_list (list_output=table)", func() {
 		toolResult, err := s.CallTool("namespaces_list", map[string]interface{}{})
@@ -220,9 +217,9 @@ func (s *NamespacesSuite) TestProjectsListInOpenShift() {
 }
 
 func (s *NamespacesSuite) TestProjectsListInOpenShiftDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { group = "project.openshift.io", version = "v1" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.Require().NoError(EnvTestInOpenShift(s.T().Context()), "Expected to configure test for OpenShift")
 	s.T().Cleanup(func() {
 		s.Require().NoError(EnvTestInOpenShiftClear(s.T().Context()), "Expected to clear OpenShift test configuration")

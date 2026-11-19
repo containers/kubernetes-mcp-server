@@ -101,9 +101,9 @@ If the tool call triggers an HTTP request (in HTTP mode), you'll also see:
 Trace ID: abc123def456789
 Duration: 150ms
 
-├─ POST /message [150ms]
+├─ POST /mcp [150ms]
 │  ├─ http.request.method: POST
-│  ├─ url.path: /message
+│  ├─ url.path: /mcp
 │  ├─ http.response.status_code: 200
 │  ├─ client.address: 192.168.1.100
 │  │
@@ -127,6 +127,7 @@ OpenTelemetry can be configured via **TOML config file** or **environment variab
 | TOML Field | Environment Variable | Description |
 |------------|---------------------|-------------|
 | `enabled` | - | Explicit enable/disable (overrides all) |
+| `service_name` | `OTEL_SERVICE_NAME` | Trace service name (defaults to the built-in server name) |
 | `endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint URL |
 | `protocol` | `OTEL_EXPORTER_OTLP_PROTOCOL` | Protocol: `grpc` or `http/protobuf` |
 | `traces_sampler` | `OTEL_TRACES_SAMPLER` | Sampling strategy |
@@ -200,6 +201,9 @@ export OTEL_SERVICE_VERSION=1.0.0
 # Additional resource attributes (useful for multi-environment deployments)
 export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production,team=platform"
 ```
+
+For traces, `OTEL_SERVICE_NAME` overrides `service_name` in the `[telemetry]`
+configuration. If neither is set, the built-in service name is used.
 
 #### Endpoint Protocols
 
@@ -363,7 +367,7 @@ Each tool call creates a span following MCP and OpenTelemetry semantic conventio
 
 HTTP requests create spans following [OpenTelemetry HTTP semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/):
 
-**Span Name Format**: `{METHOD} {path}` (e.g., "POST /message")
+**Span Name Format**: `{METHOD} {path}` (e.g., "POST /mcp")
 
 **Attributes**:
 - `http.request.method` - Request method (GET, POST, etc.) **[Required]**
@@ -402,9 +406,10 @@ Example response:
   },
   "total_http_requests": 100,
   "http_requests_by_path": {
-    "/mcp": 50,
-    "/sse": 30,
-    "/message": 20
+    "/mcp": 100
+  },
+  "requests_in_flight": {
+    "tools/call": 3
   },
   "uptime_seconds": 3600.5
 }
@@ -434,7 +439,8 @@ This endpoint returns metrics in OpenMetrics/Prometheus text format, suitable fo
 | `k8s_mcp_tool_calls_total` | Counter | Total MCP tool calls (labeled by `tool_name`) |
 | `k8s_mcp_tool_errors_total` | Counter | Total MCP tool errors (labeled by `tool_name`) |
 | `k8s_mcp_tool_duration_seconds` | Histogram | Tool call duration in seconds |
-| `k8s_mcp_http_requests_total` | Counter | HTTP requests (labeled by `http_request_method`, `url_path`, `http_response_status_class`) |
+| `k8s_mcp_http_requests_total` | Counter | HTTP requests (labeled by `http_request_method`, `url_path`, `http_response_status_class`). `url_path` is the request path when it is exactly `/mcp`, `/healthz`, `/stats` or `/metrics`, `/.well-known/*` for any path under `/.well-known/` (served or not), and `other` for anything else (including `/mcp/`), and non-standard methods are reported as `_OTHER`, so arbitrary requests can't add series |
+| `k8s_mcp_requests_in_flight` | Gauge | MCP requests currently being handled (labeled by `mcp_method_name`); useful as a horizontal autoscaling signal, e.g. with KEDA. The `subscriptions/listen` long-poll is not counted, since it stays open for the whole client session. Very short requests (`initialize`, notifications, `ping`) are counted, so filter on the method when autoscaling, e.g. `sum(k8s_mcp_requests_in_flight{mcp_method_name="tools/call"})` |
 | `k8s_mcp_server_info` | Gauge | Server info (labeled by `version`, `go_version`) |
 
 ### Prometheus Scrape Configuration

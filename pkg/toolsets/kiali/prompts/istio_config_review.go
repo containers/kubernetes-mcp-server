@@ -1,22 +1,24 @@
 package prompts
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	kialiclient "github.com/containers/kubernetes-mcp-server/pkg/kiali"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/tools"
 )
 
-func InitIstioConfigReview() []api.ServerPrompt {
+func InitIstioConfigReview(ctx context.Context, inspector api.ClusterInspector) []api.ServerPrompt {
 	return []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "istio-config-review",
 				Title:       "Review Istio Configuration",
 				Description: "Review and validate Istio configuration in a namespace, checking for misconfigurations and best practice violations",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{
 						Name:        "namespace",
 						Description: "Namespace to review Istio configuration for",
@@ -24,6 +26,7 @@ func InitIstioConfigReview() []api.ServerPrompt {
 					},
 				},
 			},
+			RBAC:    tools.MergeRBACBounded(tools.IstioConfigReadRBAC(), tools.ResourcesRBAC(ctx, inspector)),
 			Handler: istioConfigReviewHandler,
 		},
 	}
@@ -39,15 +42,13 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 
 	klogutil.FromContext(params.Context).Info("Starting Istio config review...", "namespace", namespace)
 
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return nil, err
+	}
 
-	istioContent := fetchKialiData(kiali, params, tools.KialiManageIstioConfigReadEndpoint,
-		map[string]any{"namespace": namespace, "action": "list"})
-
-	resourceContent := fetchKialiData(kiali, params, tools.KialiListOrGetResourcesEndpoint,
-		map[string]any{"namespaces": namespace, "resourceType": "service"})
-
-	promptText := buildIstioConfigReviewPrompt(namespace, istioContent, resourceContent)
+	b := api.NewPromptBudget(params.Context, istioConfigReviewAssistantText)
+	writeIstioConfigReviewPrompt(kiali, params, namespace, b)
 
 	return api.NewPromptCallResult(
 		"Istio configuration data gathered successfully",
@@ -56,14 +57,14 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 				Role: "user",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: promptText,
+					Text: b.String(),
 				},
 			},
 			{
 				Role: "assistant",
 				Content: api.PromptContent{
 					Type: "text",
-					Text: "I'll review the Istio configuration and check for issues or misconfigurations.",
+					Text: istioConfigReviewAssistantText,
 				},
 			},
 		},
@@ -71,8 +72,13 @@ func istioConfigReviewHandler(params api.PromptHandlerParams) (*api.PromptCallRe
 	), nil
 }
 
-func buildIstioConfigReviewPrompt(namespace, istioData, resourceData string) string {
-	return fmt.Sprintf(`# Istio Configuration Review
+const istioConfigReviewAssistantText = "I'll review the Istio configuration and check for issues or misconfigurations."
+
+// writeIstioConfigReviewPrompt writes the review into one prompt budget.
+// The service list does not start once that budget is spent.
+func writeIstioConfigReviewPrompt(kiali *kialiclient.Kiali, params api.PromptHandlerParams, namespace string, b *api.BuilderWithBudget) {
+	_ = b.Sections(
+		api.Text(fmt.Sprintf(`# Istio Configuration Review
 
 ## Namespace: %s
 
@@ -82,13 +88,25 @@ Review the Istio configuration in this namespace for correctness, best practices
 
 ## Istio Resources
 
-%s
+`, namespace)),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiManageIstioConfigReadEndpoint,
+				map[string]any{"namespace": namespace, "action": "list"})
+			return nil
+		},
+		api.Text(`
 
 ---
 
 ## Services in Namespace
 
-%s
+`),
+		func(b *api.BuilderWithBudget) error {
+			writeKialiData(b, kiali, params, tools.KialiListOrGetResourcesEndpoint,
+				map[string]any{"namespaces": namespace, "resourceType": "service"})
+			return nil
+		},
+		api.Text(`
 
 ---
 
@@ -104,5 +122,6 @@ Analyze the configuration above and check for:
 6. **Best Practices**: Are there any configuration anti-patterns (e.g., overly broad host matches, missing retries)?
 
 Provide a summary of findings with severity (critical, warning, info) and recommendations.
-`, namespace, istioData, resourceData)
+`),
+	)
 }

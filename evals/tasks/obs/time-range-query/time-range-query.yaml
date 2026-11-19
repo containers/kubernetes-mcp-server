@@ -1,0 +1,26 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "time-range-query"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: multi-step
+  description: |
+    Tests whether the agent correctly uses execute_range_query with
+    appropriate start/end/step parameters when asked for data over
+    a specific time window.
+spec:
+  verify:
+    - llmJudge:
+        contains: "container_cpu_usage_seconds_total"
+    - llmJudge:
+        contains: "pod"
+  prompt:
+    inline: |
+      Show me the CPU usage trend for pods in the default namespace over the last 30 minutes.
+      Include the Prometheus metric name and PromQL query you used.

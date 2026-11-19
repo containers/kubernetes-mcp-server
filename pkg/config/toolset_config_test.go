@@ -8,12 +8,11 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/stretchr/testify/suite"
 )
 
 type ToolsetConfigSuite struct {
-	BaseConfigSuite
+	ConfigFileSuite
 	originalToolsetConfigRegistry *extendedConfigRegistry
 }
 
@@ -32,7 +31,7 @@ type ToolsetConfigForTest struct {
 	Timeout  int    `toml:"timeout"`
 }
 
-var _ api.ExtendedConfig = (*ToolsetConfigForTest)(nil)
+var _ ExtendedConfig = (*ToolsetConfigForTest)(nil)
 
 func (t *ToolsetConfigForTest) Validate() error {
 	if t.Endpoint == "force-error" {
@@ -41,7 +40,7 @@ func (t *ToolsetConfigForTest) Validate() error {
 	return nil
 }
 
-func toolsetConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+func toolsetConfigForTestParser(_ context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 	var toolsetConfigForTest ToolsetConfigForTest
 	if err := md.PrimitiveDecode(primitive, &toolsetConfigForTest); err != nil {
 		return nil, err
@@ -84,6 +83,9 @@ func (s *ToolsetConfigSuite) TestReadConfigValid() {
 		s.Equal("https://example.com", testToolsetConfig.Endpoint, "Expected Endpoint to be 'https://example.com'")
 		s.Equal(30, testToolsetConfig.Timeout, "Expected Timeout to be 30")
 	})
+	s.Run("records toolset_configs source from the file", func() {
+		s.Equal(Source(validConfigPath), config.toolsetConfigsSource)
+	})
 }
 
 func (s *ToolsetConfigSuite) TestReadConfigInvalidToolsetConfig() {
@@ -114,21 +116,19 @@ func (s *ToolsetConfigSuite) TestReadConfigUnregisteredToolsetConfig() {
 	`)
 
 	config, err := Read(s.T().Context(), unregisteredConfigPath, "")
-	s.Run("returns no error for unregistered toolset config", func() {
-		s.Require().NoError(err, "Expected no error for unregistered toolset config, got %v", err)
+	s.Run("returns error for unregistered toolset config", func() {
+		s.Require().Error(err)
+		s.Contains(err.Error(), "unknown config key")
+		s.Contains(err.Error(), "toolset_configs.unregistered-toolset")
 	})
-	s.Run("returns config for unregistered toolset config", func() {
-		s.Require().NotNil(config, "Expected non-nil config for unregistered toolset config")
-	})
-	s.Run("does not parse unregistered toolset config", func() {
-		_, ok := config.GetToolsetConfig("unregistered-toolset")
-		s.Require().False(ok, "Expected no toolset config for unregistered toolset")
+	s.Run("returns nil config for unregistered toolset config", func() {
+		s.Nil(config)
 	})
 }
 
 func (s *ToolsetConfigSuite) TestConfigDirPathInContext() {
 	var capturedDirPath string
-	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var toolsetConfigForTest ToolsetConfigForTest
 		if err := md.PrimitiveDecode(primitive, &toolsetConfigForTest); err != nil {
@@ -191,7 +191,7 @@ func (s *ToolsetConfigSuite) TestExtendedConfigMergingAcrossDropIns() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -240,7 +240,7 @@ func (s *ToolsetConfigSuite) TestExtendedConfigFromDropInOnly() {
 	`), 0644)
 	s.Require().NoError(err)
 
-	config, err := Read(s.T().Context(), mainConfigPath, "")
+	config, err := Read(s.T().Context(), mainConfigPath, dropInDir)
 	s.Require().NoError(err)
 	s.Require().NotNil(config)
 
@@ -300,7 +300,7 @@ func (s *ToolsetConfigSuite) TestStandaloneConfigDirWithExtendedConfig() {
 func (s *ToolsetConfigSuite) TestConfigDirPathInContextStandalone() {
 	// Test that configDirPath is correctly set in context for standalone --config-dir
 	var capturedDirPath string
-	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (api.ExtendedConfig, error) {
+	RegisterToolsetConfig("test-toolset", func(ctx context.Context, primitive toml.Primitive, md toml.MetaData) (ExtendedConfig, error) {
 		capturedDirPath = ConfigDirPathFromContext(ctx)
 		var toolsetConfigForTest ToolsetConfigForTest
 		if err := md.PrimitiveDecode(primitive, &toolsetConfigForTest); err != nil {
@@ -327,6 +327,42 @@ func (s *ToolsetConfigSuite) TestConfigDirPathInContextStandalone() {
 		s.Require().NoError(err)
 		s.NotEmpty(capturedDirPath, "Expected non-empty directory path in context")
 		s.Equal(absTempDir, capturedDirPath, "Expected directory path to match config-dir")
+	})
+}
+
+func (s *ToolsetConfigSuite) TestReloadRejectsRequireTLSChange() {
+	RegisterToolsetConfig("test-toolset", toolsetConfigForTestParser)
+
+	s.Run("require_tls true to false fails the load", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`
+			require_tls = true
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`))
+		s.Require().NoError(err)
+		_, err = ReadToml(s.T().Context(), []byte(`
+			require_tls = false
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`), WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
+	})
+
+	s.Run("require_tls false to true fails the load", func() {
+		prev, err := ReadToml(s.T().Context(), []byte(`
+			require_tls = false
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`))
+		s.Require().NoError(err)
+		_, err = ReadToml(s.T().Context(), []byte(`
+			require_tls = true
+			[toolset_configs.test-toolset]
+			endpoint = "https://example.com"
+		`), WithPrevious(prev))
+		s.Require().Error(err)
+		s.Contains(err.Error(), "non-reloadable option require_tls changed")
 	})
 }
 

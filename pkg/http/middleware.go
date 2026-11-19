@@ -64,17 +64,28 @@ func getClientIP(r *http.Request, trustProxy bool) string {
 	return host
 }
 
-// getHTTPRoute returns a normalized route for the request path.
-// This helps reduce cardinality in traces by grouping similar paths.
-func getHTTPRoute(path string) string {
-	// Known routes for this server
+// knownHTTPRoute maps a request path to the route it is reported as in span
+// names and metric labels, and reports whether the path is a known route.
+// Matching is exact, except that every path under /.well-known/ is reported as
+// /.well-known/*. New HTTP endpoints must be added to this switch, or their
+// traffic keeps its raw path in span names and is counted as "other" in metrics.
+func knownHTTPRoute(path string) (string, bool) {
 	switch path {
-	case "/healthz", "/mcp", "/sse", "/message", "/stats":
-		return path
+	case mcpEndpoint, healthEndpoint, statsEndpoint, metricsEndpoint:
+		return path, true
 	}
-	// Check for well-known prefix
 	if strings.HasPrefix(path, "/.well-known/") {
-		return "/.well-known/*"
+		return "/.well-known/*", true
+	}
+	return "", false
+}
+
+// getHTTPRoute returns a normalized route for the request path, or the raw
+// path for an unknown route. This helps reduce cardinality in traces by
+// grouping similar paths.
+func getHTTPRoute(path string) string {
+	if route, ok := knownHTTPRoute(path); ok {
+		return route
 	}
 	return path
 }
@@ -84,7 +95,7 @@ func getHTTPRoute(path string) string {
 // SIGHUP-reloaded values take effect immediately. When enabled, X-Forwarded-*
 // and X-Real-IP headers are used for client IP and scheme detection. Only
 // enable when behind a trusted reverse proxy.
-func RequestMiddleware(cfgState *config.StaticConfigState) func(http.Handler) http.Handler {
+func RequestMiddleware(cfgState *config.ConfigState) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip tracing for health checks
@@ -93,7 +104,7 @@ func RequestMiddleware(cfgState *config.StaticConfigState) func(http.Handler) ht
 				return
 			}
 
-			trustProxy := cfgState.Load().TrustProxyHeaders
+			trustProxy := cfgState.Load().TrustProxyHeaders.Get()
 
 			// Skip all tracing work if telemetry is not enabled
 			if !telemetry.Enabled() {
@@ -245,7 +256,7 @@ func (lrw *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) 
 // Requests exceeding the limit receive a 413 Request Entity Too Large response.
 // The max_body_bytes limit is read per request from cfgState so SIGHUP-reloaded
 // values take effect immediately.
-func MaxBodyMiddleware(cfgState *config.StaticConfigState) func(http.Handler) http.Handler {
+func MaxBodyMiddleware(cfgState *config.ConfigState) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip for methods that typically don't have bodies
@@ -254,7 +265,7 @@ func MaxBodyMiddleware(cfgState *config.StaticConfigState) func(http.Handler) ht
 				return
 			}
 
-			maxBytes := cfgState.Load().HTTP.MaxBodyBytes
+			maxBytes := cfgState.Load().HTTP.MaxBodyBytes.Get()
 			// Skip if maxBytes is 0 or negative (disabled)
 			if maxBytes <= 0 {
 				next.ServeHTTP(w, r)

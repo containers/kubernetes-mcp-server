@@ -1,0 +1,29 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kiali
+  name: "List Gateway API HTTPRoutes"
+  category: "Configuration Management"
+  description: "Lists Kubernetes Gateway API HTTPRoute resources in a namespace using manage_istio_config_read."
+  difficulty: easy
+spec:
+  requires:
+  - extension: kubernetes
+    as: k8s
+  setup:
+  - script:
+      file: ./setup.sh
+      timeout: 180s
+  verify:
+  - llmJudge:
+      contains: "eval-list-route"
+  cleanup:
+  - script:
+      file: ./cleanup.sh
+      timeout: 60s
+  prompt:
+    inline: |
+      List all Kubernetes Gateway API HTTPRoute resources in the 'bookinfo' namespace.
+      These are HTTPRoute objects in the gateway.networking.k8s.io API group (not Istio VirtualServices).
+      Summarize the HTTPRoute names you found and mention eval-list-route if it appears.

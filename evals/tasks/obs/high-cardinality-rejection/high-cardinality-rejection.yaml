@@ -1,0 +1,25 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "high-cardinality-rejection"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: queries
+    suite: obs
+    requires: obs
+    toolType: error-handling
+  description: |
+    Tests agent behavior when asked for an impractically large query
+    (all containers, 24h, 1s resolution). The agent should warn about
+    the data volume or impracticality and suggest a more scoped or
+    lower-resolution alternative rather than blindly executing the query.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the agent warns that the requested query would produce an impractically large amount of data, and suggests a scoped or lower-resolution alternative"
+  prompt:
+    inline: |
+      Show me the CPU, memory, network, and disk usage for every single container
+      across all namespaces over the last 24 hours with 1-second resolution.

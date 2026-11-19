@@ -1,0 +1,21 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "get-otelcol-versions"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: otelcol
+    suite: obs
+    requires: obs
+    toolType: versions
+  description: |
+    Tests if the agent can list available OpenTelemetry Collector versions.
+spec:
+  verify:
+    - llmJudge:
+        contains: "v0.144.0"
+  prompt:
+    inline: |
+      What versions of the OpenTelemetry Collector are available?

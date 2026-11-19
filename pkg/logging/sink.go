@@ -50,7 +50,7 @@ type Sink struct {
 	errOut  io.Writer
 
 	// httpMode pins whether the running process is serving HTTP. It is
-	// captured from cfg.Port at New time and never re-read from config.
+	// captured from cfg.Port.Get() at New time and never re-read from config.
 	// The serve mode (HTTP vs stdio) is decided once at startup and
 	// blocks for the process lifetime, so a SIGHUP-reloaded config that
 	// flipped Port must not flip the log destination — flipping to
@@ -74,7 +74,7 @@ type Sink struct {
 	// close happens on reload (when replaced) and Close.
 	file *os.File
 
-	// lastLogFile is the last cfg.LogFile value applyDestination acted on,
+	// lastLogFile is the last cfg.LogFile.Get() value applyDestination acted on,
 	// used to short-circuit reloads that wouldn't change the destination
 	// (an unchanged "" or "stderr"). A real path is never short-circuited
 	// — even an unchanged path needs reopen for logrotate compatibility.
@@ -143,11 +143,11 @@ func WithOtelLogSink(sink logr.LogSink, provider LogProvider) Option {
 // cmd.Complete and reuses it for the process lifetime.
 //
 // On error, the caller does not need to Close — no file is opened.
-func New(cfg *config.StaticConfig, httpOut, errOut io.Writer, opts ...Option) (*Sink, error) {
+func New(cfg *config.Config, httpOut, errOut io.Writer, opts ...Option) (*Sink, error) {
 	s := &Sink{
 		httpOut:  httpOut,
 		errOut:   errOut,
-		httpMode: cfg.Port != "",
+		httpMode: cfg.Port.Get() != "",
 	}
 
 	if err := s.applyDestination(cfg); err != nil {
@@ -156,8 +156,8 @@ func New(cfg *config.StaticConfig, httpOut, errOut io.Writer, opts ...Option) (*
 
 	s.klogFlags = flag.NewFlagSet("klog", flag.ContinueOnError)
 	klog.InitFlags(s.klogFlags)
-	if cfg.LogLevel >= 0 {
-		_ = s.klogFlags.Set("v", strconv.Itoa(cfg.LogLevel))
+	if cfg.LogLevel.Get() >= 0 {
+		_ = s.klogFlags.Set("v", strconv.Itoa(cfg.LogLevel.Get()))
 	}
 
 	var o sinkOptions
@@ -222,13 +222,13 @@ func (s *Sink) SDKLogger() *slog.Logger {
 // success/failure decision lines up cleanly with whether logs are now
 // landing in the right place. In practice klog.Level.Set never fails on
 // strconv.Itoa output, so this is a defensive path.
-func (s *Sink) Reload(cfg *config.StaticConfig) error {
+func (s *Sink) Reload(cfg *config.Config) error {
 	if err := s.applyDestination(cfg); err != nil {
 		return err
 	}
-	if cfg.LogLevel >= 0 {
+	if cfg.LogLevel.Get() >= 0 {
 		// klog protects this with its own mutex; safe under concurrent V() reads.
-		if err := s.klogFlags.Set("v", strconv.Itoa(cfg.LogLevel)); err != nil {
+		if err := s.klogFlags.Set("v", strconv.Itoa(cfg.LogLevel.Get())); err != nil {
 			klog.Warningf("logging: failed to update klog verbosity, destination already swapped: %v", err)
 		}
 	}
@@ -267,7 +267,7 @@ func (s *Sink) Close() error {
 	return old.Close()
 }
 
-// applyDestination resolves cfg.LogFile to a writer (and optionally an open
+// applyDestination resolves cfg.LogFile.Get() to a writer (and optionally an open
 // file), swaps it in, and closes the previously-held file. It is the only
 // path that opens or closes log files — Reload and New both go through it.
 //
@@ -275,10 +275,10 @@ func (s *Sink) Close() error {
 // exception: a real file path always reopens, even when the path is
 // unchanged, so external rotation tools (logrotate's rename-and-reload
 // flow, etc.) work as expected.
-func (s *Sink) applyDestination(cfg *config.StaticConfig) error {
+func (s *Sink) applyDestination(cfg *config.Config) error {
 	// Skip when the destination is constant for the process and unchanged.
 	// Real file paths fall through — see godoc above.
-	if s.applied && cfg.LogFile == s.lastLogFile && (cfg.LogFile == "" || cfg.LogFile == StderrSentinel) {
+	if s.applied && cfg.LogFile.Get() == s.lastLogFile && (cfg.LogFile.Get() == "" || cfg.LogFile.Get() == StderrSentinel) {
 		return nil
 	}
 
@@ -287,7 +287,7 @@ func (s *Sink) applyDestination(cfg *config.StaticConfig) error {
 		newWriter io.Writer
 	)
 
-	switch cfg.LogFile {
+	switch cfg.LogFile.Get() {
 	case "":
 		if s.httpMode {
 			newWriter = s.httpOut
@@ -298,15 +298,15 @@ func (s *Sink) applyDestination(cfg *config.StaticConfig) error {
 	case StderrSentinel:
 		newWriter = s.errOut
 	default:
-		f, err := os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		f, err := os.OpenFile(cfg.LogFile.Get(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
-			return fmt.Errorf("failed to open log file %q: %w", cfg.LogFile, err)
+			return fmt.Errorf("failed to open log file %q: %w", cfg.LogFile.Get(), err)
 		}
 		newFile = f
 		newWriter = f
 	}
 
-	s.lastLogFile = cfg.LogFile
+	s.lastLogFile = cfg.LogFile.Get()
 	s.applied = true
 
 	// Swap + close under the exclusive lock (see mu). The new file was opened

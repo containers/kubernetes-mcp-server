@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 // ToServerPrompts converts Prompt definitions to ServerPrompts with handlers
-func ToServerPrompts(prompts []api.Prompt) []api.ServerPrompt {
+func ToServerPrompts(prompts []config.Prompt) []api.ServerPrompt {
 	serverPrompts := make([]api.ServerPrompt, 0, len(prompts))
 	for _, prompt := range prompts {
 		serverPrompts = append(serverPrompts, api.ServerPrompt{
@@ -20,7 +21,7 @@ func ToServerPrompts(prompts []api.Prompt) []api.ServerPrompt {
 }
 
 // createPromptHandler creates a handler function for a prompt
-func createPromptHandler(prompt api.Prompt) api.PromptHandlerFunc {
+func createPromptHandler(prompt config.Prompt) api.PromptHandlerFunc {
 	return func(params api.PromptHandlerParams) (*api.PromptCallResult, error) {
 		args := params.GetArguments()
 
@@ -52,7 +53,7 @@ func createPromptHandler(prompt api.Prompt) api.PromptHandlerFunc {
 
 // substituteArguments replaces {{argument}} placeholders in content with actual values.
 // For optional arguments not provided, their placeholders are removed.
-func substituteArguments(content string, promptArgs []api.PromptArgument, args map[string]string) string {
+func substituteArguments(content string, promptArgs []config.PromptArgument, args map[string]string) string {
 	result := content
 	for _, promptArg := range promptArgs {
 		placeholder := fmt.Sprintf("{{%s}}", promptArg.Name)

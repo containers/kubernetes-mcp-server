@@ -34,9 +34,9 @@ func InitListTraces() []api.ServerTool {
 						Description: "If true, only consider traces that contain errors. Default false.",
 						Default:     api.ToRawMessage(DefaultErrorOnly),
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional cluster name. Defaults to the cluster name in the Kiali configuration.",
+						Description: meshClusterDescription(),
 					},
 					"lookbackSeconds": {
 						Type:        "integer",
@@ -58,16 +58,19 @@ func InitListTraces() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listTracesHandler,
+		}, RBAC: NamespaceAccessRBAC("namespace"), Handler: listTracesHandler,
 	})
 
 	return ret
 }
 
 func listTracesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiListTracesEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiListTracesEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to retrieve list of traces: %w", err)), nil
 	}

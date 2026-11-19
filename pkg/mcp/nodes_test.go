@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/internal/test"
+	"github.com/containers/kubernetes-mcp-server/pkg/config/configtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 )
@@ -19,7 +19,7 @@ func (s *NodesSuite) SetupTest() {
 	s.BaseMcpSuite.SetupTest()
 	s.mockServer = test.NewMockServer()
 	s.mockServer.Handle(test.NewDiscoveryClientHandler())
-	s.Cfg.KubeConfig = s.mockServer.KubeconfigFile(s.T())
+	s.Cfg.KubeConfig.SetForTest(s.mockServer.KubeconfigFile(s.T()))
 }
 
 func (s *NodesSuite) TearDownTest() {
@@ -223,9 +223,9 @@ func (s *NodesSuite) TestNodesLog() {
 }
 
 func (s *NodesSuite) TestNodesLogDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Node" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("nodes_log (denied)", func() {
 		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
@@ -335,9 +335,9 @@ func (s *NodesSuite) TestNodesStatsSummary() {
 }
 
 func (s *NodesSuite) TestNodesStatsSummaryDenied() {
-	s.Require().NoError(toml.Unmarshal([]byte(`
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
 		denied_resources = [ { version = "v1", kind = "Node" } ]
-	`), s.Cfg), "Expected to parse denied resources config")
+	`)
 	s.InitMcpClient()
 	s.Run("nodes_stats_summary (denied)", func() {
 		toolResult, err := s.CallTool("nodes_stats_summary", map[string]interface{}{

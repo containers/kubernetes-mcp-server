@@ -6,7 +6,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 // RunStrategy represents the run strategy for a VirtualMachine
@@ -23,18 +25,37 @@ func GetVirtualMachine(ctx context.Context, client dynamic.Interface, namespace,
 }
 
 // GetVMRunStrategy retrieves the current runStrategy from a VirtualMachine
-// Returns the strategy, whether it was found, and any error
+// Returns the strategy, whether it was found, and any error.
+// A VirtualMachine that still uses the deprecated spec.running field is
+// reported as Always (running: true) or Halted (running: false), which is how
+// KubeVirt itself interprets the field.
 func GetVMRunStrategy(vm *unstructured.Unstructured) (RunStrategy, bool, error) {
 	strategy, found, err := unstructured.NestedString(vm.Object, "spec", "runStrategy")
 	if err != nil {
 		return "", false, fmt.Errorf("failed to read runStrategy: %w", err)
 	}
+	if found {
+		return RunStrategy(strategy), true, nil
+	}
 
-	return RunStrategy(strategy), found, nil
+	running, found, err := unstructured.NestedBool(vm.Object, "spec", "running")
+	if err != nil {
+		return "", false, fmt.Errorf("failed to read running: %w", err)
+	}
+	if !found {
+		return "", false, nil
+	}
+	if running {
+		return RunStrategyAlways, true, nil
+	}
+	return RunStrategyHalted, true, nil
 }
 
-// SetVMRunStrategy sets the runStrategy on a VirtualMachine
+// SetVMRunStrategy sets the runStrategy on a VirtualMachine.
+// The deprecated spec.running field is removed at the same time, because
+// KubeVirt rejects a VirtualMachine that sets both fields.
 func SetVMRunStrategy(vm *unstructured.Unstructured, strategy RunStrategy) error {
+	unstructured.RemoveNestedField(vm.Object, "spec", "running")
 	return unstructured.SetNestedField(vm.Object, string(strategy), "spec", "runStrategy")
 }
 
@@ -142,6 +163,55 @@ func CloneVM(ctx context.Context, dynamicClient dynamic.Interface, namespace, so
 	}
 
 	return result, nil
+}
+
+// newSubresourceClient creates a REST client for the KubeVirt subresources API group
+func newSubresourceClient(restConfig *rest.Config) (rest.Interface, error) {
+	cfg := rest.CopyConfig(restConfig)
+	cfg.GroupVersion = &schema.GroupVersion{Group: "subresources.kubevirt.io", Version: "v1"}
+	cfg.APIPath = "/apis"
+	cfg.NegotiatedSerializer = subresourcesCodec.WithoutConversion()
+	return rest.RESTClientFor(cfg)
+}
+
+// PauseVM pauses a running VirtualMachineInstance via the KubeVirt subresource API
+// and returns the parent VirtualMachine
+func PauseVM(ctx context.Context, dynamicClient dynamic.Interface, restConfig *rest.Config, namespace, name string) (*unstructured.Unstructured, error) {
+	client, err := newSubresourceClient(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subresource client: %w", err)
+	}
+	result := client.Put().
+		Namespace(namespace).
+		Resource("virtualmachineinstances").
+		Name(name).
+		SubResource("pause").
+		Body([]byte("{}")).
+		Do(ctx)
+	if err := result.Error(); err != nil {
+		return nil, fmt.Errorf("failed to pause VirtualMachineInstance: %w", err)
+	}
+	return GetVirtualMachine(ctx, dynamicClient, namespace, name)
+}
+
+// UnpauseVM unpauses a paused VirtualMachineInstance via the KubeVirt subresource API
+// and returns the parent VirtualMachine
+func UnpauseVM(ctx context.Context, dynamicClient dynamic.Interface, restConfig *rest.Config, namespace, name string) (*unstructured.Unstructured, error) {
+	client, err := newSubresourceClient(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subresource client: %w", err)
+	}
+	result := client.Put().
+		Namespace(namespace).
+		Resource("virtualmachineinstances").
+		Name(name).
+		SubResource("unpause").
+		Body([]byte("{}")).
+		Do(ctx)
+	if err := result.Error(); err != nil {
+		return nil, fmt.Errorf("failed to unpause VirtualMachineInstance: %w", err)
+	}
+	return GetVirtualMachine(ctx, dynamicClient, namespace, name)
 }
 
 // RestartVM restarts a VirtualMachine by temporarily setting runStrategy to Halted then back to Always

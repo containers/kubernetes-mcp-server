@@ -1,0 +1,25 @@
+# Exercises configured prompts rendered through `tpl`: the {{name}} argument
+# placeholders must be escaped as {{`{{name}}`}} so Helm does not evaluate them.
+ingress:
+  host: localhost
+config:
+  port: "8080"
+  toolsets: ["core", "config"]
+  prompts:
+    - name: mcp-version
+      title: Give me the version
+      description: Give me the version
+      messages:
+        - role: user
+          content: 'Tell me what version of Kubernetes this cluster is running on'
+    - name: check-pod-logs
+      title: Check Pod Logs
+      description: Show the logs for a pod
+      arguments:
+        - name: name
+          required: true
+        - name: namespace
+          required: false
+      messages:
+        - role: user
+          content: 'Show me the logs for pod {{`{{name}}`}} in {{`{{namespace}}`}}'

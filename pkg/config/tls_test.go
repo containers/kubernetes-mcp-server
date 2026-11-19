@@ -67,7 +67,6 @@ func (s *TLSSuite) TestValidateURLsRequireTLS() {
 		err := ValidateURLsRequireTLS(map[string]string{
 			"authorization_url": "",
 			"server_url":        "",
-			"sse_base_url":      "",
 		})
 		s.NoError(err)
 	})

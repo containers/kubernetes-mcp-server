@@ -1,0 +1,2695 @@
+{
+  "summary": {
+    "agent": {
+      "type": "file",
+      "name": "openai-agent",
+      "model": "openai:gpt-6-luna",
+      "path": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/core-eval-testing/builtin-openai/agent.yaml"
+    },
+    "judge": {
+      "type": "file",
+      "name": "openai-agent",
+      "model": "llm-agent-openai-gpt-6-luna",
+      "path": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/core-eval-testing/builtin-openai/agent.yaml"
+    },
+    "mcpServers": [
+      {
+        "name": "kubernetes",
+        "type": "http",
+        "url": "http://localhost:8080/mcp",
+        "tools": [
+          {
+            "name": "api_resources_list",
+            "description": "Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "configuration_contexts_list",
+            "description": "List all available context names and associated server urls from the kubeconfig file",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "events_list",
+            "description": "List Kubernetes events (warnings, errors, state changes) for debugging and troubleshooting in the current cluster from all namespaces. Use limit and continue to retrieve a large list one page at a time.",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "continue": {
+                  "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+                  "type": "string"
+                },
+                "fieldSelector": {
+                  "description": "Optional Kubernetes field selector to filter events by field values (e.g. 'type=Warning', 'involvedObject.name=my-pod'). Supported fields: involvedObject.kind, involvedObject.name, involvedObject.namespace, involvedObject.uid, involvedObject.apiVersion, involvedObject.resourceVersion, involvedObject.fieldPath, reason, reportingComponent, source, type. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
+                  "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "Optional Namespace to retrieve the events from. If not provided, will list events from all namespaces",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_logs",
+            "description": "Get the logs of a Kubernetes Pod (or workload name that will be resolved to a pod) in a namespace. Output is plain text, matching kubernetes-mcp-server pods_log. The line_count field tells you the total number of log lines returned. Analyze ALL of them, but summarize the results unless the user explicitly asks for the raw output. Do not omit any error or warning lines.",
+            "inputSchema": {
+              "properties": {
+                "container": {
+                  "description": "Optional. Name of the Pod container to get the logs from.",
+                  "type": "string"
+                },
+                "format": {
+                  "description": "Output formatting for chat. 'codeblock' wraps logs in ~~~ fences (recommended). 'plain' returns raw text like kubernetes-mcp-server pods_log.",
+                  "enum": [
+                    "codeblock",
+                    "plain"
+                  ],
+                  "type": "string"
+                },
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the Pod to get the logs from. If it does not exist, it will be treated as a workload name and a running pod will be selected.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace to get the Pod logs from",
+                  "type": "string"
+                },
+                "previous": {
+                  "description": "Optional. Return previous terminated container logs",
+                  "type": "boolean"
+                },
+                "severity": {
+                  "description": "Optional severity filter applied client-side. Accepts 'ERROR', 'WARN' or combinations like 'ERROR,WARN'.",
+                  "type": "string"
+                },
+                "tail": {
+                  "default": 50,
+                  "description": "Number of lines to retrieve from the end of the logs (Optional, defaults to 50). Cannot exceed 200 lines.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "workload": {
+                  "description": "Optional. Workload name override (used when name lookup fails).",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace",
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_mesh_status",
+            "description": "Retrieves the high-level health, topology, and environment details of the Istio service mesh. Returns multi-cluster control plane status (istiod), data plane namespace health (including ambient mesh status), observability stack health (Prometheus, Grafana...), and component connectivity. Use this tool as the first step to diagnose mesh-wide issues, verify Istio/Kiali versions, or check overall health before drilling into specific workloads.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_mesh_traffic_graph",
+            "description": "Returns service-to-service traffic topology, dependencies, and network metrics (throughput, response time, mTLS) for the specified namespaces. Use this to diagnose routing issues, latency, or find upstream/downstream dependencies.",
+            "inputSchema": {
+              "properties": {
+                "graphType": {
+                  "default": "versionedApp",
+                  "description": "Granularity of the graph. 'app' aggregates by app name, 'versionedApp' separates by versions, 'workload' maps specific pods/deployments. Default: versionedApp.",
+                  "enum": [
+                    "app",
+                    "versionedApp",
+                    "service",
+                    "workload"
+                  ],
+                  "type": "string"
+                },
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespaces": {
+                  "description": "Comma-separated list of namespaces to map",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespaces"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_metrics",
+            "description": "Returns a compact JSON summary of Istio metrics (latency quantiles, traffic trends, throughput, payload sizes) for the given resource.",
+            "inputSchema": {
+              "properties": {
+                "byLabels": {
+                  "description": "Comma-separated list of labels to group metrics by (e.g., 'source_workload,destination_service'). Optional",
+                  "type": "string"
+                },
+                "direction": {
+                  "default": "outbound",
+                  "description": "Traffic direction. Optional, defaults to 'outbound'",
+                  "enum": [
+                    "inbound",
+                    "outbound"
+                  ],
+                  "type": "string"
+                },
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace to get metrics from",
+                  "type": "string"
+                },
+                "quantiles": {
+                  "default": "0.5,0.95,0.99,0.999",
+                  "description": "Comma-separated list of quantiles for histogram metrics (e.g., '0.5,0.95,0.99'). Optional",
+                  "type": "string"
+                },
+                "rateInterval": {
+                  "default": "10m",
+                  "description": "Rate interval for metrics (e.g., '1m', '5m'). Optional, defaults to '10m'",
+                  "type": "string"
+                },
+                "reporter": {
+                  "default": "source",
+                  "description": "Metrics reporter(s). Comma-separated list of: 'source', 'destination', 'waypoint', or the special value 'both' (no reporter filter). Optional, defaults to 'source'. Example: 'source,waypoint'",
+                  "type": "string"
+                },
+                "requestProtocol": {
+                  "description": "Filter by request protocol (e.g., 'http', 'grpc', 'tcp'). Optional",
+                  "type": "string"
+                },
+                "resourceName": {
+                  "description": "Name of the resource to get metrics for",
+                  "type": "string"
+                },
+                "resourceType": {
+                  "description": "Type of resource to get metrics",
+                  "enum": [
+                    "service",
+                    "workload",
+                    "app"
+                  ],
+                  "type": "string"
+                },
+                "step": {
+                  "default": "15",
+                  "description": "Step between data points in seconds (e.g., '15'). Optional, defaults to 15 seconds",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resourceType",
+                "namespace",
+                "resourceName"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_pod_performance",
+            "description": "Returns a human-readable text summary with current Pod CPU/memory usage (from Prometheus) compared to Kubernetes requests/limits (from the Pod spec). Useful to answer questions like 'Is this workload using too much memory?'",
+            "inputSchema": {
+              "properties": {
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Kubernetes namespace of the Pod.",
+                  "type": "string"
+                },
+                "podName": {
+                  "description": "Kubernetes Pod name. If workloadName is provided, the tool will attempt to resolve a Pod from that workload first.",
+                  "type": "string"
+                },
+                "queryTime": {
+                  "description": "Optional end timestamp (RFC3339) for the query. Defaults to now.",
+                  "type": "string"
+                },
+                "timeRange": {
+                  "default": "10m",
+                  "description": "Time window used to compute CPU rate (Prometheus duration like '5m', '10m', '1h', '1d'). Defaults to '10m'.",
+                  "type": "string"
+                },
+                "workloadName": {
+                  "description": "Kubernetes Workload name (e.g. Deployment/StatefulSet/etc). Tool will look up the workload and pick one of its Pods. If not found, it will fall back to treating this value as a podName.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_resource_details",
+            "description": "Fetches a list of resources OR retrieves detailed data for a specific resource. If 'resourceName' is omitted, it returns a list. If 'resourceName' is provided, it returns details for that specific resource.",
+            "inputSchema": {
+              "dependentRequired": {
+                "resourceName": [
+                  "namespaces"
+                ]
+              },
+              "properties": {
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespaces": {
+                  "description": "Comma-separated list of namespaces to query (e.g., 'bookinfo' or 'bookinfo,default'). If not provided, it will query across all accessible namespaces.",
+                  "type": "string"
+                },
+                "resourceName": {
+                  "description": "Optional. The specific name of the resource. If left empty, the tool returns a list of all resources of the specified type. If provided, the tool returns deep details for this specific resource.",
+                  "type": "string"
+                },
+                "resourceType": {
+                  "description": "The type of resource to query. Use 'app' for Kiali applications (grouped by the Kubernetes 'app' label). Use 'argoapp' for ArgoCD Application CRDs (requires ArgoCD installed and the Kiali service account must have read permissions on applications.argoproj.io).",
+                  "enum": [
+                    "app",
+                    "argoapp",
+                    "namespace",
+                    "service",
+                    "workload"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resourceType"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_get_trace_details",
+            "description": "Fetches a single distributed trace by trace_id and returns its call hierarchy (service tree with duration, status, and nested calls). Use this after list_traces to drill into a specific trace.",
+            "inputSchema": {
+              "properties": {
+                "traceId": {
+                  "description": "Trace ID to fetch and summarize. If provided, namespace/service_name are ignored.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "traceId"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_list_mesh_clusters",
+            "description": "Returns the list of Istio mesh clusters that Kiali can access. Each entry includes its name and whether it is the home cluster (where Kiali is deployed). Call this tool before using meshCluster on other Kiali tools when the target cluster is unknown.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_list_traces",
+            "description": "Lists distributed traces for a service in a namespace. Returns a summary (namespace, service, total_found, avg_duration_ms) and a list of traces with id, duration_ms, spans_count, root_op, slowest_service, has_errors. Use get_trace_details with a trace id to get full hierarchy.",
+            "inputSchema": {
+              "properties": {
+                "errorOnly": {
+                  "default": false,
+                  "description": "If true, only consider traces that contain errors. Default false.",
+                  "type": "boolean"
+                },
+                "limit": {
+                  "default": 10,
+                  "description": "Maximum number of traces to return. Default 10.",
+                  "type": "integer"
+                },
+                "lookbackSeconds": {
+                  "default": 600,
+                  "description": "How far back to search. Default 600 (10m).",
+                  "type": "integer"
+                },
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Kubernetes namespace of the service.",
+                  "type": "string"
+                },
+                "serviceName": {
+                  "description": "Service name to search traces for (required). Returns multiple traces up to limit.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace",
+                "serviceName"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_manage_istio_config",
+            "description": "Create, patch, or delete Istio, Gateway API, and Inference API config. Supports Istio resources (networking.istio.io, security.istio.io), Gateway API resources (gateway.networking.k8s.io), and Inference API resources (inference.networking.k8s.io) when installed on the cluster. For list and get (read-only) use manage_istio_config_read.",
+            "inputSchema": {
+              "properties": {
+                "action": {
+                  "description": "Action to perform (write)",
+                  "enum": [
+                    "create",
+                    "patch",
+                    "delete"
+                  ],
+                  "type": "string"
+                },
+                "data": {
+                  "description": "JSON or YAML data for the resource. Required for create and patch actions. For create, you can provide partial content (e.g. only spec) and it will be merged onto a valid template with defaults. Arrays (like servers, http, etc.) are REPLACED entirely, so include ALL elements you want.",
+                  "type": "string"
+                },
+                "group": {
+                  "description": "API group of the Istio object. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
+                  "enum": [
+                    "networking.istio.io",
+                    "security.istio.io",
+                    "gateway.networking.k8s.io",
+                    "inference.networking.k8s.io"
+                  ],
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "Kind of the Istio object (e.g., 'VirtualService', 'DestinationRule').",
+                  "enum": [
+                    "VirtualService",
+                    "DestinationRule",
+                    "Gateway",
+                    "ServiceEntry",
+                    "Sidecar",
+                    "WorkloadEntry",
+                    "WorkloadGroup",
+                    "EnvoyFilter",
+                    "AuthorizationPolicy",
+                    "PeerAuthentication",
+                    "RequestAuthentication",
+                    "HTTPRoute",
+                    "GRPCRoute",
+                    "ReferenceGrant",
+                    "TCPRoute",
+                    "TLSRoute",
+                    "InferencePool"
+                  ],
+                  "type": "string"
+                },
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace containing the Istio object.",
+                  "type": "string"
+                },
+                "object": {
+                  "description": "Name of the Istio object.",
+                  "type": "string"
+                },
+                "version": {
+                  "description": "API version. Use 'v1' for all resource types.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "action",
+                "namespace",
+                "group",
+                "version",
+                "kind",
+                "object"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "kiali_manage_istio_config_read",
+            "description": "Read Istio, Gateway API, and Inference API config. 'list' groups by namespace→'group/version/kind'→{valid:[...],invalid:[...]} where valid/invalid arrays contain resource names; omit group/kind to retrieve ALL config types in a single call. Supports Istio (networking.istio.io, security.istio.io), Gateway API (gateway.networking.k8s.io), and Inference API (inference.networking.k8s.io) when installed. 'get' returns full YAML. For writes use manage_istio_config.",
+            "inputSchema": {
+              "dependentRequired": {
+                "object": [
+                  "group",
+                  "version",
+                  "kind",
+                  "namespace"
+                ]
+              },
+              "properties": {
+                "action": {
+                  "description": "Action to perform (read-only)",
+                  "enum": [
+                    "list",
+                    "get"
+                  ],
+                  "type": "string"
+                },
+                "group": {
+                  "description": "API group of the Istio object. Required ONLY for 'get' action. For 'list', OMIT group and kind to retrieve ALL config types in a single call. Use 'gateway.networking.k8s.io' for Gateway API resources. Use 'inference.networking.k8s.io' for Inference API resources.",
+                  "enum": [
+                    "networking.istio.io",
+                    "security.istio.io",
+                    "gateway.networking.k8s.io",
+                    "inference.networking.k8s.io"
+                  ],
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "Kind of the Istio object. Required ONLY for 'get' action. For 'list', OMIT to return all kinds at once — do NOT call separately for each kind.",
+                  "enum": [
+                    "VirtualService",
+                    "DestinationRule",
+                    "Gateway",
+                    "ServiceEntry",
+                    "Sidecar",
+                    "WorkloadEntry",
+                    "WorkloadGroup",
+                    "EnvoyFilter",
+                    "AuthorizationPolicy",
+                    "PeerAuthentication",
+                    "RequestAuthentication",
+                    "HTTPRoute",
+                    "GRPCRoute",
+                    "ReferenceGrant",
+                    "TCPRoute",
+                    "TLSRoute",
+                    "InferencePool"
+                  ],
+                  "type": "string"
+                },
+                "meshCluster": {
+                  "description": "Optional Istio mesh cluster name from kiali_list_mesh_clusters (e.g. west). When omitted, Kiali defaults to its home cluster.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace containing the Istio object. For 'list', if not provided, returns objects across all namespaces. For 'get', required.",
+                  "type": "string"
+                },
+                "object": {
+                  "description": "Name of the Istio object. Required for 'get' action.",
+                  "type": "string"
+                },
+                "serviceName": {
+                  "description": "Filter Istio configurations (VirtualServices, DestinationRules, and their referenced Gateways) that affect a specific service. Only applicable for 'list' action",
+                  "type": "string"
+                },
+                "version": {
+                  "description": "API version. Use 'v1' for all resource types. Required for 'get' action.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "namespaces_list",
+            "description": "List all the Kubernetes namespaces in the current cluster. Use limit and continue to retrieve a large list one page at a time.",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "continue": {
+                  "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+                  "type": "string"
+                },
+                "fieldSelector": {
+                  "description": "Optional Kubernetes field selector to filter namespaces by field values (e.g. 'metadata.name=default', 'status.phase=Active'). Supported fields: metadata.name, status.phase. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
+                  "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "nodes_log",
+            "description": "Get logs from a Kubernetes node (kubelet, kube-proxy, or other system logs). This accesses node logs through the Kubernetes API proxy to the kubelet",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the node to get logs from",
+                  "type": "string"
+                },
+                "query": {
+                  "description": "query specifies services(s) or files from which to return logs (required). Example: \"kubelet\" to fetch kubelet logs, \"/\u003clog-file-name\u003e\" to fetch a specific log file from the node (e.g., \"/var/log/kubelet.log\" or \"/var/log/kube-proxy.log\")",
+                  "type": "string"
+                },
+                "tailLines": {
+                  "default": 100,
+                  "description": "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "query"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "nodes_stats_summary",
+            "description": "Get detailed resource usage statistics from a Kubernetes node via the kubelet's Summary API. Provides comprehensive metrics including CPU, memory, filesystem, and network usage at the node, pod, and container levels. On systems with cgroup v2 and kernel 4.20+, also includes PSI (Pressure Stall Information) metrics that show resource pressure for CPU, memory, and I/O. See https://kubernetes.io/docs/reference/instrumentation/understand-psi-metrics/ for details on PSI metrics",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the node to get stats from",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_delete",
+            "description": "Delete a Kubernetes Pod in the current or provided namespace with the provided name",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the Pod to delete",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace to delete the Pod from",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_exec",
+            "description": "Execute a command in a Kubernetes Pod (shell access, run commands in container) in the current or provided namespace with the provided name and command",
+            "inputSchema": {
+              "properties": {
+                "command": {
+                  "description": "Command to execute in the Pod container. The first item is the command to be run, and the rest are the arguments to that command. Example: [\"ls\", \"-l\", \"/tmp\"]",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "container": {
+                  "description": "Name of the Pod container where the command will be executed (Optional)",
+                  "type": "string"
+                },
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the Pod where the command will be executed",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace of the Pod where the command will be executed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "command"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_get",
+            "description": "Get a Kubernetes Pod in the current or provided namespace with the provided name",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the Pod",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace to get the Pod from",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_list",
+            "description": "List all the Kubernetes pods in the current cluster from all namespaces. Use limit and continue to retrieve a large list one page at a time.",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "continue": {
+                  "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+                  "type": "string"
+                },
+                "fieldSelector": {
+                  "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
+                  "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
+                  "type": "string"
+                },
+                "labelSelector": {
+                  "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+                  "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_list_in_namespace",
+            "description": "List all the Kubernetes pods in the specified namespace in the current cluster. Use limit and continue to retrieve a large list one page at a time.",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "continue": {
+                  "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+                  "type": "string"
+                },
+                "fieldSelector": {
+                  "description": "Optional Kubernetes field selector to filter pods by field values (e.g. 'status.phase=Running', 'spec.nodeName=node1'). Supported fields: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. Note: CrashLoopBackOff is a container state, not a pod phase, so it cannot be filtered directly. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
+                  "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
+                  "type": "string"
+                },
+                "labelSelector": {
+                  "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the pods by label",
+                  "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "Namespace to list pods from",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_log",
+            "description": "Get the logs of a Kubernetes Pod in the current or provided namespace with the provided name",
+            "inputSchema": {
+              "properties": {
+                "container": {
+                  "description": "Name of the Pod container to get the logs from (Optional)",
+                  "type": "string"
+                },
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the Pod to get the logs from",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace to get the Pod logs from",
+                  "type": "string"
+                },
+                "previous": {
+                  "description": "Return previous terminated container logs (Optional)",
+                  "type": "boolean"
+                },
+                "tail": {
+                  "default": 100,
+                  "description": "Number of lines to retrieve from the end of the logs (Optional, default: 100)",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "pods_run",
+            "description": "Run a Kubernetes Pod in the current or provided namespace with the provided container image and optional name",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "image": {
+                  "description": "Container Image to run in the Pod",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the Pod (Optional, random name if not provided)",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Namespace to run the Pod in",
+                  "type": "string"
+                },
+                "port": {
+                  "description": "TCP/IP port to expose from the Pod container (Optional, no port exposed if not provided)",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "image"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "resources_create_or_update",
+            "description": "Create or update a Kubernetes resource via Server-Side Apply. The manifest is the complete desired state: any field this tool previously set and the new manifest omits is removed. To edit an existing resource, fetch it with resources_get, modify it, then re-apply the full resource.\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "resource": {
+                  "description": "Complete YAML or JSON representation of the Kubernetes resource (full desired state, not a partial patch). Include apiVersion, kind, metadata, and the full spec. For namespaced resources, include metadata.namespace to specify the target namespace; if omitted, the configured default namespace is used",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "resources_delete",
+            "description": "Delete a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+            "inputSchema": {
+              "properties": {
+                "apiVersion": {
+                  "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+                  "type": "string"
+                },
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "gracePeriodSeconds": {
+                  "description": "Optional duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used",
+                  "type": "integer"
+                },
+                "kind": {
+                  "description": "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the resource",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Optional Namespace to delete the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will delete resource from configured namespace",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "apiVersion",
+                "kind",
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "resources_get",
+            "description": "Get a Kubernetes resource in the current cluster by providing its apiVersion, kind, optionally the namespace, and its name\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+            "inputSchema": {
+              "properties": {
+                "apiVersion": {
+                  "description": "apiVersion of the resource (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+                  "type": "string"
+                },
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "kind of the resource (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the resource",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Optional Namespace to retrieve the namespaced resource from (ignored in case of cluster scoped resources). If not provided, will get resource from configured namespace",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "apiVersion",
+                "kind",
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "resources_list",
+            "description": "List Kubernetes resources and objects in the current cluster by providing their apiVersion and kind and optionally the namespace and label selector. Use limit and continue to retrieve a large list one page at a time.\n(common apiVersion and kind include: v1 Pod, v1 Service, v1 Node, apps/v1 Deployment, networking.k8s.io/v1 Ingress)",
+            "inputSchema": {
+              "properties": {
+                "apiVersion": {
+                  "description": "apiVersion of the resources (examples of valid apiVersion are: v1, apps/v1, networking.k8s.io/v1)",
+                  "type": "string"
+                },
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "continue": {
+                  "description": "Opaque token from the continue field of the previous page. Send it unchanged with the same limit, namespace, and selectors to retrieve the next page. Omit on the first call.",
+                  "type": "string"
+                },
+                "fieldSelector": {
+                  "description": "Optional Kubernetes field selector to filter resources by field values (e.g. 'status.phase=Running', 'metadata.name=myresource'). Supported fields vary by resource type. For Pods: metadata.name, metadata.namespace, spec.nodeName, spec.restartPolicy, spec.schedulerName, spec.serviceAccountName, status.phase (Pending/Running/Succeeded/Failed/Unknown), status.podIP, status.nominatedNodeName. See https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/",
+                  "pattern": "^[.\\-A-Za-z0-9]+([=!,]{1,2}[./\\-A-Za-z0-9]+)+$",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "kind of the resources (examples of valid kind are: Pod, Service, Deployment, Ingress)",
+                  "type": "string"
+                },
+                "labelSelector": {
+                  "description": "Optional Kubernetes label selector (e.g. 'app=myapp,env=prod' or 'app in (myapp,yourapp)'), use this option when you want to filter the resources by label",
+                  "pattern": "^([/_.\\-A-Za-z0-9=, ()!])+$",
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "Maximum number of items to return. Omit or set to 0 to list everything, which fails if the response exceeds max_backend_response_bytes. Retry with a smaller limit when that happens. The API may return fewer items than requested.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "Optional Namespace to retrieve the namespaced resources from (ignored in case of cluster scoped resources). If not provided, will list resources from all namespaces",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "apiVersion",
+                "kind"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "name": "resources_scale",
+            "description": "Get or update the scale of a Kubernetes resource in the current cluster by providing its apiVersion, kind, name, and optionally the namespace. If the scale is set in the tool call, the scale will be updated to that value. Always returns the current scale of the resource",
+            "inputSchema": {
+              "properties": {
+                "apiVersion": {
+                  "description": "apiVersion of the resource (examples of valid apiVersion are apps/v1)",
+                  "type": "string"
+                },
+                "context": {
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "kind of the resource (examples of valid kind are: StatefulSet, Deployment)",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name of the resource",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace",
+                  "type": "string"
+                },
+                "scale": {
+                  "description": "Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "apiVersion",
+                "kind",
+                "name"
+              ],
+              "type": "object"
+            }
+          }
+        ]
+      }
+    ],
+    "evals": {
+      "names": [
+        "Audit Multicluster Mesh Health",
+        "Analyze Remote Service Metrics",
+        "Discover Accessible Mesh Clusters",
+        "Inspect Remote Cluster Workload",
+        "Visualize West Cluster Traffic",
+        "List Remote Cluster Traces"
+      ],
+      "taskSets": [
+        {
+          "glob": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/*/*.yaml",
+          "labelSelector": {
+            "multicluster": "true",
+            "suite": "kiali"
+          }
+        }
+      ]
+    },
+    "timeout": {
+      "defaultTask": "15m",
+      "defaultCleanup": "2m"
+    },
+    "parallelWorkers": 1,
+    "runs": 1
+  },
+  "results": [
+    {
+      "taskName": "Audit Multicluster Mesh Health",
+      "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/mesh-status-multicluster/mesh-status-multicluster.yaml",
+      "taskPassed": true,
+      "taskOutput": "## Multicluster Istio health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version 1.31.4 | **Degraded** — monitored namespace `bookinfo` |\n| **west** | No separate `istiod` was reported. The east control plane’s connection to the west data plane is **Healthy**. | **Degraded** — monitored namespace `bookinfo` |\n\n## Overall health: **Degraded**\n\nThe control plane and its reported connections to both clusters are healthy, but the `bookinfo` data plane is degraded in **both east and west**. The observability stack (Prometheus, Grafana, and Jaeger) is healthy.",
+      "taskJudgeReason": "The reference answer is simply “east.” The model response explicitly identifies the east mesh cluster in its audit table, so it contains the reference’s core information. Additional cluster-health details do not contradict that information.",
+      "difficulty": "medium",
+      "totalRuns": 1,
+      "assertionResults": {
+        "toolsUsed": {
+          "passed": true
+        },
+        "minToolCalls": {
+          "passed": true
+        },
+        "maxToolCalls": {
+          "passed": true
+        }
+      },
+      "allAssertionsPassed": true,
+      "callHistory": {
+        "ToolCalls": [
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:40:47.995439992Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          },
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:40:49.185785788Z",
+            "success": true,
+            "name": "kiali_get_mesh_status",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"components\":{\"control_plane\":{\"nodes\":[{\"cluster\":\"east\",\"name\":\"istiod\",\"namespace\":\"istio-system\",\"status\":\"Healthy\",\"version\":\"1.31.4\"}],\"status\":\"Healthy\"},\"data_plane\":{\"monitored_namespaces\":[{\"cluster\":\"east\",\"health\":\"DEGRADED\",\"name\":\"bookinfo\"},{\"cluster\":\"west\",\"health\":\"DEGRADED\",\"name\":\"bookinfo\"}]},\"observability_stack\":{\"grafana\":\"Healthy\",\"jaeger\":\"Healthy\",\"prometheus\":\"Healthy\"}},\"connectivity_graph\":[{\"from\":\"istio-system/istiod\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"Data Plane\",\"to_cluster\":\"west\"},{\"from\":\"istio-system/istiod\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"Data Plane\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/jaeger\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/istiod\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/Prometheus\",\"to_cluster\":\"east\"},{\"from\":\"istio-system/kiali\",\"from_cluster\":\"east\",\"status\":\"Healthy\",\"to\":\"istio-system/Grafana\",\"to_cluster\":\"east\"}],\"environment\":{\"istio_version\":\"1.31.4\",\"kiali_version\":\"v2.35.0-SNAPSHOT\",\"timestamp\":\"2026-11-16T19:40:49Z\",\"trust_domain\":\"cluster.local\"}}"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 368,
+              "totalTokens": 369
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_get_mesh_status",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          }
+        ],
+        "ResourceReads": null,
+        "PromptGets": null
+      },
+      "tokenEstimate": {
+        "inputTokens": 7257,
+        "outputTokens": 300,
+        "totalTokens": 21021,
+        "promptTokens": 37,
+        "messageTokens": 174,
+        "thinkingTokens": 0,
+        "toolInputTokens": 2,
+        "toolOutputTokens": 846,
+        "mcpSchemaTokens": 7187,
+        "promptGetInputTokens": 0,
+        "promptGetOutputTokens": 0,
+        "resourceInputTokens": 0,
+        "resourceOutputTokens": 0,
+        "source": "actual",
+        "actual": {
+          "inputTokens": 7257,
+          "outputTokens": 300,
+          "totalTokens": 21021
+        }
+      },
+      "judgeTokenUsage": {
+        "inputTokens": 3118,
+        "outputTokens": 144,
+        "totalTokens": 3262
+      },
+      "setupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      },
+      "agentOutput": {
+        "Steps": [
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_mesh_clusters"
+          },
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_get_mesh_status"
+          },
+          {
+            "type": "message",
+            "success": true,
+            "message": "## Multicluster Istio health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version 1.31.4 | **Degraded** — monitored namespace `bookinfo` |\n| **west** | No separate `istiod` was reported. The east control plane’s connection to the west data plane is **Healthy**. | **Degraded** — monitored namespace `bookinfo` |\n\n## Overall health: **Degraded**\n\nThe control plane and its reported connections to both clusters are healthy, but the `bookinfo` data plane is degraded in **both east and west**. The observability stack (Prometheus, Grafana, and Jaeger) is healthy."
+          }
+        ],
+        "Success": true,
+        "Error": "",
+        "agentDetails": {
+          "tokenEstimate": {
+            "inputTokens": 7257,
+            "outputTokens": 300,
+            "totalTokens": 21021,
+            "promptTokens": 37,
+            "messageTokens": 174,
+            "thinkingTokens": 0,
+            "toolInputTokens": 2,
+            "toolOutputTokens": 846,
+            "mcpSchemaTokens": 7187,
+            "promptGetInputTokens": 0,
+            "promptGetOutputTokens": 0,
+            "resourceInputTokens": 0,
+            "resourceOutputTokens": 0,
+            "source": "actual",
+            "actual": {
+              "inputTokens": 7257,
+              "outputTokens": 300,
+              "totalTokens": 21021
+            }
+          },
+          "toolCalls": [
+            {
+              "title": "kiali_list_mesh_clusters",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            },
+            {
+              "title": "kiali_get_mesh_status",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"components\\\":{\\\"control_plane\\\":{\\\"nodes\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"name\\\":\\\"istiod\\\",\\\"namespace\\\":\\\"istio-system\\\",\\\"status\\\":\\\"Healthy\\\",\\\"version\\\":\\\"1.31.4\\\"}],\\\"status\\\":\\\"Healthy\\\"},\\\"data_plane\\\":{\\\"monitored_namespaces\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"health\\\":\\\"DEGRADED\\\",\\\"name\\\":\\\"bookinfo\\\"},{\\\"cluster\\\":\\\"west\\\",\\\"health\\\":\\\"DEGRADED\\\",\\\"name\\\":\\\"bookinfo\\\"}]},\\\"observability_stack\\\":{\\\"grafana\\\":\\\"Healthy\\\",\\\"jaeger\\\":\\\"Healthy\\\",\\\"prometheus\\\":\\\"Healthy\\\"}},\\\"connectivity_graph\\\":[{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"west\\\"},{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/jaeger\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/istiod\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Prometheus\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Grafana\\\",\\\"to_cluster\\\":\\\"east\\\"}],\\\"environment\\\":{\\\"istio_version\\\":\\\"1.31.4\\\",\\\"kiali_version\\\":\\\"v2.35.0-SNAPSHOT\\\",\\\"timestamp\\\":\\\"2026-11-16T19:40:49Z\\\",\\\"trust_domain\\\":\\\"cluster.local\\\"}}\"}],\"resultType\":\"complete\"}"
+            }
+          ],
+          "outputSteps": [
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_mesh_clusters",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_get_mesh_status",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"components\\\":{\\\"control_plane\\\":{\\\"nodes\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"name\\\":\\\"istiod\\\",\\\"namespace\\\":\\\"istio-system\\\",\\\"status\\\":\\\"Healthy\\\",\\\"version\\\":\\\"1.31.4\\\"}],\\\"status\\\":\\\"Healthy\\\"},\\\"data_plane\\\":{\\\"monitored_namespaces\\\":[{\\\"cluster\\\":\\\"east\\\",\\\"health\\\":\\\"DEGRADED\\\",\\\"name\\\":\\\"bookinfo\\\"},{\\\"cluster\\\":\\\"west\\\",\\\"health\\\":\\\"DEGRADED\\\",\\\"name\\\":\\\"bookinfo\\\"}]},\\\"observability_stack\\\":{\\\"grafana\\\":\\\"Healthy\\\",\\\"jaeger\\\":\\\"Healthy\\\",\\\"prometheus\\\":\\\"Healthy\\\"}},\\\"connectivity_graph\\\":[{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"west\\\"},{\\\"from\\\":\\\"istio-system/istiod\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"Data Plane\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/jaeger\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/istiod\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Prometheus\\\",\\\"to_cluster\\\":\\\"east\\\"},{\\\"from\\\":\\\"istio-system/kiali\\\",\\\"from_cluster\\\":\\\"east\\\",\\\"status\\\":\\\"Healthy\\\",\\\"to\\\":\\\"istio-system/Grafana\\\",\\\"to_cluster\\\":\\\"east\\\"}],\\\"environment\\\":{\\\"istio_version\\\":\\\"1.31.4\\\",\\\"kiali_version\\\":\\\"v2.35.0-SNAPSHOT\\\",\\\"timestamp\\\":\\\"2026-11-16T19:40:49Z\\\",\\\"trust_domain\\\":\\\"cluster.local\\\"}}\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "message",
+              "content": "## Multicluster Istio health audit\n\n| Mesh cluster | Control plane | Data plane |\n|---|---|---|\n| **east** (Kiali home cluster) | **Healthy** — `istiod` in `istio-system`, version 1.31.4 | **Degraded** — monitored namespace `bookinfo` |\n| **west** | No separate `istiod` was reported. The east control plane’s connection to the west data plane is **Healthy**. | **Degraded** — monitored namespace `bookinfo` |\n\n## Overall health: **Degraded**\n\nThe control plane and its reported connections to both clusters are healthy, but the `bookinfo` data plane is degraded in **both east and west**. The observability stack (Prometheus, Grafana, and Jaeger) is healthy."
+            }
+          ]
+        }
+      },
+      "verifyOutput": {
+        "Steps": [
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer is simply “east.” The model response explicitly identifies the east mesh cluster in its audit table, so it contains the reference’s core information. Additional cluster-health details do not contradict that information.",
+            "usage": {
+              "inputTokens": 1561,
+              "outputTokens": 74,
+              "totalTokens": 1635
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer is “west.” The model response explicitly includes the west mesh cluster and reports its control-plane and data-plane status, so it contains the core information required by the reference.",
+            "usage": {
+              "inputTokens": 1557,
+              "outputTokens": 70,
+              "totalTokens": 1627
+            }
+          }
+        ],
+        "Success": true,
+        "Error": ""
+      },
+      "cleanupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      }
+    },
+    {
+      "taskName": "Analyze Remote Service Metrics",
+      "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/metrics-west-reviews/metrics-west-reviews.yaml",
+      "taskPassed": true,
+      "taskOutput": "**Inbound request rate — `reviews` service (`bookinfo`)**  \n**Mesh cluster:** `west` (remote; Kiali’s home cluster is `east`)  \n**Period:** last 10 minutes\n\n- **Average:** 0.968 requests/s\n- **Range:** 0.936–0.989 requests/s\n- **Trend:** rising across the sampled buckets, from 0.936 to 0.989 requests/s\n\nThe metrics query used inbound direction.",
+      "taskJudgeReason": "The reference answer’s core information is simply the service name “reviews.” The model response explicitly identifies the `reviews` service, so it contains the reference information. Its additional metric details do not contradict the reference.",
+      "difficulty": "medium",
+      "totalRuns": 1,
+      "assertionResults": {
+        "toolsUsed": {
+          "passed": true
+        },
+        "minToolCalls": {
+          "passed": true
+        },
+        "maxToolCalls": {
+          "passed": true
+        }
+      },
+      "allAssertionsPassed": true,
+      "callHistory": {
+        "ToolCalls": [
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:40:59.130846583Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          },
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:00.270892251Z",
+            "success": true,
+            "name": "kiali_get_metrics",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"context\":{\"cluster\":\"west\",\"direction\":\"inbound\",\"namespace\":\"bookinfo\",\"rateInterval\":\"10m\",\"reporter\":\"source\",\"resourceName\":\"reviews\",\"resourceType\":\"service\",\"windowDuration\":\"45s\",\"windowEnd\":\"2026-11-16T19:41:00Z\",\"windowStart\":\"2026-11-16T19:40:15Z\"},\"empty\":false,\"errors\":{\"emptySeries\":false,\"max\":0.022388576576576575,\"total\":0.06698037774616722,\"zeroErrors\":false},\"latency\":{\"quantiles\":[{\"avg\":17.970263860133105,\"label\":\"P50\",\"max\":18.209390889099915,\"min\":17.430691486134165,\"stat\":\"0.5\",\"stdDev\":0.31476577634983793},{\"avg\":54.94015208430425,\"label\":\"P95\",\"max\":57.33718415580212,\"min\":49.328339812997335,\"stat\":\"0.95\",\"stdDev\":3.2820414521675816},{\"avg\":99.65912070128994,\"label\":\"P99\",\"max\":99.96101060625489,\"min\":99.46795902174668,\"stat\":\"0.99\",\"stdDev\":0.19690680467648694},{\"avg\":818.9541981129732,\"label\":\"P99.9\",\"max\":821.3250630063558,\"min\":817.5284357300889,\"stat\":\"0.999\",\"stdDev\":1.481115181651489},{\"avg\":23.229720371263447,\"label\":\"Avg\",\"max\":23.561659733632112,\"min\":22.506082495502994,\"stat\":\"avg\",\"stdDev\":0.42498905273466014}],\"trend\":{\"bucketAverages\":[23.561659733632112,23.502749293531732,23.348389962386943,22.506082495502994],\"bucketCount\":4,\"endValue\":22.506082495502994,\"maxBucketIndex\":0,\"maxValue\":23.561659733632112,\"pattern\":\"flat\",\"startValue\":23.561659733632112,\"title\":\"Latency (avg)\",\"unit\":\"ms\"}},\"overview\":{\"latency\":{\"avgMs\":23.229720371263447,\"flatSeries\":false,\"p95Ms\":54.94015208430425,\"p99Ms\":99.65912070128994,\"stdDevMs\":0.42498905273466014},\"requestRate\":{\"avgPerS\":0.9677157630540024,\"stable\":false}},\"sizes\":[{\"metric\":\"request_size\",\"stats\":[{\"constant\":true,\"label\":\"Avg\",\"stats\":{\"avg\":294.91525423728814,\"max\":294.9152542372882,\"min\":294.91525423728814,\"stdDev\":4.0194366942304644e-14}},{\"constant\":true,\"label\":\"P50\",\"stats\":{\"avg\":375,\"max\":375,\"min\":375,\"stdDev\":0}},{\"constant\":true,\"label\":\"P95\",\"stats\":{\"avg\":487.5,\"max\":487.5,\"min\":487.5,\"stdDev\":0}},{\"constant\":true,\"label\":\"P99\",\"stats\":{\"avg\":497.5,\"max\":497.5,\"min\":497.5,\"stdDev\":0}}],\"title\":\"Request Size\"},{\"metric\":\"response_size\",\"stats\":[{\"constant\":false,\"label\":\"Avg\",\"stats\":{\"avg\":609.8064556705176,\"max\":620.2214599041301,\"min\":605.7810838814758,\"stdDev\":6.025410565026007},\"trend\":{\"bucketAverages\":[605.7810838814758,606.3540959626097,613.5453214189927],\"bucketCount\":3,\"endValue\":613.5453214189927,\"maxBucketIndex\":2,\"maxValue\":613.5453214189927,\"pattern\":\"flat\",\"startValue\":605.7810838814758,\"title\":\"Trend (Avg)\",\"unit\":\"B\"}},{\"constant\":true,\"label\":\"P50\",\"stats\":{\"avg\":740.9812216611174,\"max\":748.2707847871142,\"min\":738.2151780289448,\"stdDev\":4.215591785616807}},{\"constant\":true,\"label\":\"P95\",\"stats\":{\"avg\":974.0981221661117,\"max\":974.8270784787114,\"min\":973.8215178028945,\"stdDev\":0.42155917856167674}},{\"constant\":true,\"label\":\"P99\",\"stats\":{\"avg\":994.8196244332223,\"max\":994.9654156957422,\"min\":994.7643035605788,\"stdDev\":0.08431183571231986}}],\"title\":\"Response Size\"}],\"snapshot\":{\"direction\":\"inbound\",\"reporter\":\"source\",\"latencyP99AvgMs\":99.65912070128994,\"latencyP99MaxMs\":99.96101060625489,\"latencyP99MinMs\":99.46795902174668,\"latencyP99StdDevMs\":0.19690680467648694,\"requestRateAvgPerS\":0.9677157630540024,\"requestRateMaxPerS\":0.9885105937921727,\"requestRateMinPerS\":0.9358416178464177},\"traffic\":{\"avg\":0.9677157630540024,\"max\":0.9885105937921727,\"min\":0.9358416178464177,\"stdDev\":0.02131843323920305,\"stable\":false,\"trend\":{\"bucketAverages\":[0.9358416178464177,0.9608429132817027,0.9856679272957167,0.9885105937921727],\"bucketCount\":4,\"endValue\":0.9885105937921727,\"maxBucketIndex\":3,\"maxValue\":0.9885105937921727,\"pattern\":\"rising\",\"startValue\":0.9358416178464177,\"title\":\"Request count\",\"unit\":\"req/s\"}},\"throughput\":[{\"name\":\"request_throughput\",\"stable\":false,\"stats\":{\"avg\":290.4723440531067,\"max\":296.7677997585316,\"min\":282.1006238370089,\"stdDev\":5.482117843747994},\"trend\":{\"bucketAverages\":[282.1006238370089,289.468349336848,296.7677997585316,293.5526032800384],\"bucketCount\":4,\"endValue\":293.5526032800384,\"maxBucketIndex\":2,\"maxValue\":296.7677997585316,\"pattern\":\"spike_before_end\",\"startValue\":282.1006238370089,\"title\":\"Request Throughput\",\"unit\":\"B/s\"},\"title\":\"Request Throughput\"},{\"name\":\"response_throughput\",\"stable\":false,\"stats\":{\"avg\":600.6627218229426,\"max\":617.3557371112183,\"min\":579.458740150908,\"stdDev\":14.65410721244815},\"trend\":{\"bucketAverages\":[579.458740150908,595.1551055772452,610.681304452399,617.3557371112183],\"bucketCount\":4,\"endValue\":617.3557371112183,\"maxBucketIndex\":3,\"maxValue\":617.3557371112183,\"pattern\":\"rising\",\"startValue\":579.458740150908,\"title\":\"Response Throughput\",\"unit\":\"B/s\"},\"title\":\"Response Throughput\"}]}"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 32,
+              "outputTokens": 1707,
+              "totalTokens": 1739
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_get_metrics",
+                "arguments": {
+                  "direction": "inbound",
+                  "meshCluster": "west",
+                  "namespace": "bookinfo",
+                  "rateInterval": "10m",
+                  "resourceName": "reviews",
+                  "resourceType": "service"
+                }
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          }
+        ],
+        "ResourceReads": null,
+        "PromptGets": null
+      },
+      "tokenEstimate": {
+        "inputTokens": 2013,
+        "outputTokens": 167,
+        "totalTokens": 22321,
+        "promptTokens": 60,
+        "messageTokens": 101,
+        "thinkingTokens": 0,
+        "toolInputTokens": 33,
+        "toolOutputTokens": 2628,
+        "mcpSchemaTokens": 7187,
+        "promptGetInputTokens": 0,
+        "promptGetOutputTokens": 0,
+        "resourceInputTokens": 0,
+        "resourceOutputTokens": 0,
+        "source": "actual",
+        "actual": {
+          "inputTokens": 2013,
+          "outputTokens": 167,
+          "totalTokens": 22321
+        }
+      },
+      "judgeTokenUsage": {
+        "inputTokens": 2925,
+        "outputTokens": 147,
+        "totalTokens": 3072
+      },
+      "setupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      },
+      "agentOutput": {
+        "Steps": [
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_mesh_clusters"
+          },
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_get_metrics"
+          },
+          {
+            "type": "message",
+            "success": true,
+            "message": "**Inbound request rate — `reviews` service (`bookinfo`)**  \n**Mesh cluster:** `west` (remote; Kiali’s home cluster is `east`)  \n**Period:** last 10 minutes\n\n- **Average:** 0.968 requests/s\n- **Range:** 0.936–0.989 requests/s\n- **Trend:** rising across the sampled buckets, from 0.936 to 0.989 requests/s\n\nThe metrics query used inbound direction."
+          }
+        ],
+        "Success": true,
+        "Error": "",
+        "agentDetails": {
+          "tokenEstimate": {
+            "inputTokens": 2013,
+            "outputTokens": 167,
+            "totalTokens": 22321,
+            "promptTokens": 60,
+            "messageTokens": 101,
+            "thinkingTokens": 0,
+            "toolInputTokens": 33,
+            "toolOutputTokens": 2628,
+            "mcpSchemaTokens": 7187,
+            "promptGetInputTokens": 0,
+            "promptGetOutputTokens": 0,
+            "resourceInputTokens": 0,
+            "resourceOutputTokens": 0,
+            "source": "actual",
+            "actual": {
+              "inputTokens": 2013,
+              "outputTokens": 167,
+              "totalTokens": 22321
+            }
+          },
+          "toolCalls": [
+            {
+              "title": "kiali_list_mesh_clusters",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            },
+            {
+              "title": "kiali_get_metrics",
+              "status": "completed",
+              "rawInput": {
+                "direction": "inbound",
+                "meshCluster": "west",
+                "namespace": "bookinfo",
+                "rateInterval": "10m",
+                "resourceName": "reviews",
+                "resourceType": "service"
+              },
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"context\\\":{\\\"cluster\\\":\\\"west\\\",\\\"direction\\\":\\\"inbound\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"rateInterval\\\":\\\"10m\\\",\\\"reporter\\\":\\\"source\\\",\\\"resourceName\\\":\\\"reviews\\\",\\\"resourceType\\\":\\\"service\\\",\\\"windowDuration\\\":\\\"45s\\\",\\\"windowEnd\\\":\\\"2026-11-16T19:41:00Z\\\",\\\"windowStart\\\":\\\"2026-11-16T19:40:15Z\\\"},\\\"empty\\\":false,\\\"errors\\\":{\\\"emptySeries\\\":false,\\\"max\\\":0.022388576576576575,\\\"total\\\":0.06698037774616722,\\\"zeroErrors\\\":false},\\\"latency\\\":{\\\"quantiles\\\":[{\\\"avg\\\":17.970263860133105,\\\"label\\\":\\\"P50\\\",\\\"max\\\":18.209390889099915,\\\"min\\\":17.430691486134165,\\\"stat\\\":\\\"0.5\\\",\\\"stdDev\\\":0.31476577634983793},{\\\"avg\\\":54.94015208430425,\\\"label\\\":\\\"P95\\\",\\\"max\\\":57.33718415580212,\\\"min\\\":49.328339812997335,\\\"stat\\\":\\\"0.95\\\",\\\"stdDev\\\":3.2820414521675816},{\\\"avg\\\":99.65912070128994,\\\"label\\\":\\\"P99\\\",\\\"max\\\":99.96101060625489,\\\"min\\\":99.46795902174668,\\\"stat\\\":\\\"0.99\\\",\\\"stdDev\\\":0.19690680467648694},{\\\"avg\\\":818.9541981129732,\\\"label\\\":\\\"P99.9\\\",\\\"max\\\":821.3250630063558,\\\"min\\\":817.5284357300889,\\\"stat\\\":\\\"0.999\\\",\\\"stdDev\\\":1.481115181651489},{\\\"avg\\\":23.229720371263447,\\\"label\\\":\\\"Avg\\\",\\\"max\\\":23.561659733632112,\\\"min\\\":22.506082495502994,\\\"stat\\\":\\\"avg\\\",\\\"stdDev\\\":0.42498905273466014}],\\\"trend\\\":{\\\"bucketAverages\\\":[23.561659733632112,23.502749293531732,23.348389962386943,22.506082495502994],\\\"bucketCount\\\":4,\\\"endValue\\\":22.506082495502994,\\\"maxBucketIndex\\\":0,\\\"maxValue\\\":23.561659733632112,\\\"pattern\\\":\\\"flat\\\",\\\"startValue\\\":23.561659733632112,\\\"title\\\":\\\"Latency (avg)\\\",\\\"unit\\\":\\\"ms\\\"}},\\\"overview\\\":{\\\"latency\\\":{\\\"avgMs\\\":23.229720371263447,\\\"flatSeries\\\":false,\\\"p95Ms\\\":54.94015208430425,\\\"p99Ms\\\":99.65912070128994,\\\"stdDevMs\\\":0.42498905273466014},\\\"requestRate\\\":{\\\"avgPerS\\\":0.9677157630540024,\\\"stable\\\":false}},\\\"sizes\\\":[{\\\"metric\\\":\\\"request_size\\\",\\\"stats\\\":[{\\\"constant\\\":true,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":294.91525423728814,\\\"max\\\":294.9152542372882,\\\"min\\\":294.91525423728814,\\\"stdDev\\\":4.0194366942304644e-14}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":375,\\\"max\\\":375,\\\"min\\\":375,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":487.5,\\\"max\\\":487.5,\\\"min\\\":487.5,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":497.5,\\\"max\\\":497.5,\\\"min\\\":497.5,\\\"stdDev\\\":0}}],\\\"title\\\":\\\"Request Size\\\"},{\\\"metric\\\":\\\"response_size\\\",\\\"stats\\\":[{\\\"constant\\\":false,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":609.8064556705176,\\\"max\\\":620.2214599041301,\\\"min\\\":605.7810838814758,\\\"stdDev\\\":6.025410565026007},\\\"trend\\\":{\\\"bucketAverages\\\":[605.7810838814758,606.3540959626097,613.5453214189927],\\\"bucketCount\\\":3,\\\"endValue\\\":613.5453214189927,\\\"maxBucketIndex\\\":2,\\\"maxValue\\\":613.5453214189927,\\\"pattern\\\":\\\"flat\\\",\\\"startValue\\\":605.7810838814758,\\\"title\\\":\\\"Trend (Avg)\\\",\\\"unit\\\":\\\"B\\\"}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":740.9812216611174,\\\"max\\\":748.2707847871142,\\\"min\\\":738.2151780289448,\\\"stdDev\\\":4.215591785616807}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":974.0981221661117,\\\"max\\\":974.8270784787114,\\\"min\\\":973.8215178028945,\\\"stdDev\\\":0.42155917856167674}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":994.8196244332223,\\\"max\\\":994.9654156957422,\\\"min\\\":994.7643035605788,\\\"stdDev\\\":0.08431183571231986}}],\\\"title\\\":\\\"Response Size\\\"}],\\\"snapshot\\\":{\\\"direction\\\":\\\"inbound\\\",\\\"reporter\\\":\\\"source\\\",\\\"latencyP99AvgMs\\\":99.65912070128994,\\\"latencyP99MaxMs\\\":99.96101060625489,\\\"latencyP99MinMs\\\":99.46795902174668,\\\"latencyP99StdDevMs\\\":0.19690680467648694,\\\"requestRateAvgPerS\\\":0.9677157630540024,\\\"requestRateMaxPerS\\\":0.9885105937921727,\\\"requestRateMinPerS\\\":0.9358416178464177},\\\"traffic\\\":{\\\"avg\\\":0.9677157630540024,\\\"max\\\":0.9885105937921727,\\\"min\\\":0.9358416178464177,\\\"stdDev\\\":0.02131843323920305,\\\"stable\\\":false,\\\"trend\\\":{\\\"bucketAverages\\\":[0.9358416178464177,0.9608429132817027,0.9856679272957167,0.9885105937921727],\\\"bucketCount\\\":4,\\\"endValue\\\":0.9885105937921727,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":0.9885105937921727,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":0.9358416178464177,\\\"title\\\":\\\"Request count\\\",\\\"unit\\\":\\\"req/s\\\"}},\\\"throughput\\\":[{\\\"name\\\":\\\"request_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":290.4723440531067,\\\"max\\\":296.7677997585316,\\\"min\\\":282.1006238370089,\\\"stdDev\\\":5.482117843747994},\\\"trend\\\":{\\\"bucketAverages\\\":[282.1006238370089,289.468349336848,296.7677997585316,293.5526032800384],\\\"bucketCount\\\":4,\\\"endValue\\\":293.5526032800384,\\\"maxBucketIndex\\\":2,\\\"maxValue\\\":296.7677997585316,\\\"pattern\\\":\\\"spike_before_end\\\",\\\"startValue\\\":282.1006238370089,\\\"title\\\":\\\"Request Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Request Throughput\\\"},{\\\"name\\\":\\\"response_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":600.6627218229426,\\\"max\\\":617.3557371112183,\\\"min\\\":579.458740150908,\\\"stdDev\\\":14.65410721244815},\\\"trend\\\":{\\\"bucketAverages\\\":[579.458740150908,595.1551055772452,610.681304452399,617.3557371112183],\\\"bucketCount\\\":4,\\\"endValue\\\":617.3557371112183,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":617.3557371112183,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":579.458740150908,\\\"title\\\":\\\"Response Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Response Throughput\\\"}]}\"}],\"resultType\":\"complete\"}"
+            }
+          ],
+          "outputSteps": [
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_mesh_clusters",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_get_metrics",
+                "status": "completed",
+                "rawInput": {
+                  "direction": "inbound",
+                  "meshCluster": "west",
+                  "namespace": "bookinfo",
+                  "rateInterval": "10m",
+                  "resourceName": "reviews",
+                  "resourceType": "service"
+                },
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"context\\\":{\\\"cluster\\\":\\\"west\\\",\\\"direction\\\":\\\"inbound\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"rateInterval\\\":\\\"10m\\\",\\\"reporter\\\":\\\"source\\\",\\\"resourceName\\\":\\\"reviews\\\",\\\"resourceType\\\":\\\"service\\\",\\\"windowDuration\\\":\\\"45s\\\",\\\"windowEnd\\\":\\\"2026-11-16T19:41:00Z\\\",\\\"windowStart\\\":\\\"2026-11-16T19:40:15Z\\\"},\\\"empty\\\":false,\\\"errors\\\":{\\\"emptySeries\\\":false,\\\"max\\\":0.022388576576576575,\\\"total\\\":0.06698037774616722,\\\"zeroErrors\\\":false},\\\"latency\\\":{\\\"quantiles\\\":[{\\\"avg\\\":17.970263860133105,\\\"label\\\":\\\"P50\\\",\\\"max\\\":18.209390889099915,\\\"min\\\":17.430691486134165,\\\"stat\\\":\\\"0.5\\\",\\\"stdDev\\\":0.31476577634983793},{\\\"avg\\\":54.94015208430425,\\\"label\\\":\\\"P95\\\",\\\"max\\\":57.33718415580212,\\\"min\\\":49.328339812997335,\\\"stat\\\":\\\"0.95\\\",\\\"stdDev\\\":3.2820414521675816},{\\\"avg\\\":99.65912070128994,\\\"label\\\":\\\"P99\\\",\\\"max\\\":99.96101060625489,\\\"min\\\":99.46795902174668,\\\"stat\\\":\\\"0.99\\\",\\\"stdDev\\\":0.19690680467648694},{\\\"avg\\\":818.9541981129732,\\\"label\\\":\\\"P99.9\\\",\\\"max\\\":821.3250630063558,\\\"min\\\":817.5284357300889,\\\"stat\\\":\\\"0.999\\\",\\\"stdDev\\\":1.481115181651489},{\\\"avg\\\":23.229720371263447,\\\"label\\\":\\\"Avg\\\",\\\"max\\\":23.561659733632112,\\\"min\\\":22.506082495502994,\\\"stat\\\":\\\"avg\\\",\\\"stdDev\\\":0.42498905273466014}],\\\"trend\\\":{\\\"bucketAverages\\\":[23.561659733632112,23.502749293531732,23.348389962386943,22.506082495502994],\\\"bucketCount\\\":4,\\\"endValue\\\":22.506082495502994,\\\"maxBucketIndex\\\":0,\\\"maxValue\\\":23.561659733632112,\\\"pattern\\\":\\\"flat\\\",\\\"startValue\\\":23.561659733632112,\\\"title\\\":\\\"Latency (avg)\\\",\\\"unit\\\":\\\"ms\\\"}},\\\"overview\\\":{\\\"latency\\\":{\\\"avgMs\\\":23.229720371263447,\\\"flatSeries\\\":false,\\\"p95Ms\\\":54.94015208430425,\\\"p99Ms\\\":99.65912070128994,\\\"stdDevMs\\\":0.42498905273466014},\\\"requestRate\\\":{\\\"avgPerS\\\":0.9677157630540024,\\\"stable\\\":false}},\\\"sizes\\\":[{\\\"metric\\\":\\\"request_size\\\",\\\"stats\\\":[{\\\"constant\\\":true,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":294.91525423728814,\\\"max\\\":294.9152542372882,\\\"min\\\":294.91525423728814,\\\"stdDev\\\":4.0194366942304644e-14}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":375,\\\"max\\\":375,\\\"min\\\":375,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":487.5,\\\"max\\\":487.5,\\\"min\\\":487.5,\\\"stdDev\\\":0}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":497.5,\\\"max\\\":497.5,\\\"min\\\":497.5,\\\"stdDev\\\":0}}],\\\"title\\\":\\\"Request Size\\\"},{\\\"metric\\\":\\\"response_size\\\",\\\"stats\\\":[{\\\"constant\\\":false,\\\"label\\\":\\\"Avg\\\",\\\"stats\\\":{\\\"avg\\\":609.8064556705176,\\\"max\\\":620.2214599041301,\\\"min\\\":605.7810838814758,\\\"stdDev\\\":6.025410565026007},\\\"trend\\\":{\\\"bucketAverages\\\":[605.7810838814758,606.3540959626097,613.5453214189927],\\\"bucketCount\\\":3,\\\"endValue\\\":613.5453214189927,\\\"maxBucketIndex\\\":2,\\\"maxValue\\\":613.5453214189927,\\\"pattern\\\":\\\"flat\\\",\\\"startValue\\\":605.7810838814758,\\\"title\\\":\\\"Trend (Avg)\\\",\\\"unit\\\":\\\"B\\\"}},{\\\"constant\\\":true,\\\"label\\\":\\\"P50\\\",\\\"stats\\\":{\\\"avg\\\":740.9812216611174,\\\"max\\\":748.2707847871142,\\\"min\\\":738.2151780289448,\\\"stdDev\\\":4.215591785616807}},{\\\"constant\\\":true,\\\"label\\\":\\\"P95\\\",\\\"stats\\\":{\\\"avg\\\":974.0981221661117,\\\"max\\\":974.8270784787114,\\\"min\\\":973.8215178028945,\\\"stdDev\\\":0.42155917856167674}},{\\\"constant\\\":true,\\\"label\\\":\\\"P99\\\",\\\"stats\\\":{\\\"avg\\\":994.8196244332223,\\\"max\\\":994.9654156957422,\\\"min\\\":994.7643035605788,\\\"stdDev\\\":0.08431183571231986}}],\\\"title\\\":\\\"Response Size\\\"}],\\\"snapshot\\\":{\\\"direction\\\":\\\"inbound\\\",\\\"reporter\\\":\\\"source\\\",\\\"latencyP99AvgMs\\\":99.65912070128994,\\\"latencyP99MaxMs\\\":99.96101060625489,\\\"latencyP99MinMs\\\":99.46795902174668,\\\"latencyP99StdDevMs\\\":0.19690680467648694,\\\"requestRateAvgPerS\\\":0.9677157630540024,\\\"requestRateMaxPerS\\\":0.9885105937921727,\\\"requestRateMinPerS\\\":0.9358416178464177},\\\"traffic\\\":{\\\"avg\\\":0.9677157630540024,\\\"max\\\":0.9885105937921727,\\\"min\\\":0.9358416178464177,\\\"stdDev\\\":0.02131843323920305,\\\"stable\\\":false,\\\"trend\\\":{\\\"bucketAverages\\\":[0.9358416178464177,0.9608429132817027,0.9856679272957167,0.9885105937921727],\\\"bucketCount\\\":4,\\\"endValue\\\":0.9885105937921727,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":0.9885105937921727,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":0.9358416178464177,\\\"title\\\":\\\"Request count\\\",\\\"unit\\\":\\\"req/s\\\"}},\\\"throughput\\\":[{\\\"name\\\":\\\"request_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":290.4723440531067,\\\"max\\\":296.7677997585316,\\\"min\\\":282.1006238370089,\\\"stdDev\\\":5.482117843747994},\\\"trend\\\":{\\\"bucketAverages\\\":[282.1006238370089,289.468349336848,296.7677997585316,293.5526032800384],\\\"bucketCount\\\":4,\\\"endValue\\\":293.5526032800384,\\\"maxBucketIndex\\\":2,\\\"maxValue\\\":296.7677997585316,\\\"pattern\\\":\\\"spike_before_end\\\",\\\"startValue\\\":282.1006238370089,\\\"title\\\":\\\"Request Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Request Throughput\\\"},{\\\"name\\\":\\\"response_throughput\\\",\\\"stable\\\":false,\\\"stats\\\":{\\\"avg\\\":600.6627218229426,\\\"max\\\":617.3557371112183,\\\"min\\\":579.458740150908,\\\"stdDev\\\":14.65410721244815},\\\"trend\\\":{\\\"bucketAverages\\\":[579.458740150908,595.1551055772452,610.681304452399,617.3557371112183],\\\"bucketCount\\\":4,\\\"endValue\\\":617.3557371112183,\\\"maxBucketIndex\\\":3,\\\"maxValue\\\":617.3557371112183,\\\"pattern\\\":\\\"rising\\\",\\\"startValue\\\":579.458740150908,\\\"title\\\":\\\"Response Throughput\\\",\\\"unit\\\":\\\"B/s\\\"},\\\"title\\\":\\\"Response Throughput\\\"}]}\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "message",
+              "content": "**Inbound request rate — `reviews` service (`bookinfo`)**  \n**Mesh cluster:** `west` (remote; Kiali’s home cluster is `east`)  \n**Period:** last 10 minutes\n\n- **Average:** 0.968 requests/s\n- **Range:** 0.936–0.989 requests/s\n- **Trend:** rising across the sampled buckets, from 0.936 to 0.989 requests/s\n\nThe metrics query used inbound direction."
+            }
+          ]
+        }
+      },
+      "verifyOutput": {
+        "Steps": [
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer’s core information is simply the service name “reviews.” The model response explicitly identifies the `reviews` service, so it contains the reference information. Its additional metric details do not contradict the reference.",
+            "usage": {
+              "inputTokens": 1464,
+              "outputTokens": 75,
+              "totalTokens": 1539
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer specifies the mesh cluster as west. The model response explicitly identifies the metrics as coming from mesh cluster west, so it contains the full core information required by the CONTAINS criterion.",
+            "usage": {
+              "inputTokens": 1461,
+              "outputTokens": 72,
+              "totalTokens": 1533
+            }
+          }
+        ],
+        "Success": true,
+        "Error": ""
+      },
+      "cleanupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      }
+    },
+    {
+      "taskName": "Discover Accessible Mesh Clusters",
+      "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/resource-list-clusters/resource-list-clusters.yaml",
+      "taskPassed": true,
+      "taskOutput": "Kiali can access these mesh clusters:\n\n- **east** — home cluster (where Kiali is running)\n- **west**",
+      "taskJudgeReason": "The reference answer identifies “home.” The model response explicitly labels the east cluster as the home cluster where Kiali is running, so it contains the core information.",
+      "difficulty": "easy",
+      "totalRuns": 1,
+      "assertionResults": {
+        "toolsUsed": {
+          "passed": true
+        },
+        "minToolCalls": {
+          "passed": true
+        },
+        "maxToolCalls": {
+          "passed": true
+        }
+      },
+      "allAssertionsPassed": true,
+      "callHistory": {
+        "ToolCalls": [
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:08.803805248Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          }
+        ],
+        "ResourceReads": null,
+        "PromptGets": null
+      },
+      "tokenEstimate": {
+        "inputTokens": 163,
+        "outputTokens": 47,
+        "totalTokens": 13509,
+        "promptTokens": 33,
+        "messageTokens": 26,
+        "thinkingTokens": 0,
+        "toolInputTokens": 1,
+        "toolOutputTokens": 109,
+        "mcpSchemaTokens": 7187,
+        "promptGetInputTokens": 0,
+        "promptGetOutputTokens": 0,
+        "resourceInputTokens": 0,
+        "resourceOutputTokens": 0,
+        "source": "actual",
+        "actual": {
+          "inputTokens": 163,
+          "outputTokens": 47,
+          "totalTokens": 13509
+        }
+      },
+      "judgeTokenUsage": {
+        "inputTokens": 3776,
+        "outputTokens": 209,
+        "totalTokens": 3985
+      },
+      "setupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      },
+      "agentOutput": {
+        "Steps": [
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_mesh_clusters"
+          },
+          {
+            "type": "message",
+            "success": true,
+            "message": "Kiali can access these mesh clusters:\n\n- **east** — home cluster (where Kiali is running)\n- **west**"
+          }
+        ],
+        "Success": true,
+        "Error": "",
+        "agentDetails": {
+          "tokenEstimate": {
+            "inputTokens": 163,
+            "outputTokens": 47,
+            "totalTokens": 13509,
+            "promptTokens": 33,
+            "messageTokens": 26,
+            "thinkingTokens": 0,
+            "toolInputTokens": 1,
+            "toolOutputTokens": 109,
+            "mcpSchemaTokens": 7187,
+            "promptGetInputTokens": 0,
+            "promptGetOutputTokens": 0,
+            "resourceInputTokens": 0,
+            "resourceOutputTokens": 0,
+            "source": "actual",
+            "actual": {
+              "inputTokens": 163,
+              "outputTokens": 47,
+              "totalTokens": 13509
+            }
+          },
+          "toolCalls": [
+            {
+              "title": "kiali_list_mesh_clusters",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            }
+          ],
+          "outputSteps": [
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_mesh_clusters",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "message",
+              "content": "Kiali can access these mesh clusters:\n\n- **east** — home cluster (where Kiali is running)\n- **west**"
+            }
+          ]
+        }
+      },
+      "verifyOutput": {
+        "Steps": [
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer identifies “home.” The model response explicitly labels the east cluster as the home cluster where Kiali is running, so it contains the core information.",
+            "usage": {
+              "inputTokens": 1254,
+              "outputTokens": 65,
+              "totalTokens": 1319
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer identifies “east.” The model response explicitly lists east as the home cluster where Kiali is running, so it contains the reference’s core information. The additional west cluster does not contradict it.",
+            "usage": {
+              "inputTokens": 1263,
+              "outputTokens": 74,
+              "totalTokens": 1337
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer identifies west as the relevant mesh cluster. The model response explicitly lists west, so it contains the reference information; the additional east/home-cluster detail does not contradict it.",
+            "usage": {
+              "inputTokens": 1259,
+              "outputTokens": 70,
+              "totalTokens": 1329
+            }
+          }
+        ],
+        "Success": true,
+        "Error": ""
+      },
+      "cleanupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      }
+    },
+    {
+      "taskName": "Inspect Remote Cluster Workload",
+      "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/resource-remote-workload/resource-remote-workload.yaml",
+      "taskPassed": true,
+      "taskOutput": "Kiali can access two mesh clusters: **west** (remote) and **east** (Kiali’s home cluster).\n\nThe **reviews-v2** workload in `bookinfo` is on **west**. It is a Deployment with **1/1 replicas available**, and its pod and Istio sidecar are **Running/Ready**. Istio proxy configuration is synced across CDS, EDS, LDS, and RDS. However, the workload’s overall status is **Degraded**; reported traffic success is **100% inbound** and **99% outbound**. The details returned don’t identify the cause of the degraded status.",
+      "taskJudgeReason": "The reference answer identifies the workload as reviews-v2, and the model response explicitly discusses the reviews-v2 workload. It includes this core information, along with additional non-contradictory details.",
+      "difficulty": "medium",
+      "totalRuns": 1,
+      "assertionResults": {
+        "toolsUsed": {
+          "passed": true
+        },
+        "minToolCalls": {
+          "passed": true
+        },
+        "maxToolCalls": {
+          "passed": true
+        }
+      },
+      "allAssertionsPassed": true,
+      "callHistory": {
+        "ToolCalls": [
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:19.424877966Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          },
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:20.522121276Z",
+            "success": true,
+            "name": "kiali_get_resource_details",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"associated_services\":[\"reviews\"],\"istio\":{\"istio_sidecar\":true,\"is_ambient\":false,\"is_gateway\":false,\"is_waypoint\":false,\"is_ztunnel\":false,\"mode\":\"Sidecar\",\"proxy_version\":\"1.31.4\",\"sync_status\":{\"CDS\":\"Synced\",\"EDS\":\"Synced\",\"LDS\":\"Synced\",\"RDS\":\"Synced\"},\"validations\":[\"reviews-v2\",\"productpage\",\"details\",\"reviews\",\"ratings\"]},\"pods\":[{\"containers\":[\"reviews\"],\"istio_init\":\"Ready\",\"istio_proxy\":\"Ready\",\"name\":\"reviews-v2-6654685b49-25wgh\",\"status\":\"Running\"}],\"status\":{\"overall\":\"Degraded\",\"replicas\":{\"available\":1,\"current\":1,\"desired\":1},\"traffic_success_rate\":{\"inbound\":\"100%\",\"outbound\":\"99%\"}},\"workload\":{\"created_at\":\"2026-11-16T19:30:29Z\",\"kind\":\"Deployment\",\"labels\":{\"app\":\"reviews\",\"pod-template-hash\":\"6654685b49\",\"version\":\"v2\"},\"name\":\"reviews-v2\",\"namespace\":\"bookinfo\",\"service_account\":\"bookinfo-reviews\"}}"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 25,
+              "outputTokens": 273,
+              "totalTokens": 298
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_get_resource_details",
+                "arguments": {
+                  "meshCluster": "west",
+                  "namespaces": "bookinfo",
+                  "resourceName": "reviews-v2",
+                  "resourceType": "workload"
+                }
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          }
+        ],
+        "ResourceReads": null,
+        "PromptGets": null
+      },
+      "tokenEstimate": {
+        "inputTokens": 565,
+        "outputTokens": 288,
+        "totalTokens": 20974,
+        "promptTokens": 50,
+        "messageTokens": 132,
+        "thinkingTokens": 0,
+        "toolInputTokens": 26,
+        "toolOutputTokens": 638,
+        "mcpSchemaTokens": 7187,
+        "promptGetInputTokens": 0,
+        "promptGetOutputTokens": 0,
+        "resourceInputTokens": 0,
+        "resourceOutputTokens": 0,
+        "source": "actual",
+        "actual": {
+          "inputTokens": 565,
+          "outputTokens": 288,
+          "totalTokens": 20974
+        }
+      },
+      "judgeTokenUsage": {
+        "inputTokens": 3025,
+        "outputTokens": 159,
+        "totalTokens": 3184
+      },
+      "setupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      },
+      "agentOutput": {
+        "Steps": [
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_mesh_clusters"
+          },
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_get_resource_details"
+          },
+          {
+            "type": "message",
+            "success": true,
+            "message": "Kiali can access two mesh clusters: **west** (remote) and **east** (Kiali’s home cluster).\n\nThe **reviews-v2** workload in `bookinfo` is on **west**. It is a Deployment with **1/1 replicas available**, and its pod and Istio sidecar are **Running/Ready**. Istio proxy configuration is synced across CDS, EDS, LDS, and RDS. However, the workload’s overall status is **Degraded**; reported traffic success is **100% inbound** and **99% outbound**. The details returned don’t identify the cause of the degraded status."
+          }
+        ],
+        "Success": true,
+        "Error": "",
+        "agentDetails": {
+          "tokenEstimate": {
+            "inputTokens": 565,
+            "outputTokens": 288,
+            "totalTokens": 20974,
+            "promptTokens": 50,
+            "messageTokens": 132,
+            "thinkingTokens": 0,
+            "toolInputTokens": 26,
+            "toolOutputTokens": 638,
+            "mcpSchemaTokens": 7187,
+            "promptGetInputTokens": 0,
+            "promptGetOutputTokens": 0,
+            "resourceInputTokens": 0,
+            "resourceOutputTokens": 0,
+            "source": "actual",
+            "actual": {
+              "inputTokens": 565,
+              "outputTokens": 288,
+              "totalTokens": 20974
+            }
+          },
+          "toolCalls": [
+            {
+              "title": "kiali_list_mesh_clusters",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            },
+            {
+              "title": "kiali_get_resource_details",
+              "status": "completed",
+              "rawInput": {
+                "meshCluster": "west",
+                "namespaces": "bookinfo",
+                "resourceName": "reviews-v2",
+                "resourceType": "workload"
+              },
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"associated_services\\\":[\\\"reviews\\\"],\\\"istio\\\":{\\\"istio_sidecar\\\":true,\\\"is_ambient\\\":false,\\\"is_gateway\\\":false,\\\"is_waypoint\\\":false,\\\"is_ztunnel\\\":false,\\\"mode\\\":\\\"Sidecar\\\",\\\"proxy_version\\\":\\\"1.31.4\\\",\\\"sync_status\\\":{\\\"CDS\\\":\\\"Synced\\\",\\\"EDS\\\":\\\"Synced\\\",\\\"LDS\\\":\\\"Synced\\\",\\\"RDS\\\":\\\"Synced\\\"},\\\"validations\\\":[\\\"reviews-v2\\\",\\\"productpage\\\",\\\"details\\\",\\\"reviews\\\",\\\"ratings\\\"]},\\\"pods\\\":[{\\\"containers\\\":[\\\"reviews\\\"],\\\"istio_init\\\":\\\"Ready\\\",\\\"istio_proxy\\\":\\\"Ready\\\",\\\"name\\\":\\\"reviews-v2-6654685b49-25wgh\\\",\\\"status\\\":\\\"Running\\\"}],\\\"status\\\":{\\\"overall\\\":\\\"Degraded\\\",\\\"replicas\\\":{\\\"available\\\":1,\\\"current\\\":1,\\\"desired\\\":1},\\\"traffic_success_rate\\\":{\\\"inbound\\\":\\\"100%\\\",\\\"outbound\\\":\\\"99%\\\"}},\\\"workload\\\":{\\\"created_at\\\":\\\"2026-11-16T19:30:29Z\\\",\\\"kind\\\":\\\"Deployment\\\",\\\"labels\\\":{\\\"app\\\":\\\"reviews\\\",\\\"pod-template-hash\\\":\\\"6654685b49\\\",\\\"version\\\":\\\"v2\\\"},\\\"name\\\":\\\"reviews-v2\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"service_account\\\":\\\"bookinfo-reviews\\\"}}\"}],\"resultType\":\"complete\"}"
+            }
+          ],
+          "outputSteps": [
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_mesh_clusters",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_get_resource_details",
+                "status": "completed",
+                "rawInput": {
+                  "meshCluster": "west",
+                  "namespaces": "bookinfo",
+                  "resourceName": "reviews-v2",
+                  "resourceType": "workload"
+                },
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"associated_services\\\":[\\\"reviews\\\"],\\\"istio\\\":{\\\"istio_sidecar\\\":true,\\\"is_ambient\\\":false,\\\"is_gateway\\\":false,\\\"is_waypoint\\\":false,\\\"is_ztunnel\\\":false,\\\"mode\\\":\\\"Sidecar\\\",\\\"proxy_version\\\":\\\"1.31.4\\\",\\\"sync_status\\\":{\\\"CDS\\\":\\\"Synced\\\",\\\"EDS\\\":\\\"Synced\\\",\\\"LDS\\\":\\\"Synced\\\",\\\"RDS\\\":\\\"Synced\\\"},\\\"validations\\\":[\\\"reviews-v2\\\",\\\"productpage\\\",\\\"details\\\",\\\"reviews\\\",\\\"ratings\\\"]},\\\"pods\\\":[{\\\"containers\\\":[\\\"reviews\\\"],\\\"istio_init\\\":\\\"Ready\\\",\\\"istio_proxy\\\":\\\"Ready\\\",\\\"name\\\":\\\"reviews-v2-6654685b49-25wgh\\\",\\\"status\\\":\\\"Running\\\"}],\\\"status\\\":{\\\"overall\\\":\\\"Degraded\\\",\\\"replicas\\\":{\\\"available\\\":1,\\\"current\\\":1,\\\"desired\\\":1},\\\"traffic_success_rate\\\":{\\\"inbound\\\":\\\"100%\\\",\\\"outbound\\\":\\\"99%\\\"}},\\\"workload\\\":{\\\"created_at\\\":\\\"2026-11-16T19:30:29Z\\\",\\\"kind\\\":\\\"Deployment\\\",\\\"labels\\\":{\\\"app\\\":\\\"reviews\\\",\\\"pod-template-hash\\\":\\\"6654685b49\\\",\\\"version\\\":\\\"v2\\\"},\\\"name\\\":\\\"reviews-v2\\\",\\\"namespace\\\":\\\"bookinfo\\\",\\\"service_account\\\":\\\"bookinfo-reviews\\\"}}\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "message",
+              "content": "Kiali can access two mesh clusters: **west** (remote) and **east** (Kiali’s home cluster).\n\nThe **reviews-v2** workload in `bookinfo` is on **west**. It is a Deployment with **1/1 replicas available**, and its pod and Istio sidecar are **Running/Ready**. Istio proxy configuration is synced across CDS, EDS, LDS, and RDS. However, the workload’s overall status is **Degraded**; reported traffic success is **100% inbound** and **99% outbound**. The details returned don’t identify the cause of the degraded status."
+            }
+          ]
+        }
+      },
+      "verifyOutput": {
+        "Steps": [
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer identifies the workload as reviews-v2, and the model response explicitly discusses the reviews-v2 workload. It includes this core information, along with additional non-contradictory details.",
+            "usage": {
+              "inputTokens": 1508,
+              "outputTokens": 73,
+              "totalTokens": 1581
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer's core information is that the relevant mesh cluster is west. The model response explicitly states that reviews-v2 is on west (and identifies west as the remote cluster), so it contains the required meaning. Additional workload details do not conflict with the reference.",
+            "usage": {
+              "inputTokens": 1517,
+              "outputTokens": 86,
+              "totalTokens": 1603
+            }
+          }
+        ],
+        "Success": true,
+        "Error": ""
+      },
+      "cleanupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      }
+    },
+    {
+      "taskName": "Visualize West Cluster Traffic",
+      "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/topology-west-cluster-graph/topology-west-cluster-graph.yaml",
+      "taskPassed": true,
+      "taskOutput": "**Workload traffic graph — `bookinfo` on mesh cluster `west`**  \n`west` is the remote cluster; Kiali’s home cluster is `east`.\n\n```mermaid\ngraph LR\n  ingress[\"istio-ingressgateway (latest)\"] --\u003e|13,867 · 91 ms| productpage[\"productpage (v1)\"]\n  productpage --\u003e|955 · 10 ms| details[\"details (v1)\"]\n  productpage --\u003e|359 · 21 ms| reviews1[\"reviews (v1)\"]\n  productpage --\u003e|445 · 49 ms| reviews2[\"reviews (v2)\"]\n  productpage --\u003e|393 · 50 ms| reviews3[\"reviews (v3)\"]\n  reviews2 --\u003e|296 · 4 ms · degraded| ratings[\"ratings (v1)\"]\n  reviews3 --\u003e|273 · 4 ms| ratings\n```\n\nThe graph shows ingress traffic flowing to `productpage`, which calls `details` and all three `reviews` versions. `reviews (v2)` and `reviews (v3)` call `ratings`. All listed edges use HTTP with mTLS enabled. The `reviews (v2) → ratings (v1)` edge is marked **Degraded**; the other edges are marked **Healthy**. Throughput figures and response times in milliseconds are shown on each edge.",
+      "taskJudgeReason": "The reference answer specifies the cluster as “west.” The model response explicitly identifies the graph as being on mesh cluster “west” and reiterates that west is the remote cluster, so it contains the required core information.",
+      "difficulty": "medium",
+      "totalRuns": 1,
+      "assertionResults": {
+        "toolsUsed": {
+          "passed": true
+        },
+        "minToolCalls": {
+          "passed": true
+        },
+        "maxToolCalls": {
+          "passed": true
+        }
+      },
+      "allAssertionsPassed": true,
+      "callHistory": {
+        "ToolCalls": [
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:30.9687664Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          },
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:32.250410852Z",
+            "success": true,
+            "name": "kiali_get_mesh_traffic_graph",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"graphType\":\"workload\",\"health\":{\"overallStatus\":\"DEGRADED\",\"availability\":50,\"totalErrorRate\":0.007708971955216887,\"namespaceCount\":1,\"entityCounts\":{\"apps\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"services\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"workloads\":{\"total\":6,\"healthy\":2,\"degraded\":2,\"unhealthy\":0,\"notReady\":2}},\"namespaceSummary\":{\"bookinfo\":{\"status\":\"HEALTHY\",\"availability\":50,\"errorRate\":0.007708971955216887,\"apps\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"services\":{\"total\":0,\"healthy\":0,\"degraded\":0,\"unhealthy\":0,\"notReady\":0},\"workloads\":{\"total\":6,\"healthy\":2,\"degraded\":2,\"unhealthy\":0,\"notReady\":2}}},\"timestamp\":\"2026-11-16T19:41:32Z\",\"rateInterval\":\"10m\"},\"namespaces\":[\"bookinfo\"],\"nodes\":[{\"name\":\"details\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"productpage\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"istio-ingressgateway\",\"type\":\"workload\",\"version\":\"latest\"},{\"name\":\"ratings\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v1\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v2\"},{\"name\":\"reviews\",\"type\":\"workload\",\"version\":\"v3\"}],\"traffic\":[{\"health\":\"Degraded\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":4,\"source\":\"reviews (v2)\",\"target\":\"ratings (v1)\",\"throughput\":\"296\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":49,\"source\":\"productpage (v1)\",\"target\":\"reviews (v2)\",\"throughput\":\"445\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":10,\"source\":\"productpage (v1)\",\"target\":\"details (v1)\",\"throughput\":\"955\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":21,\"source\":\"productpage (v1)\",\"target\":\"reviews (v1)\",\"throughput\":\"359\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":50,\"source\":\"productpage (v1)\",\"target\":\"reviews (v3)\",\"throughput\":\"393\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":91,\"source\":\"istio-ingressgateway (latest)\",\"target\":\"productpage (v1)\",\"throughput\":\"13867\"},{\"health\":\"Healthy\",\"mTLS\":true,\"protocol\":\"http\",\"responseTimeMs\":4,\"source\":\"reviews (v3)\",\"target\":\"ratings (v1)\",\"throughput\":\"273\"}]}"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 18,
+              "outputTokens": 715,
+              "totalTokens": 733
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_get_mesh_traffic_graph",
+                "arguments": {
+                  "graphType": "workload",
+                  "meshCluster": "west",
+                  "namespaces": "bookinfo"
+                }
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          }
+        ],
+        "ResourceReads": null,
+        "PromptGets": null
+      },
+      "tokenEstimate": {
+        "inputTokens": 996,
+        "outputTokens": 425,
+        "totalTokens": 21522,
+        "promptTokens": 40,
+        "messageTokens": 285,
+        "thinkingTokens": 0,
+        "toolInputTokens": 19,
+        "toolOutputTokens": 1410,
+        "mcpSchemaTokens": 7187,
+        "promptGetInputTokens": 0,
+        "promptGetOutputTokens": 0,
+        "resourceInputTokens": 0,
+        "resourceOutputTokens": 0,
+        "source": "actual",
+        "actual": {
+          "inputTokens": 996,
+          "outputTokens": 425,
+          "totalTokens": 21522
+        }
+      },
+      "judgeTokenUsage": {
+        "inputTokens": 3593,
+        "outputTokens": 153,
+        "totalTokens": 3746
+      },
+      "setupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      },
+      "agentOutput": {
+        "Steps": [
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_mesh_clusters"
+          },
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_get_mesh_traffic_graph"
+          },
+          {
+            "type": "message",
+            "success": true,
+            "message": "**Workload traffic graph — `bookinfo` on mesh cluster `west`**  \n`west` is the remote cluster; Kiali’s home cluster is `east`.\n\n```mermaid\ngraph LR\n  ingress[\"istio-ingressgateway (latest)\"] --\u003e|13,867 · 91 ms| productpage[\"productpage (v1)\"]\n  productpage --\u003e|955 · 10 ms| details[\"details (v1)\"]\n  productpage --\u003e|359 · 21 ms| reviews1[\"reviews (v1)\"]\n  productpage --\u003e|445 · 49 ms| reviews2[\"reviews (v2)\"]\n  productpage --\u003e|393 · 50 ms| reviews3[\"reviews (v3)\"]\n  reviews2 --\u003e|296 · 4 ms · degraded| ratings[\"ratings (v1)\"]\n  reviews3 --\u003e|273 · 4 ms| ratings\n```\n\nThe graph shows ingress traffic flowing to `productpage`, which calls `details` and all three `reviews` versions. `reviews (v2)` and `reviews (v3)` call `ratings`. All listed edges use HTTP with mTLS enabled. The `reviews (v2) → ratings (v1)` edge is marked **Degraded**; the other edges are marked **Healthy**. Throughput figures and response times in milliseconds are shown on each edge."
+          }
+        ],
+        "Success": true,
+        "Error": "",
+        "agentDetails": {
+          "tokenEstimate": {
+            "inputTokens": 996,
+            "outputTokens": 425,
+            "totalTokens": 21522,
+            "promptTokens": 40,
+            "messageTokens": 285,
+            "thinkingTokens": 0,
+            "toolInputTokens": 19,
+            "toolOutputTokens": 1410,
+            "mcpSchemaTokens": 7187,
+            "promptGetInputTokens": 0,
+            "promptGetOutputTokens": 0,
+            "resourceInputTokens": 0,
+            "resourceOutputTokens": 0,
+            "source": "actual",
+            "actual": {
+              "inputTokens": 996,
+              "outputTokens": 425,
+              "totalTokens": 21522
+            }
+          },
+          "toolCalls": [
+            {
+              "title": "kiali_list_mesh_clusters",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            },
+            {
+              "title": "kiali_get_mesh_traffic_graph",
+              "status": "completed",
+              "rawInput": {
+                "graphType": "workload",
+                "meshCluster": "west",
+                "namespaces": "bookinfo"
+              },
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"graphType\\\":\\\"workload\\\",\\\"health\\\":{\\\"overallStatus\\\":\\\"DEGRADED\\\",\\\"availability\\\":50,\\\"totalErrorRate\\\":0.007708971955216887,\\\"namespaceCount\\\":1,\\\"entityCounts\\\":{\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":2,\\\"degraded\\\":2,\\\"unhealthy\\\":0,\\\"notReady\\\":2}},\\\"namespaceSummary\\\":{\\\"bookinfo\\\":{\\\"status\\\":\\\"HEALTHY\\\",\\\"availability\\\":50,\\\"errorRate\\\":0.007708971955216887,\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":2,\\\"degraded\\\":2,\\\"unhealthy\\\":0,\\\"notReady\\\":2}}},\\\"timestamp\\\":\\\"2026-11-16T19:41:32Z\\\",\\\"rateInterval\\\":\\\"10m\\\"},\\\"namespaces\\\":[\\\"bookinfo\\\"],\\\"nodes\\\":[{\\\"name\\\":\\\"details\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"productpage\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"istio-ingressgateway\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"latest\\\"},{\\\"name\\\":\\\"ratings\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v2\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v3\\\"}],\\\"traffic\\\":[{\\\"health\\\":\\\"Degraded\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":4,\\\"source\\\":\\\"reviews (v2)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"296\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":49,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v2)\\\",\\\"throughput\\\":\\\"445\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"details (v1)\\\",\\\"throughput\\\":\\\"955\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":21,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v1)\\\",\\\"throughput\\\":\\\"359\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":50,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v3)\\\",\\\"throughput\\\":\\\"393\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":91,\\\"source\\\":\\\"istio-ingressgateway (latest)\\\",\\\"target\\\":\\\"productpage (v1)\\\",\\\"throughput\\\":\\\"13867\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":4,\\\"source\\\":\\\"reviews (v3)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"273\\\"}]}\"}],\"resultType\":\"complete\"}"
+            }
+          ],
+          "outputSteps": [
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_mesh_clusters",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_get_mesh_traffic_graph",
+                "status": "completed",
+                "rawInput": {
+                  "graphType": "workload",
+                  "meshCluster": "west",
+                  "namespaces": "bookinfo"
+                },
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"graphType\\\":\\\"workload\\\",\\\"health\\\":{\\\"overallStatus\\\":\\\"DEGRADED\\\",\\\"availability\\\":50,\\\"totalErrorRate\\\":0.007708971955216887,\\\"namespaceCount\\\":1,\\\"entityCounts\\\":{\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":2,\\\"degraded\\\":2,\\\"unhealthy\\\":0,\\\"notReady\\\":2}},\\\"namespaceSummary\\\":{\\\"bookinfo\\\":{\\\"status\\\":\\\"HEALTHY\\\",\\\"availability\\\":50,\\\"errorRate\\\":0.007708971955216887,\\\"apps\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"services\\\":{\\\"total\\\":0,\\\"healthy\\\":0,\\\"degraded\\\":0,\\\"unhealthy\\\":0,\\\"notReady\\\":0},\\\"workloads\\\":{\\\"total\\\":6,\\\"healthy\\\":2,\\\"degraded\\\":2,\\\"unhealthy\\\":0,\\\"notReady\\\":2}}},\\\"timestamp\\\":\\\"2026-11-16T19:41:32Z\\\",\\\"rateInterval\\\":\\\"10m\\\"},\\\"namespaces\\\":[\\\"bookinfo\\\"],\\\"nodes\\\":[{\\\"name\\\":\\\"details\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"productpage\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"istio-ingressgateway\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"latest\\\"},{\\\"name\\\":\\\"ratings\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v1\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v2\\\"},{\\\"name\\\":\\\"reviews\\\",\\\"type\\\":\\\"workload\\\",\\\"version\\\":\\\"v3\\\"}],\\\"traffic\\\":[{\\\"health\\\":\\\"Degraded\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":4,\\\"source\\\":\\\"reviews (v2)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"296\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":49,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v2)\\\",\\\"throughput\\\":\\\"445\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":10,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"details (v1)\\\",\\\"throughput\\\":\\\"955\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":21,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v1)\\\",\\\"throughput\\\":\\\"359\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":50,\\\"source\\\":\\\"productpage (v1)\\\",\\\"target\\\":\\\"reviews (v3)\\\",\\\"throughput\\\":\\\"393\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":91,\\\"source\\\":\\\"istio-ingressgateway (latest)\\\",\\\"target\\\":\\\"productpage (v1)\\\",\\\"throughput\\\":\\\"13867\\\"},{\\\"health\\\":\\\"Healthy\\\",\\\"mTLS\\\":true,\\\"protocol\\\":\\\"http\\\",\\\"responseTimeMs\\\":4,\\\"source\\\":\\\"reviews (v3)\\\",\\\"target\\\":\\\"ratings (v1)\\\",\\\"throughput\\\":\\\"273\\\"}]}\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "message",
+              "content": "**Workload traffic graph — `bookinfo` on mesh cluster `west`**  \n`west` is the remote cluster; Kiali’s home cluster is `east`.\n\n```mermaid\ngraph LR\n  ingress[\"istio-ingressgateway (latest)\"] --\u003e|13,867 · 91 ms| productpage[\"productpage (v1)\"]\n  productpage --\u003e|955 · 10 ms| details[\"details (v1)\"]\n  productpage --\u003e|359 · 21 ms| reviews1[\"reviews (v1)\"]\n  productpage --\u003e|445 · 49 ms| reviews2[\"reviews (v2)\"]\n  productpage --\u003e|393 · 50 ms| reviews3[\"reviews (v3)\"]\n  reviews2 --\u003e|296 · 4 ms · degraded| ratings[\"ratings (v1)\"]\n  reviews3 --\u003e|273 · 4 ms| ratings\n```\n\nThe graph shows ingress traffic flowing to `productpage`, which calls `details` and all three `reviews` versions. `reviews (v2)` and `reviews (v3)` call `ratings`. All listed edges use HTTP with mTLS enabled. The `reviews (v2) → ratings (v1)` edge is marked **Degraded**; the other edges are marked **Healthy**. Throughput figures and response times in milliseconds are shown on each edge."
+            }
+          ]
+        }
+      },
+      "verifyOutput": {
+        "Steps": [
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer specifies the cluster as “west.” The model response explicitly identifies the graph as being on mesh cluster “west” and reiterates that west is the remote cluster, so it contains the required core information.",
+            "usage": {
+              "inputTokens": 1795,
+              "outputTokens": 76,
+              "totalTokens": 1871
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer is “bookinfo.” The model response explicitly identifies the graph as being for the `bookinfo` namespace, so it contains the full core information required. Its additional graph details do not contradict the reference.",
+            "usage": {
+              "inputTokens": 1798,
+              "outputTokens": 77,
+              "totalTokens": 1875
+            }
+          }
+        ],
+        "Success": true,
+        "Error": ""
+      },
+      "cleanupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      }
+    },
+    {
+      "taskName": "List Remote Cluster Traces",
+      "taskPath": "/home/runner/work/kubernetes-mcp-server/kubernetes-mcp-server/evals/tasks/kiali/multicluster/traces-west-reviews/traces-west-reviews.yaml",
+      "taskPassed": true,
+      "taskOutput": "The traces are from the **west** mesh cluster, which is remote from Kiali’s home cluster (**east**).\n\nIn the last 10 minutes, **10 traces** were found for `reviews` in `bookinfo` (average duration **18.6 ms**). The slowest service reported for each trace was `istio-ingressgateway.istio-system`, with trace durations ranging from **14.6 to 23.2 ms**. **No traces were marked as having errors.**",
+      "taskJudgeReason": "The reference answer consists of “reviews.” The model response explicitly identifies the traces as being for the `reviews` service, so it contains the core information required by the CONTAINS criterion. The additional cluster and trace details do not contradict the reference.",
+      "difficulty": "medium",
+      "totalRuns": 1,
+      "assertionResults": {
+        "toolsUsed": {
+          "passed": true
+        },
+        "minToolCalls": {
+          "passed": true
+        },
+        "maxToolCalls": {
+          "passed": true
+        }
+      },
+      "allAssertionsPassed": true,
+      "callHistory": {
+        "ToolCalls": [
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:43.438888302Z",
+            "success": true,
+            "name": "kiali_list_mesh_clusters",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"isHome\":false,\"name\":\"west\"},{\"isHome\":true,\"name\":\"east\"}]"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 1,
+              "outputTokens": 33,
+              "totalTokens": 34
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_mesh_clusters",
+                "arguments": {}
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          },
+          {
+            "serverName": "kubernetes",
+            "timestamp": "2026-11-16T19:41:47.326546297Z",
+            "success": true,
+            "name": "kiali_list_traces",
+            "result": {
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "kubernetes-mcp-server",
+                  "title": "kubernetes-mcp-server",
+                  "version": "be8b260",
+                  "websiteUrl": "https://github.com/containers/kubernetes-mcp-server"
+                }
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"summary\":{\"namespace\":\"bookinfo\",\"service\":\"reviews\",\"total_found\":10,\"avg_duration_ms\":18.6152},\"traces\":[{\"id\":\"bc14f79fe950e724f80e404c28d9aa2a\",\"duration_ms\":18.801,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (18.8ms)\",\"has_errors\":false},{\"id\":\"4302c1718ec01d140da6d68e51418953\",\"duration_ms\":16.525,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (16.5ms)\",\"has_errors\":false},{\"id\":\"35cbe6f832cca63109a5ff22d3d85325\",\"duration_ms\":23.22,\"spans_count\":7,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (23.2ms)\",\"has_errors\":false},{\"id\":\"8555f84147336101aab0cdcb4e79463e\",\"duration_ms\":16.049,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (16.0ms)\",\"has_errors\":false},{\"id\":\"3fde8b8f8d2fd40961008bda1b8ade05\",\"duration_ms\":22.427,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (22.4ms)\",\"has_errors\":false},{\"id\":\"30159e1c44a0cedaa5719769d1ca6a92\",\"duration_ms\":14.601,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (14.6ms)\",\"has_errors\":false},{\"id\":\"90b7240e448d42f41c38008d78f59659\",\"duration_ms\":20.413,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (20.4ms)\",\"has_errors\":false},{\"id\":\"cb72b74dd7b5d3f88584c9dbbb3877c1\",\"duration_ms\":18.911,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (18.9ms)\",\"has_errors\":false},{\"id\":\"331120444d6e42ed203c252d6047597d\",\"duration_ms\":15.549,\"spans_count\":6,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (15.5ms)\",\"has_errors\":false},{\"id\":\"f7bfaca07a2eb17835b9806b28669035\",\"duration_ms\":19.656,\"spans_count\":8,\"root_op\":\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\",\"slowest_service\":\"istio-ingressgateway.istio-system (19.7ms)\",\"has_errors\":false}]}"
+                }
+              ],
+              "resultType": "complete"
+            },
+            "tokens": {
+              "inputTokens": 30,
+              "outputTokens": 934,
+              "totalTokens": 964
+            },
+            "request": {
+              "Session": {},
+              "Params": {
+                "_meta": {
+                  "io.modelcontextprotocol/clientCapabilities": {
+                    "roots": {
+                      "listChanged": true
+                    }
+                  },
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpchecker-agent",
+                    "version": "1.0.0"
+                  },
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                },
+                "name": "kiali_list_traces",
+                "arguments": {
+                  "errorOnly": false,
+                  "limit": 10,
+                  "lookbackSeconds": 600,
+                  "meshCluster": "west",
+                  "namespace": "bookinfo",
+                  "serviceName": "reviews"
+                }
+              },
+              "Extra": {
+                "TokenInfo": null
+              }
+            }
+          }
+        ],
+        "ResourceReads": null,
+        "PromptGets": null
+      },
+      "tokenEstimate": {
+        "inputTokens": 1238,
+        "outputTokens": 292,
+        "totalTokens": 21659,
+        "promptTokens": 54,
+        "messageTokens": 103,
+        "thinkingTokens": 0,
+        "toolInputTokens": 31,
+        "toolOutputTokens": 1377,
+        "mcpSchemaTokens": 7187,
+        "promptGetInputTokens": 0,
+        "promptGetOutputTokens": 0,
+        "resourceInputTokens": 0,
+        "resourceOutputTokens": 0,
+        "source": "actual",
+        "actual": {
+          "inputTokens": 1238,
+          "outputTokens": 292,
+          "totalTokens": 21659
+        }
+      },
+      "judgeTokenUsage": {
+        "inputTokens": 2918,
+        "outputTokens": 148,
+        "totalTokens": 3066
+      },
+      "setupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      },
+      "agentOutput": {
+        "Steps": [
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_mesh_clusters"
+          },
+          {
+            "type": "tool_call",
+            "success": true,
+            "message": "kiali_list_traces"
+          },
+          {
+            "type": "message",
+            "success": true,
+            "message": "The traces are from the **west** mesh cluster, which is remote from Kiali’s home cluster (**east**).\n\nIn the last 10 minutes, **10 traces** were found for `reviews` in `bookinfo` (average duration **18.6 ms**). The slowest service reported for each trace was `istio-ingressgateway.istio-system`, with trace durations ranging from **14.6 to 23.2 ms**. **No traces were marked as having errors.**"
+          }
+        ],
+        "Success": true,
+        "Error": "",
+        "agentDetails": {
+          "tokenEstimate": {
+            "inputTokens": 1238,
+            "outputTokens": 292,
+            "totalTokens": 21659,
+            "promptTokens": 54,
+            "messageTokens": 103,
+            "thinkingTokens": 0,
+            "toolInputTokens": 31,
+            "toolOutputTokens": 1377,
+            "mcpSchemaTokens": 7187,
+            "promptGetInputTokens": 0,
+            "promptGetOutputTokens": 0,
+            "resourceInputTokens": 0,
+            "resourceOutputTokens": 0,
+            "source": "actual",
+            "actual": {
+              "inputTokens": 1238,
+              "outputTokens": 292,
+              "totalTokens": 21659
+            }
+          },
+          "toolCalls": [
+            {
+              "title": "kiali_list_mesh_clusters",
+              "status": "completed",
+              "rawInput": {},
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+            },
+            {
+              "title": "kiali_list_traces",
+              "status": "completed",
+              "rawInput": {
+                "errorOnly": false,
+                "limit": 10,
+                "lookbackSeconds": 600,
+                "meshCluster": "west",
+                "namespace": "bookinfo",
+                "serviceName": "reviews"
+              },
+              "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"summary\\\":{\\\"namespace\\\":\\\"bookinfo\\\",\\\"service\\\":\\\"reviews\\\",\\\"total_found\\\":10,\\\"avg_duration_ms\\\":18.6152},\\\"traces\\\":[{\\\"id\\\":\\\"bc14f79fe950e724f80e404c28d9aa2a\\\",\\\"duration_ms\\\":18.801,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.8ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"4302c1718ec01d140da6d68e51418953\\\",\\\"duration_ms\\\":16.525,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"35cbe6f832cca63109a5ff22d3d85325\\\",\\\"duration_ms\\\":23.22,\\\"spans_count\\\":7,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (23.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"8555f84147336101aab0cdcb4e79463e\\\",\\\"duration_ms\\\":16.049,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.0ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"3fde8b8f8d2fd40961008bda1b8ade05\\\",\\\"duration_ms\\\":22.427,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (22.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"30159e1c44a0cedaa5719769d1ca6a92\\\",\\\"duration_ms\\\":14.601,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.6ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"90b7240e448d42f41c38008d78f59659\\\",\\\"duration_ms\\\":20.413,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (20.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"cb72b74dd7b5d3f88584c9dbbb3877c1\\\",\\\"duration_ms\\\":18.911,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.9ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"331120444d6e42ed203c252d6047597d\\\",\\\"duration_ms\\\":15.549,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (15.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"f7bfaca07a2eb17835b9806b28669035\\\",\\\"duration_ms\\\":19.656,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.7ms)\\\",\\\"has_errors\\\":false}]}\"}],\"resultType\":\"complete\"}"
+            }
+          ],
+          "outputSteps": [
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_mesh_clusters",
+                "status": "completed",
+                "rawInput": {},
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"[{\\\"isHome\\\":false,\\\"name\\\":\\\"west\\\"},{\\\"isHome\\\":true,\\\"name\\\":\\\"east\\\"}]\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "tool_call",
+              "toolCall": {
+                "title": "kiali_list_traces",
+                "status": "completed",
+                "rawInput": {
+                  "errorOnly": false,
+                  "limit": 10,
+                  "lookbackSeconds": 600,
+                  "meshCluster": "west",
+                  "namespace": "bookinfo",
+                  "serviceName": "reviews"
+                },
+                "rawOutput": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kubernetes-mcp-server\",\"title\":\"kubernetes-mcp-server\",\"version\":\"be8b260\",\"websiteUrl\":\"https://github.com/containers/kubernetes-mcp-server\"}},\"content\":[{\"type\":\"text\",\"text\":\"{\\\"summary\\\":{\\\"namespace\\\":\\\"bookinfo\\\",\\\"service\\\":\\\"reviews\\\",\\\"total_found\\\":10,\\\"avg_duration_ms\\\":18.6152},\\\"traces\\\":[{\\\"id\\\":\\\"bc14f79fe950e724f80e404c28d9aa2a\\\",\\\"duration_ms\\\":18.801,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.8ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"4302c1718ec01d140da6d68e51418953\\\",\\\"duration_ms\\\":16.525,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"35cbe6f832cca63109a5ff22d3d85325\\\",\\\"duration_ms\\\":23.22,\\\"spans_count\\\":7,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (23.2ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"8555f84147336101aab0cdcb4e79463e\\\",\\\"duration_ms\\\":16.049,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (16.0ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"3fde8b8f8d2fd40961008bda1b8ade05\\\",\\\"duration_ms\\\":22.427,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (22.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"30159e1c44a0cedaa5719769d1ca6a92\\\",\\\"duration_ms\\\":14.601,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (14.6ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"90b7240e448d42f41c38008d78f59659\\\",\\\"duration_ms\\\":20.413,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (20.4ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"cb72b74dd7b5d3f88584c9dbbb3877c1\\\",\\\"duration_ms\\\":18.911,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (18.9ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"331120444d6e42ed203c252d6047597d\\\",\\\"duration_ms\\\":15.549,\\\"spans_count\\\":6,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (15.5ms)\\\",\\\"has_errors\\\":false},{\\\"id\\\":\\\"f7bfaca07a2eb17835b9806b28669035\\\",\\\"duration_ms\\\":19.656,\\\"spans_count\\\":8,\\\"root_op\\\":\\\"istio-ingressgateway.istio-system productpage.bookinfo.svc.cluster.local:9080/productpage 200\\\",\\\"slowest_service\\\":\\\"istio-ingressgateway.istio-system (19.7ms)\\\",\\\"has_errors\\\":false}]}\"}],\"resultType\":\"complete\"}"
+              }
+            },
+            {
+              "type": "message",
+              "content": "The traces are from the **west** mesh cluster, which is remote from Kiali’s home cluster (**east**).\n\nIn the last 10 minutes, **10 traces** were found for `reviews` in `bookinfo` (average duration **18.6 ms**). The slowest service reported for each trace was `istio-ingressgateway.istio-system`, with trace durations ranging from **14.6 to 23.2 ms**. **No traces were marked as having errors.**"
+            }
+          ]
+        }
+      },
+      "verifyOutput": {
+        "Steps": [
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer consists of “reviews.” The model response explicitly identifies the traces as being for the `reviews` service, so it contains the core information required by the CONTAINS criterion. The additional cluster and trace details do not contradict the reference.",
+            "usage": {
+              "inputTokens": 1468,
+              "outputTokens": 83,
+              "totalTokens": 1551
+            }
+          },
+          {
+            "type": "llmJudge",
+            "success": true,
+            "message": "The reference answer identifies the cluster as west. The model response explicitly states that the traces are from the west mesh cluster, so it contains the core information required.",
+            "usage": {
+              "inputTokens": 1450,
+              "outputTokens": 65,
+              "totalTokens": 1515
+            }
+          }
+        ],
+        "Success": true,
+        "Error": ""
+      },
+      "cleanupOutput": {
+        "Steps": [],
+        "Success": true,
+        "Error": ""
+      }
+    }
+  ]
+}

@@ -11,8 +11,9 @@ import (
 
 // ValidatorProviders holds the providers needed to create validators.
 type ValidatorProviders struct {
-	Discovery  func() discovery.DiscoveryInterface
-	AuthClient func() authv1client.AuthorizationV1Interface
+	Discovery   func() discovery.DiscoveryInterface
+	AuthClient  func() authv1client.AuthorizationV1Interface
+	SchemaCache *openAPISchemaCache
 }
 
 // ValidatorFactory creates a validator given the providers.
@@ -57,7 +58,7 @@ func (r *validatorRegistry) createAll(providers ValidatorProviders) []api.HTTPVa
 
 func init() {
 	RegisterValidator("schema", func(p ValidatorProviders) api.HTTPValidator {
-		return NewSchemaValidator(p.Discovery)
+		return newSchemaValidator(p.Discovery, p.SchemaCache)
 	})
 	RegisterValidator("rbac", func(p ValidatorProviders) api.HTTPValidator {
 		return NewRBACValidator(p.AuthClient)

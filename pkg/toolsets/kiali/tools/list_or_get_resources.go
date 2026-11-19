@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -11,7 +12,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali/internal/defaults"
 )
 
-func InitListOrGetResources() []api.ServerTool {
+func InitListOrGetResources(ctx context.Context, inspector api.ClusterInspector) []api.ServerTool {
 	ret := make([]api.ServerTool, 0)
 	name := defaults.ToolsetName() + "_get_resource_details"
 	ret = append(ret, api.ServerTool{
@@ -34,9 +35,9 @@ func InitListOrGetResources() []api.ServerTool {
 						Type:        "string",
 						Description: "Optional. The specific name of the resource. If left empty, the tool returns a list of all resources of the specified type. If provided, the tool returns deep details for this specific resource.",
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional. Name of the cluster to get resources from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+						Description: meshClusterDescription(),
 					},
 				},
 				Required: []string{"resourceType"},
@@ -51,16 +52,19 @@ func InitListOrGetResources() []api.ServerTool {
 				IdempotentHint:  ptr.To(true),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: listOrGetResourcesHandler,
+		}, RBAC: ResourcesRBAC(ctx, inspector), Handler: listOrGetResourcesHandler,
 	})
 
 	return ret
 }
 
 func listOrGetResourcesHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiListOrGetResourcesEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiListOrGetResourcesEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to list or get resources: %w", err)), nil
 	}

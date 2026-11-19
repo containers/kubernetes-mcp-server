@@ -72,8 +72,9 @@ func (c *Core) NodesStatsSummary(ctx context.Context, name string) (string, erro
 }
 
 func (c *Core) NodesTop(ctx context.Context, options api.NodesTopOptions) (*metrics.NodeMetricsList, error) {
-	// TODO, maybe move to mcp Tools setup and omit in case metrics aren't available in the target cluster
-	if !c.supportsGroupVersion(metrics.GroupName + "/" + metricsv1beta1api.SchemeGroupVersion.Version) {
+	// When enable_target_compatibility_tool_filters is enabled (the default),
+	// TargetCompatibilityFilters also omit the nodes_top tool if this API is absent.
+	if !c.supportsGroupVersion(NodeMetricsGVK.GroupVersion().String()) {
 		return nil, errors.New("metrics API is not available")
 	}
 	versionedMetrics := &metricsv1beta1api.NodeMetricsList{}

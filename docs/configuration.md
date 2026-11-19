@@ -1,18 +1,17 @@
 # Configuration Reference
 
-This document provides comprehensive reference documentation for configuring the Kubernetes MCP Server via TOML configuration files.
+This document is the reference for the Kubernetes MCP Server configuration surface.
 
-The server supports two configuration methods:
-- **Command-line arguments** - For quick configuration and overrides
-- **TOML configuration files** - For complex, persistent, and shareable configurations
+Runtime settings live in TOML files. A small set of options also accept environment variables. The CLI is limited to bootstrap knobs that select those files (`--config`, `--config-dir`) plus `--version`. Set `port` in TOML to run HTTP mode.
 
-This reference focuses on TOML file configuration. For CLI arguments, see the [Configuration Options](#cli-configuration-options) section or run `kubernetes-mcp-server --help`.
+For release-to-release migrations, see [Configuration Changes](configuration-changes.md). Run `kubernetes-mcp-server --help` for CLI help.
 
-## Table of Contents
+**Table of Contents**
 
-- [Table of Contents](#table-of-contents)
 - [Configuration Loading](#configuration-loading)
   - [Usage](#usage)
+  - [Reading the Configuration from stdin](#reading-the-configuration-from-stdin)
+  - [Sensitive Values](#sensitive-values)
 - [Drop-in Configuration](#drop-in-configuration)
   - [How Drop-in Files Work](#how-drop-in-files-work)
   - [Example Directory Structure](#example-directory-structure)
@@ -20,15 +19,19 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
 - [Dynamic Configuration Reload](#dynamic-configuration-reload)
   - [How to Reload](#how-to-reload)
   - [What Gets Reloaded](#what-gets-reloaded)
-  - [Limitations](#limitations)
+  - [What Requires a Restart](#what-requires-a-restart)
 - [Configuration Reference](#configuration-reference-1)
   - [Server Settings](#server-settings)
   - [HTTP Server Security](#http-server-security)
+  - [Memory Bounds](#memory-bounds)
   - [Kubernetes Connection](#kubernetes-connection)
+    - [Client Limits and Watcher Timing](#client-limits-and-watcher-timing)
     - [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod)
+  - [Cluster Authorization](#cluster-authorization)
   - [Access Control](#access-control)
   - [Toolsets](#toolsets)
   - [Tool Filtering](#tool-filtering)
+  - [Target Compatibility](#target-compatibility)
   - [Tool Overrides](#tool-overrides)
   - [Denied Resources](#denied-resources)
   - [Server Instructions](#server-instructions)
@@ -40,23 +43,36 @@ This reference focuses on TOML file configuration. For CLI arguments, see the [C
   - [Toolset-Specific Configuration](#toolset-specific-configuration)
     - [Helm Configuration](#helm-configuration)
   - [Cluster Provider Configuration](#cluster-provider-configuration)
-- [CLI Configuration Options](#cli-configuration-options)
+- [Environment Variables](#environment-variables)
+- [CLI](#cli)
 - [Complete Example](#complete-example)
 - [Related Documentation](#related-documentation)
 
 ## Configuration Loading
 
-Configuration values are loaded and merged in the following order (later sources override earlier ones):
+Each option is resolved once per load. Later sources override earlier ones:
 
-1. **Internal Defaults** - Built-in default values
-2. **Main Configuration File** - Loaded via `--config` flag
-3. **Drop-in Files** - Loaded from `--config-dir` in lexical (alphabetical) order
+1. **Defaults** — Built-in values (for example `list_output = "table"`)
+2. **Main configuration file** — `--config` (or stdin with `--config -`), or `$MCP_CONFIG_PATH` if `--config` is unset. Optional when `--config-dir` supplies the files
+3. **`--config-dir` files** — lexical `.toml` files. Can be the only file source. Omitted means no directory is read
+4. **Environment variables** — Only where an option declares an env name. An empty or unset variable does not override
+5. **CLI** — Only `--config` / `--config-dir` / `--version`. These select files; they are not runtime option overrides
+
+Unknown TOML keys fail the load (startup and SIGHUP exit non-zero). Registered `toolset_configs.<name>` and `cluster_provider_configs.<name>` tables remain valid; unknown fields *inside* a registered block also fail.
+
+String options (including each element of a string list, and duration strings) have surrounding whitespace stripped at load from TOML and env. `tls_cert = " /certs/tls.crt "` is the same as `tls_cert = "/certs/tls.crt"`.
+
+After validation (startup and SIGHUP, success or failure) the server logs every option with its resolved value and source (file path, `<Stdin>`, `<Env>`, or `<Default>`). Sensitive values are redacted. Independent validation errors are all reported. On SIGHUP the same dump includes `changed=true` and `previous` when a value differs from the prior config. A failed SIGHUP reload dumps when a config was produced, then the process exits.
+
+Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-only; the default (`port=""`, `require_oauth=false`) still works.
 
 ### Usage
 
 ```bash
 # Use a main configuration file
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml
+# or
+MCP_CONFIG_PATH=/etc/kubernetes-mcp-server/config.toml kubernetes-mcp-server
 
 # Use only drop-in configuration files (no main config)
 kubernetes-mcp-server --config-dir /etc/kubernetes-mcp-server/conf.d/
@@ -64,29 +80,144 @@ kubernetes-mcp-server --config-dir /etc/kubernetes-mcp-server/conf.d/
 # Use both main config and explicit drop-in directory
 kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
                       --config-dir /etc/kubernetes-mcp-server/config.d/
+
+# Read the main configuration from stdin (HTTP mode only)
+cat <<EOF | kubernetes-mcp-server --config -
+port = "8080"
+read_only = true
+EOF
 ```
+
+### Reading the Configuration from stdin
+
+`--config -` reads the main configuration from stdin, up to end of input, instead of from a file. Everything else works as for a file: `--config-dir` drop-ins and environment variables still override it, and options it sets are logged with the source `<Stdin>`. Relative paths in it are resolved against the working directory.
+
+The stdio transport also uses stdin, so `--config -` only works in HTTP mode. If neither stdin nor a drop-in sets `port`, the server exits with an error instead of starting in stdio mode.
+
+The server reads stdin once, at startup. A `SIGHUP` reload applies the same stdin configuration again and re-reads the `--config-dir` files and environment variables.
+
+### Sensitive Values
+
+Some configuration values are sensitive: an inline client secret, or paths to private keys, tokens and kubeconfigs. Fields marked with 🔒 in the reference tables are the ones to protect:
+
+| Field | What is sensitive |
+|-------|-------------------|
+| `token_exchange.client_auth.client_secret` | The secret itself, written inline in TOML. The server shows it as `<redacted>` when it logs the resolved configuration |
+| `tls_key` | Path to the TLS private key |
+| `token_exchange.client_auth.private_key_file` | Path to the private key used by `private_key_jwt` |
+| `token_exchange.client_auth.token_file` | Path to the JWT read by `jwt_file` |
+| `kubeconfig` | Path to a kubeconfig, which usually contains tokens or client keys |
+
+Certificates (`tls_cert`, `certificate_authority`, `token_exchange.client_auth.certificate_file`) are public.
+
+**Best practice: mount the configuration from a Secret.** When the server runs in a cluster, store `config.toml` in a Secret instead of a ConfigMap, and mount the files the 🔒 paths point to from a Secret too. Then a sensitive value can't end up in a ConfigMap by mistake, and you don't need to split the configuration across several objects:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-server-config
+  namespace: mcp
+type: Opaque
+stringData:
+  config.toml: |
+    port = "8080"
+    require_oauth = true
+    authorization_url = "https://keycloak.example.com/realms/mcp"
+    oauth_audience = "kubernetes-mcp-server"
+
+    [token_exchange]
+    strategy = "rfc8693"
+    audience = "kubernetes-api"
+
+    [token_exchange.client_auth]
+    method = "client_secret_basic"
+    client_id = "mcp-backend"
+    client_secret = "your-client-secret"
+---
+# In the Deployment's pod spec:
+#   args: ["--config", "/etc/kubernetes-mcp-server/config.toml"]
+#   volumeMounts:
+#     - name: config
+#       mountPath: /etc/kubernetes-mcp-server
+#       readOnly: true
+#   volumes:
+#     - name: config
+#       secret:
+#         secretName: mcp-server-config
+```
+
+**ConfigMaps still work.** You can mount the configuration from a ConfigMap instead of a Secret, or use both. A ConfigMap is handy if people who can't read Secrets should still see most of the settings. If you use one, keep the 🔒 values out of it: put `client_secret` in its own drop-in file stored in a Secret, load that directory with `--config-dir`, and mount the key, token and kubeconfig files from a Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-server-secrets
+  namespace: mcp
+type: Opaque
+stringData:
+  50-token-exchange.toml: |
+    [token_exchange.client_auth]
+    client_secret = "your-client-secret"
+---
+# In the Deployment's pod spec, next to the ConfigMap mount for config.toml:
+#   args: ["--config", "/etc/kubernetes-mcp-server/config.toml",
+#          "--config-dir", "/etc/kubernetes-mcp-server/secrets.d"]
+#   volumeMounts:
+#     - name: mcp-secrets
+#       mountPath: /etc/kubernetes-mcp-server/secrets.d
+#       readOnly: true
+#   volumes:
+#     - name: mcp-secrets
+#       secret:
+#         secretName: mcp-server-secrets
+```
+
+The other `[token_exchange]` settings (`strategy`, `audience`, `client_auth.method`, `client_auth.client_id`) can stay in the ConfigMap. For a full Deployment that mounts a Secret, see [Cross-Cluster Access from a Pod](#cross-cluster-access-from-a-pod).
 
 ## Drop-in Configuration
 
-Drop-in files allow you to split configuration into multiple files and override specific settings without modifying the main configuration file.
+`--config-dir` loads every `.toml` file in a directory, in lexical order. It can be the **only** configuration source, or layered on a main `--config` file.
 
 ### How Drop-in Files Work
 
-- **Default Directory**: If `--config-dir` is not specified, the server looks for drop-in files in `conf.d/` relative to the main config file's directory (when `--config` is provided)
+- **Opt-in**: Files under a directory are read only when `--config-dir` is set. A sibling `conf.d/` next to `--config` is not loaded unless you pass `--config-dir`. If that leftover directory still contains `.toml` files (the files the old implicit lookup would have applied), startup and SIGHUP exit until you pass `--config-dir` or remove them.
+- **Standalone**: `--config-dir` without `--config` is enough; those files are the whole TOML surface.
+- **Relative path**: Relative `--config` and `--config-dir` are resolved against the working directory, independently of each other.
 - **File Naming**: Use numeric prefixes to control loading order (e.g., `00-base.toml`, `10-cluster.toml`, `99-override.toml`)
 - **File Extension**: Only `.toml` files are processed; dotfiles (starting with `.`) are ignored
 - **Partial Configuration**: Drop-in files can contain only a subset of configuration options
-- **Merge Behavior**: Values present in a drop-in file override previous values; missing values are preserved
+- **Merge Behavior**: Values present in a drop-in file override previous values; missing values are preserved. The last file that set a given key is that key's source
+- **Unknown keys**: An unknown key in any file fails the entire load
 
 ### Example Directory Structure
 
 ```
+/etc/kubernetes-mcp-server/conf.d/   # --config-dir alone
+├── 00-base.toml
+├── 10-toolsets.toml
+└── 99-local.toml
+```
+
+```bash
+kubernetes-mcp-server --config-dir /etc/kubernetes-mcp-server/conf.d
+```
+
+Or a main file plus a directory:
+
+```
 /etc/kubernetes-mcp-server/
-├── config.toml              # Main configuration
-└── conf.d/                  # Default drop-in directory
-    ├── 00-base.toml         # Base overrides
-    ├── 10-toolsets.toml     # Toolset-specific config
-    └── 99-local.toml        # Local overrides (highest priority)
+├── config.toml
+└── conf.d/
+    ├── 00-base.toml
+    ├── 10-toolsets.toml
+    └── 99-local.toml
+```
+
+```bash
+kubernetes-mcp-server --config /etc/kubernetes-mcp-server/config.toml \
+                      --config-dir /etc/kubernetes-mcp-server/conf.d
 ```
 
 ### Example Drop-in Files
@@ -123,16 +254,23 @@ pkill -HUP kubernetes-mcp-server
 
 ### What Gets Reloaded
 
-The server will:
-- Reload the main config file and all drop-in files
-- Update configuration values (log level, output format, etc.)
-- Rebuild the toolset registry with new tool configurations
-- Log the reload status
+SIGHUP re-reads the main file and drop-ins, re-applies environment variables, re-validates, and logs every option again (marking values that changed, with the previous value). Whitespace padding on string values is ignored, so it is not a change. A main configuration read from stdin (`--config -`) is not read again; the copy read at startup is applied with the reloaded drop-ins.
 
-### Limitations
+Reloadable settings take effect immediately (log level, toolsets, OAuth/token-exchange, confirmation rules, most HTTP body/rate-limit settings, `max_backend_response_bytes`, `max_in_flight`, `max_result_bytes`, and so on). Toolset registries are rebuilt.
 
-- **Requires restart**: `kubeconfig` or cluster-related settings
-- **Not available on Windows**: Restart the server to reload configuration
+If the new files fail to parse (including unknown keys), a non-reloadable option would change, or Validate fails, the process exits. When Validate fails, the rejected configuration is dumped first. `toolset_configs` parsers see the `require_tls` value from this load; a would-be `require_tls` change fails before those parsers run.
+
+### What Requires a Restart
+
+A SIGHUP that would change a non-reloadable option is rejected and the process exits. Restart to apply those values. That includes:
+
+- Listen/TLS: `port`, `bind_address`, `metrics_port`, `tls_cert`, `tls_key`, `require_tls`, `tls_min_version`, `tls_cipher_suites`, `http.read_header_timeout`
+- Process shape: `stateless`, `disable_localhost_protection`, `server_instructions`, `apps_enabled`
+- Cluster connection: `kubeconfig`, `cluster_provider_strategy`, `cluster_provider_configs`
+- Kubernetes client: `kube_client_qps`, `kube_client_burst`, watcher/poll timings
+- Telemetry: the `[telemetry]` table
+
+SIGHUP is not available on Windows; restart the process.
 
 ## Configuration Reference
 
@@ -142,19 +280,38 @@ The server will:
 |-------|------|---------|-------------|
 | `log_level` | integer | `0` | Logging verbosity level (0-9). Higher values produce more verbose output. Similar to [kubectl logging levels](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-output-verbosity-and-debugging). |
 | `log_file` | string | `""` | Path to a server log file. Required for logging in stdio mode (where stdout is reserved for the MCP protocol); replaces stdout logging in HTTP mode. The file is created if it does not exist and opened in append mode (`O_APPEND`, `0o600`). Use the special value `stderr` to route logs to stderr without opening a file. |
-| `port` | string | `""` | When set, starts the MCP server in HTTP mode (Streamable HTTP at `/mcp`, SSE at `/sse`) on the specified port. |
-| `sse_base_url` | string | `""` | Base URL for Server-Sent Events (SSE) connections. Used when the server is behind a reverse proxy. |
+| `port` | string | `""` | When set, starts the MCP server in HTTP mode (Streamable HTTP at `/mcp`) on the specified port. |
+| `bind_address` | string | `"0.0.0.0"` | Address to bind the HTTP server to. Set to `127.0.0.1` to restrict to localhost. A warning is logged when listening on all interfaces (`0.0.0.0` or `::`) without TLS or OAuth, and when a separate metrics port is bound to all interfaces (the metrics server never uses TLS or OAuth). |
+| `metrics_port` | string | `""` | When set (in HTTP mode), starts a separate HTTP server on this port serving only `/metrics`, `/stats`, and `/healthz` endpoints. Useful for Kubernetes deployments with network policies to separate metrics scraping from MCP protocol access. The metrics server uses the same `bind_address` but does not use TLS or OAuth. A warning is logged if `bind_address` is all interfaces (`0.0.0.0` or `::`). |
 | `list_output` | string | `"table"` | Output format for resource list operations. Valid values: `yaml`, `table`. |
+| `apps_enabled` | boolean | `false` | Enables MCP Apps resources and interactive views for tools that support them. Requires server restart. |
 | `stateless` | boolean | `false` | When `true`, disables tool and prompt change notifications. Useful for container deployments, load balancing, and serverless environments. |
+| `disable_localhost_protection` | boolean | `false` | When `true`, disables the MCP Go SDK DNS-rebinding check on Streamable HTTP. Leave `false` for local HTTP. Set `true` only behind a trusted reverse proxy that forwards to loopback while preserving the public or Service `Host`. For that sidecar pattern, also set `bind_address = "127.0.0.1"` (see below). |
 | `tls_cert` | string | `""` | Path to TLS certificate file for HTTPS. When set along with `tls_key`, the server serves HTTPS instead of HTTP. |
-| `tls_key` | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
+| `tls_key` 🔒 | string | `""` | Path to TLS private key file for HTTPS. Must be set together with `tls_cert`. |
 | `require_tls` | boolean | `false` | When `true`, enforces TLS for all connections. Server refuses to start without TLS certificates, and outbound connections to non-HTTPS endpoints (e.g., Kiali) are rejected. |
+| `tls_min_version` | string | `""` | Minimum TLS version (e.g., `"1.2"`, `"1.3"`; `"1.0"` and `"1.1"` are accepted for operator parity but not recommended). Defaults to TLS 1.2 if not set. Overridden by `TLS_MIN_VERSION` when that env var is non-empty. Applies to inbound HTTPS and outbound clients (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata). |
+| `tls_cipher_suites` | array | `[]` | TLS 1.2 cipher suites (TLS 1.3 cipher suites are not configurable). If empty, Go's defaults are used. Overridden by `TLS_CIPHER_SUITES` (comma-separated) when that env var is non-empty. Applies to inbound HTTPS and outbound clients. |
+
+The Streamable HTTP handler (go-sdk) rejects requests accepted on a loopback address (`127.0.0.1`, `::1`) when `Host` is not localhost. That blocks browser DNS rebinding against a local MCP server. It also 403s the usual in-pod sidecar pattern: kube-rbac-proxy `--upstream=http://127.0.0.1:8080/` keeps `Host: <service>:<port>`. Set `disable_localhost_protection = true` in that case.
+
+For that sidecar deploy, also set `bind_address = "127.0.0.1"` so only the proxy can reach the MCP port. The flag is not what enforces that: default `bind_address` is `0.0.0.0`, and traffic to `podIP:<port>` never hits the Host check (the accept address is not loopback), so other pods can skip kube-rbac-proxy. `metrics_port` uses the same `bind_address`; cluster Prometheus scrapes will fail unless metrics are scraped from a sidecar or you keep a non-loopback bind.
+
+Do not enable `disable_localhost_protection` for a laptop process listening on all interfaces without a trusted proxy. `trust_proxy_headers` does not rewrite `Host` and does not disable this check. Changing the value requires a restart.
+
+**Sidecar (kube-rbac-proxy):**
+```toml
+port = "8080"
+bind_address = "127.0.0.1"
+disable_localhost_protection = true
+```
 
 **Example:**
 ```toml
 log_level = 2
 log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
+metrics_port = "9090"  # Separate port for metrics/stats (e.g. for network policy isolation)
 list_output = "yaml"
 stateless = true
 
@@ -164,7 +321,42 @@ tls_key = "/etc/tls/tls.key"
 
 # Enforce TLS for all connections (requires tls_cert and tls_key)
 require_tls = true
+
+# Global TLS version and cipher suites (inbound + outbound; env vars override)
+tls_min_version = "1.2"
+tls_cipher_suites = [
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+]
 ```
+
+**TLS Environment Variables:**
+
+`TLS_MIN_VERSION` and `TLS_CIPHER_SUITES` configure TLS for **both** inbound and outbound connections. They are applied at load time (startup and SIGHUP) and override the corresponding TOML values when set:
+
+| Setting | Inbound (HTTP server) | Outbound (Kiali, NetObserv, observability backends, OAuth, token exchange, well-known metadata) |
+|---------|----------------------|-------------------------------------------------------------------------|
+| `tls_min_version` / `tls_cipher_suites` (TOML) | ✅ | ✅ |
+| `TLS_MIN_VERSION` / `TLS_CIPHER_SUITES` (env) | ✅ overrides TOML | ✅ overrides TOML |
+
+When neither TOML nor env is set, both inbound and outbound default to TLS 1.2 with Go's default cipher suites.
+
+Inbound TLS is not reloadable: a SIGHUP that would change `tls_min_version` / `tls_cipher_suites` (or their env overrides) is rejected and the process exits. Outbound clients (OAuth, token exchange, well-known metadata) pick up a successfully applied reload; Kiali, NetObserv, and observability backends re-read TLS settings on each tool invocation. Observability backends verify certificates and hostnames using the combined system trust store, Kubernetes REST config CA data and CA file (when configured), and mounted service CA (when present); an unreadable or invalid CA source fails the connection. Setting an observability toolset's `insecure = true` is rejected.
+
+```bash
+# Example: Enforce TLS 1.3 minimum version (inbound + outbound)
+export TLS_MIN_VERSION="1.3"
+
+# Example: Restrict TLS 1.2 cipher suites (inbound + outbound; TLS 1.3 ciphers are not configurable)
+export TLS_MIN_VERSION="1.2"
+export TLS_CIPHER_SUITES="TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+```
+
+> **Note:** TLS 1.3 uses a fixed set of cipher suites that cannot be configured. The `TLS_CIPHER_SUITES` setting only affects TLS 1.2 and earlier connections.
+
+> **Note:** When the minimum TLS version is below `"1.3"` and you set a custom cipher list, include at least one HTTP/2-compatible suite (for example, `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`). Omitting it can break HTTPS/HTTP2 clients even when TLS 1.2 handshakes succeed.
+
+> **Note:** `TLS_MIN_VERSION` values `"1.0"` and `"1.1"` are accepted for operator parity with cluster-wide TLS settings but are not recommended for production use.
 
 ### HTTP Server Security
 
@@ -173,9 +365,9 @@ Configure HTTP server settings to protect against denial-of-service attacks.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `http.read_header_timeout` | duration | `"10s"` | Maximum duration for reading request headers. Primary defense against Slowloris attacks. |
-| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). |
+| `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). One term in the [pod memory floor](scaling.md). Stdio frames use the same number. |
 | `http.rate_limit_rps` | float | `0` | Maximum requests per second per session. When `0` (default), rate limiting is disabled. |
-| `http.rate_limit_burst` | integer | `10` | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. |
+| `http.rate_limit_burst` | integer | `0` (effective `10`) | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. `0` uses the built-in burst of 10. |
 
 Duration values use Go duration syntax: `"30s"`, `"5m"`, `"1h30m"`.
 
@@ -193,43 +385,113 @@ rate_limit_rps = 5           # 5 requests per second per session
 rate_limit_burst = 10        # allow bursts of up to 10 requests
 ```
 
+### Memory Bounds
+
+Process-wide caps on work this server holds in memory.
+They apply to stdio and HTTP.
+`0` disables a limit.
+Each option is reloadable.
+[Scaling](scaling.md) turns these caps into a pod memory floor.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_backend_response_bytes` | integer | `4194304` | Maximum bytes read from one Kubernetes API, Kiali, NetObserv, Loki, Tempo, Prometheus, or Alertmanager response. `pods_exec` counts stdout and stderr together. An exact fit is allowed. The next byte closes the body and the call returns an error. `0` disables the cap. HTTP `101` upgrades are not capped. The schema fetch skips the cap so the aggregated spec can be parsed whole. Every other request stays capped. `pods_exec` keeps the bytes already stored and appends a truncation notice even if the exec library returns a stream error after the cap. A stream error before the cap drops that output. |
+| `max_result_bytes` | integer | `16777216` | Maximum bytes of one tool, prompt, or resource result. A tool counts `Content` plus the JSON size of `StructuredContent` when that field is set. When `ContentBlocks` is set, those block bytes replace `Content`, including image data. A tool error counts the error text. A prompt counts message text. A resource counts its text or blob. Log and event assembly stops at the cap and appends a truncation notice. The notice may make the result longer than the cap by the length of that notice. A result larger than the cap plus that notice is rejected and is not sent. |
+| `max_in_flight` | integer | `64` | Maximum number of `tools/call`, `prompts/get`, and `resources/read` requests running at once in this process. When every slot is in use, another of those requests is rejected with JSON-RPC error `-32030` (`max_in_flight limit exceeded`). Other methods are not counted. Every session shares one pool. |
+
+`max_backend_response_bytes` is read from the live config on each backend call.
+Kubernetes, Prometheus, and Alertmanager apply it on the round tripper, so the client stops reading and does not decode the rest.
+Kiali, NetObserv, Loki, and Tempo apply it when they read the body.
+An exact fit is allowed.
+The next byte closes the body and returns an error, so client-go does not decode the rest.
+A list over that cap is the same error, with no partial page.
+`resources_list`, `pods_list`, `pods_list_in_namespace`, `pods_top`, `nodes_top`, `namespaces_list`, `projects_list`, and `events_list` take `limit` and `continue`.
+Omit `limit` to list everything.
+Set it, and send the `continue` token from the previous page with the same selectors, to retrieve the next Kubernetes list page.
+`helm_list` takes `limit` and `offset`.
+Helm applies those after it has loaded the release secrets, so a secret list that exceeds this cap still fails.
+NetObserv flow export is the exception: it keeps the bytes already read and appends a truncation notice.
+`0` leaves that read uncapped.
+Switching-protocol (`101`) responses and the (internal-only) openapi schema retrieval are skipped.
+Every other request, including a namespace or object named `openapi`, stays capped.
+Clients of one cluster share one parsed OpenAPI model, including when several calls fetch it at once.
+A failed fetch is not kept.
+`pods_exec` shares one counter across stdout and stderr; at the cap it cancels the exec, keeps the bytes already stored, and appends a truncation notice, including when the exec library reports a stream error instead of `context.Canceled`.
+A stream error before the cap drops those buffers.
+
+`max_result_bytes` is read on each call.
+An exact fit is allowed.
+`0` disables the check.
+Lowering it does not change a call already running.
+A write that does not fit is cut and a truncation notice is appended; that notice may exceed the cap by its own length.
+A collector that keeps several backend reads stops before the next read once that budget is exhausted.
+
+A running call keeps its slot until the handler returns, including a call that started while the limit was `0`.
+Lowering `max_in_flight`, or raising it from `0`, does not cancel calls already running; new calls are rejected until the number in flight drops below the new cap.
+Raising a positive limit, or setting `0`, takes effect on the next acquire.
+
+**Example:**
+```toml
+max_backend_response_bytes = 4194304
+max_result_bytes = 16777216
+max_in_flight = 64
+```
+
 ### Kubernetes Connection
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `kubeconfig` | string | `""` | Path to the Kubernetes configuration file. If not provided, the server uses the in-cluster configuration or the default kubeconfig location (`~/.kube/config`). |
-| `cluster_provider_strategy` | string | auto-detect | How the server finds clusters. Valid values: `kubeconfig`, `in-cluster`, `kcp`, `disabled`. |
+| `kubeconfig` 🔒 | string | `""` | Path to the Kubernetes configuration file. A non-empty path selects the kubeconfig provider (including from a pod). If empty, client-go uses in-cluster config or `$KUBECONFIG` / `~/.kube/config`. `$KUBECONFIG` is not a server option. |
+| `cluster_provider_strategy` | string | auto-detect | How the server finds clusters. Valid values: `kubeconfig`, `in-cluster`, `kcp`, `disabled`. Optional when `kubeconfig` is set. Use this to pin `in-cluster`, `kcp`, `disabled`, or a custom/downstream provider. |
+| `ca_refresh_interval` | duration | `"24h"` | How often a CA fetched via the `caURL` kubeconfig cluster extension is re-fetched so a rotated cluster CA is picked up without a restart. Use `0s` to disable automatic re-fetching; the CA is then only refreshed when a manager is rebuilt or via an on-demand SIGHUP re-fetch. |
 
 **Example:**
 ```toml
 kubeconfig = "/home/user/.kube/config"
-cluster_provider_strategy = "kubeconfig"
 ```
+
+#### Client Limits and Watcher Timing
+
+These settings accept both TOML and environment variables. Env vars are integer milliseconds (or numeric QPS/burst); TOML durations use Go duration syntax (`"100ms"`, `"30s"`).
+
+| Field | Type | Default | Env | Description |
+|-------|------|---------|-----|-------------|
+| `kube_client_qps` | float | `0` (client-go default) | `KUBE_CLIENT_QPS` | Kubernetes client QPS limit. `0` leaves client-go defaults. |
+| `kube_client_burst` | integer | `0` (client-go default) | `KUBE_CLIENT_BURST` | Kubernetes client burst. `0` leaves client-go defaults. |
+| `kubeconfig_debounce_window` | duration | `"100ms"` | `KUBECONFIG_DEBOUNCE_WINDOW_MS` | Debounce window for kubeconfig file changes. |
+| `cluster_state_poll_interval` | duration | `"30s"` | `CLUSTER_STATE_POLL_INTERVAL_MS` | Poll interval for cluster API discovery changes. |
+| `cluster_state_debounce_window` | duration | `"5s"` | `CLUSTER_STATE_DEBOUNCE_WINDOW_MS` | Debounce window for cluster state reloads. |
+| `workspace_poll_interval` | duration | `"60s"` | `WORKSPACE_POLL_INTERVAL_MS` | Poll interval for kcp workspace changes. |
+| `workspace_debounce_window` | duration | `"5s"` | `WORKSPACE_DEBOUNCE_WINDOW_MS` | Debounce window for kcp workspace reloads. |
+
+```toml
+kube_client_qps = 50
+kube_client_burst = 100
+kubeconfig_debounce_window = "50ms"
+cluster_state_poll_interval = "10s"
+```
+
+None of these take effect on SIGHUP; restart the process.
 
 #### Cross-Cluster Access from a Pod
 
 When the MCP server runs inside a Kubernetes pod, it automatically detects the in-cluster environment and uses the `in-cluster` provider strategy to connect to the **local** cluster's API server.
 
-If you need the server to connect to a **different** cluster instead, you must explicitly provide both `kubeconfig` and `cluster_provider_strategy`. This overrides the automatic in-cluster detection.
+If you need the server to connect to a **different** cluster instead, set `kubeconfig` to that cluster's kubeconfig file. A non-empty path overrides in-cluster detection; `cluster_provider_strategy` is optional.
 
 **Required configuration:**
 
 ```toml
-kubeconfig = "/etc/kubernetes-mcp-server/external-kubeconfig"
-cluster_provider_strategy = "kubeconfig"
+kubeconfig = "/etc/kubernetes-mcp-server/kubeconfig"
 ```
 
-Or via CLI flags:
-
-```bash
-kubernetes-mcp-server --kubeconfig /etc/kubernetes-mcp-server/external-kubeconfig --cluster-provider kubeconfig
-```
-
-> **Important:** Both settings are required. Setting `--cluster-provider kubeconfig` alone (without `--kubeconfig`) will fail because the server still detects the in-cluster environment. The explicit `--kubeconfig` path overrides this detection.
+> **Important:** Setting `cluster_provider_strategy = "kubeconfig"` alone (without `kubeconfig`) will fail because the server still detects the in-cluster environment. The explicit kubeconfig path is what overrides that detection.
 
 **Mounting the kubeconfig in a pod:**
 
-To make an external kubeconfig available inside a pod, mount it from a Secret or ConfigMap:
+A Deployment must run HTTP mode: set `port` in TOML. Empty `port` is stdio, which is for a local client that spawns the process and talks over pipes — not for a pod.
+
+Put `port` and `kubeconfig` in TOML, mount both the config file and the kubeconfig, and expose the HTTP port:
 
 ```yaml
 apiVersion: v1
@@ -241,29 +503,68 @@ type: Opaque
 data:
   kubeconfig: <base64-encoded-kubeconfig>
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-server-config
+  namespace: mcp
+data:
+  config.toml: |
+    port = "8080"
+    kubeconfig = "/etc/kubernetes-mcp-server/kubeconfig"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kubernetes-mcp-server
   namespace: mcp
 spec:
+  selector:
+    matchLabels:
+      app: kubernetes-mcp-server
   template:
+    metadata:
+      labels:
+        app: kubernetes-mcp-server
     spec:
       containers:
         - name: kubernetes-mcp-server
+          image: quay.io/containers/kubernetes_mcp_server:latest
           args:
-            - --kubeconfig
-            - /etc/kubernetes-mcp-server/kubeconfig
-            - --cluster-provider
-            - kubeconfig
+            - --config
+            - /etc/kubernetes-mcp-server/config.toml
+          ports:
+            - name: http
+              containerPort: 8080
           volumeMounts:
+            - name: mcp-config
+              mountPath: /etc/kubernetes-mcp-server/config.toml
+              subPath: config.toml
+              readOnly: true
             - name: external-kubeconfig
-              mountPath: /etc/kubernetes-mcp-server
+              mountPath: /etc/kubernetes-mcp-server/kubeconfig
+              subPath: kubeconfig
               readOnly: true
       volumes:
+        - name: mcp-config
+          configMap:
+            name: mcp-server-config
         - name: external-kubeconfig
           secret:
             secretName: external-kubeconfig
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubernetes-mcp-server
+  namespace: mcp
+spec:
+  selector:
+    app: kubernetes-mcp-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
 ```
 
 **Troubleshooting cross-cluster access:**
@@ -275,21 +576,66 @@ If the server starts but operations fail (e.g., `failed to list namespaces: unkn
 3. **Permissions** — The credentials in the kubeconfig must have sufficient RBAC permissions on the target cluster.
 4. **TLS certificates** — If the external cluster uses a private CA, the CA certificate must be included in the kubeconfig or mounted separately.
 
+#### CA served over HTTPS
+
+When a cluster's API-server CA is served over HTTPS (e.g. an endpoint mirroring the cluster CA for cross-cluster consumers), a kubeconfig cluster entry can point at that URL instead of embedding the CA:
+
+```yaml
+apiVersion: v1
+clusters:
+- name: production
+  cluster:
+    server: https://kubernetes.default.svc
+    extensions:
+    - name: kubernetes-mcp-server
+      extension:
+        caURL: https://ca.production.example.com/
+```
+
+At manager creation the server fetches the CA from `caURL`, caches it to a file and points the Kubernetes client at that file. Because the client reloads CA files it is pointed at, a rotated CA (e.g. after the cluster is re-provisioned) is picked up without a restart; `ca_refresh_interval` controls how often the cache is re-fetched (default `24h`, `0s` disables). Other tools ignore the extension entirely.
+
+Notes:
+
+- The URL must be `https`. A trust root fetched over cleartext could be swapped by a network attacker, who could then impersonate the cluster the CA is meant to authenticate. Redirects are followed only to other `https` URLs, and the chain is capped.
+- The endpoint serving `caURL` must present a certificate the MCP process **already trusts** — system roots or `SSL_CERT_FILE` — **not** the cluster CA being fetched. This is a different trust domain from “the URL must be https”: a private-CA-signed endpoint fails at manager creation. Point `caURL` at something trusted by the process, or add its certificate to the process trust store.
+- The response must be a PEM CA certificate; other content fails fast with a clear error.
+- client-go re-checks the cached file roughly every 5 minutes (the `ClientsAllowCARotation` feature, beta and enabled by default in client-go 1.36+), so a rotation converges once the refresher writes the new CA; setting `ca_refresh_interval` below that cadence does not speed it up. With that feature disabled (e.g. `KUBE_FEATURE_ClientsAllowCARotation=false`), the client no longer re-reads the file, so a changed CA is only picked up when a manager is rebuilt.
+- Sending SIGHUP to reload configuration also triggers an immediate CA re-fetch, so a rotated CA can be picked up without waiting out `ca_refresh_interval` or restarting.
+- The cache directory (a subdirectory of the system temp dir, which honors `$TMPDIR`) must be writable. With a read-only root filesystem, mount an emptyDir at `/tmp` or set `$TMPDIR` to writable storage. The cache directory is per user (its name includes the user's uid on unix), so different users on one host do not collide.
+- The initial fetch happens at manager creation; if it fails (unreachable endpoint, non-PEM response), manager creation fails rather than silently using an empty trust store. For the default context that is startup; lazily-created contexts (other targets) surface the error on first use.
+- Applies to every cluster provider strategy backed by a kubeconfig (`kubeconfig` and `kcp`).
+
+### Cluster Authorization
+
+Kubernetes RBAC on the identity this server authenticates as is the access control to rely on for Kubernetes API calls. That identity is either the client's bearer token or a server credential such as a kubeconfig user or an in-cluster ServiceAccount. Scope a server credential with a Role or ClusterRole, as described in the [Kubernetes setup guide](getting-started-kubernetes.md). That boundary still holds when a tool annotation is wrong or the same credentials are used outside this process. [Tool RBAC metadata](tool-rbac-metadata.md) tells a client which permissions a tool may need so it can prepare that RBAC. The metadata does not grant access.
+
+Non-Kubernetes backends enforce their own checks on the credential this server presents. Kiali, NetObserv, Prometheus, Loki, and Tempo receive a bearer token: the client token in passthrough mode, after token exchange when configured, otherwise the kubeconfig or in-cluster ServiceAccount token. The backend decides whether that token is allowed. Helm registry fetches use registry credentials.
+
+`read_only`, `disable_destructive`, `toolsets`, `enabled_tools`, `disabled_tools`, `denied_resources`, `confirmation_rules`, `confirmation_fallback`, and the RBAC pre-check inside `validation_enabled` are best-effort guardrails. They narrow what an MCP client is offered or reject some calls before they are sent. They do not change the cluster permissions of the identity the server authenticates as.
+
+- **Tool hiding.** `read_only`, `disable_destructive`, `toolsets`, `enabled_tools`, and `disabled_tools` unregister tools. A hidden tool cannot be called. `read_only` keeps tools annotated `readOnlyHint=true`, which can still read any object that identity can get, including Secrets. `disable_destructive` unregisters tools annotated `destructiveHint=true`.
+- **Request denial.** `denied_resources` rejects matching group/version/kind calls on the Kubernetes client and omits those kinds from discovery. A match is by kind and API version. Verb, namespace, and name are ignored. An empty `kind` matches every kind in that group and version. Calls made with another HTTP client — Kiali, NetObserv, Prometheus, Loki, Tempo, and Helm registry fetches — do not consult this list.
+- **Prompts and pre-checks.** `confirmation_rules` prompt at tool invocation and on the Kubernetes client path. If the client cannot elicit a confirmation, the call proceeds unless `confirmation_fallback` is `"deny"` (the default is `"allow"`). With `validation_enabled`, the server sends a `SelfSubjectAccessReview` before the Kubernetes call. The API server still authorizes the real request. Schema validation from that flag checks the manifest.
+
+`enable_target_compatibility_tool_filters` (on by default) hides tools whose required APIs are absent. See [Target compatibility](#target-compatibility). That filter reflects which APIs the cluster advertises.
+
+OAuth settings (`require_oauth`, `authorization_url`, `skip_jwt_verification`, and the rest of [OAuth and Authorization](#oauth-and-authorization)), `cluster_auth_mode`, and TLS settings configure how clients authenticate to this server and which identity is sent to the cluster. Those settings stand apart from the guardrails in this section. With `cluster_auth_mode = "passthrough"` (the default when a bearer token is present), the API server authorizes that token, after token exchange when configured. With `cluster_auth_mode = "kubeconfig"`, or when no token is present and passthrough falls back, the API server authorizes the kubeconfig or in-cluster ServiceAccount identity.
+
 ### Access Control
 
-Control what operations the MCP server can perform on your Kubernetes cluster. These options help enforce the principle of least privilege, ensuring AI assistants only have the permissions they need for their intended tasks.
+`read_only` and `disable_destructive` unregister tools. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `read_only` | boolean | `false` | When `true`, only exposes tools annotated with `readOnlyHint=true`. Prevents any write operations on the cluster. |
-| `disable_destructive` | boolean | `false` | When `true`, disables tools annotated with `destructiveHint=true` (delete, update operations). Has no effect when `read_only` is `true`. |
+| `read_only` | boolean | `false` | When `true`, only tools annotated with `readOnlyHint=true` are registered. See [Cluster authorization](#cluster-authorization). |
+| `disable_destructive` | boolean | `false` | When `true`, tools annotated with `destructiveHint=true` are not registered. Has no effect when `read_only` is `true`. See [Cluster authorization](#cluster-authorization). |
 
 **Example:**
 ```toml
-# Production-safe configuration
+# Register only tools annotated readOnlyHint=true
 read_only = true
 
-# Or allow writes but prevent deletions
+# Or keep other write tools, and hide tools annotated destructiveHint=true
 disable_destructive = true
 ```
 
@@ -297,23 +643,31 @@ disable_destructive = true
 
 Toolsets group related tools together. Enable only the toolsets you need to reduce context size and improve LLM tool selection accuracy.
 
+Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `toolsets` | string[] | `["core", "config", "helm"]` | List of toolsets to enable. |
+| `toolsets` | string[] | `["core", "config"]` | List of toolsets to enable. See [Cluster authorization](#cluster-authorization). |
 
 **Available Toolsets:**
 
 <!-- AVAILABLE-TOOLSETS-START -->
 
-| Toolset  | Description                                                                                                                                                                     | Default |
-|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| config   | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                         | ✓       |
-| core     | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                             | ✓       |
-| helm     | Tools for managing Helm charts and releases                                                                                                                                     |         |
-| kcp      | Manage kcp workspaces and multi-tenancy features                                                                                                                                |         |
-| kiali    | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.            |         |
-| kubevirt | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details. |         |
-| tekton   | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, and TaskRuns.                                                                                              |         |
+| Toolset                        | Description                                                                                                                                                                                                                             | Default |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| config                         | View and manage the current local Kubernetes configuration (kubeconfig)                                                                                                                                                                 | ✓       |
+| core                           | Most common tools for Kubernetes management (Pods, Generic Resources, Events, etc.)                                                                                                                                                     | ✓       |
+| helm                           | Tools for managing Helm charts and releases                                                                                                                                                                                             |         |
+| kcp                            | Manage kcp workspaces and multi-tenancy features                                                                                                                                                                                        |         |
+| kiali                          | Most common tools for managing Kiali, check the [Kiali documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/KIALI.md) for more details.                                                                    |         |
+| kubevirt                       | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
+| netobserv                      | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
+| observability/alert-management | Toolset for listing OpenShift alerts and managing alert rules via the monitoring-plugin management API.                                                                                                                                 |         |
+| observability/logs             | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
+| observability/metrics          | Toolset for querying Prometheus and Alertmanager, including listing, creating, updating, and deleting silences.                                                                                                                         |         |
+| observability/otelcol          | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
+| observability/traces           | Distributed tracing tools for discovering Tempo instances, searching and retrieving traces, and exploring trace attributes.                                                                                                             |         |
+| tekton                         | Tekton pipeline management tools for Pipelines, PipelineRuns, Tasks, TaskRuns, and troubleshooting.                                                                                                                                     |         |
 
 <!-- AVAILABLE-TOOLSETS-END -->
 
@@ -322,6 +676,9 @@ Toolsets group related tools together. Enable only the toolsets you need to redu
 # Enable specific toolsets
 toolsets = ["core", "config", "helm", "kubevirt"]
 ```
+
+Some tools require additional cluster APIs, resource instances, or permissions.
+See [Tool requirements](tool-requirements.md) for availability prerequisites.
 
 **Available Resources:**
 
@@ -341,10 +698,24 @@ toolsets = ["core", "config", "helm", "kubevirt"]
 
 Fine-grained control over individual tools within enabled toolsets.
 
+`enabled_tools` and `disabled_tools` unregister tools. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled_tools` | string[] | `[]` | Allowlist of specific tools to enable. When set, only these tools are available. |
-| `disabled_tools` | string[] | `[]` | Denylist of specific tools to disable. Applied after `enabled_tools`. |
+| `enabled_tools` | string[] | `[]` | Allowlist of specific tools to enable. When set, only these tools are registered. See [Cluster authorization](#cluster-authorization). |
+| `opt_in_tools` | string[] | `[]` | Additional tools to enable on top of the current selection, whether that is the default selection or an explicit `enabled_tools` allowlist. |
+| `disabled_tools` | string[] | `[]` | Denylist of specific tools to unregister. Applied after `enabled_tools`. See [Cluster authorization](#cluster-authorization). |
+
+The owning toolset must be enabled in `toolsets` for a tool to be available. Neither `enabled_tools` nor `opt_in_tools` enables a toolset automatically. All selections remain subject to `read_only`, `disable_destructive`, and other tool availability filters.
+
+The `configuration_view` tool is disabled by default in HTTP mode because it exposes kubeconfig contents. Add it to `opt_in_tools` to enable it alongside the other available tools, without maintaining a complete allowlist:
+
+```toml
+toolsets = ["core", "config"]
+opt_in_tools = ["configuration_view"]
+```
+
+Including `configuration_view` in an explicit `enabled_tools` allowlist also enables it in HTTP mode. If a tool appears in `disabled_tools`, it remains disabled even when it is in either enable list.
 
 **Example:**
 ```toml
@@ -353,6 +724,22 @@ enabled_tools = ["pods_list", "pods_get", "pods_log"]
 
 # Or disable specific tools from enabled toolsets
 disabled_tools = ["resources_delete", "pods_delete"]
+```
+
+### Target Compatibility
+
+Hides tools that require API groups the target cluster does not advertise. This reflects cluster capabilities. See [Cluster authorization](#cluster-authorization).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enable_target_compatibility_tool_filters` | boolean | `true` | When `true`, tools that require API groups absent from the cluster are hidden (for example OpenShift-only `projects_list`, or `pods_top` / `nodes_top` when the Metrics Server API is unavailable). Set to `false` to turn this check off, so no tool is hidden for a missing API group (other settings such as `read_only` can still hide tools). |
+
+The old name `experimental_enable_target_compatibility_tool_filters` is deprecated and still read, with a warning in the log. See [Configuration Changes](configuration-changes.md#target-compatibility-filters-on-by-default).
+
+**Example:**
+```toml
+# Do not hide tools based on which API groups the target cluster(s) support
+enable_target_compatibility_tool_filters = false
 ```
 
 ### Tool Overrides
@@ -366,7 +753,7 @@ Customize tool descriptions shown to MCP clients without modifying source code. 
 **Override Fields:**
 - `description` (optional): Custom description for the tool. Empty strings are ignored.
 
-Tools are keyed by their flat name (e.g., `pods_list`, `resources_get`), consistent with `enabled_tools` and `disabled_tools`.
+Tools are keyed by their flat name (e.g., `pods_list`, `resources_get`), consistent with `enabled_tools`, `opt_in_tools`, and `disabled_tools`.
 
 **Example:**
 ```toml
@@ -379,15 +766,17 @@ description = "Get a Kubernetes resource by name. Always specify the namespace e
 
 ### Denied Resources
 
-Prevent access to specific Kubernetes resource types.
+Reject Kubernetes API calls for specific group/version/kind combinations, and omit those kinds from discovery.
+
+Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `denied_resources` | array | `[]` | List of GroupVersionKind objects that should not be accessible. |
+| `denied_resources` | array | `[]` | GroupVersionKind entries to reject on the Kubernetes client. An empty `kind` matches every kind in that group and version. See [Cluster authorization](#cluster-authorization). |
 
 **Example:**
 ```toml
-# Deny access to Secrets and ConfigMaps
+# Reject Secret and ConfigMap calls on the Kubernetes client
 [[denied_resources]]
 group = ""
 version = "v1"
@@ -398,7 +787,7 @@ group = ""
 version = "v1"
 kind = "ConfigMap"
 
-# Deny access to RBAC resources for additional security
+# Also reject common RBAC kinds on the Kubernetes client
 [[denied_resources]]
 group = "rbac.authorization.k8s.io"
 version = "v1"
@@ -492,22 +881,28 @@ Configure OAuth/OIDC authentication for HTTP mode deployments.
 |-------|------|---------|-------------|
 | `require_oauth` | boolean | `false` | When `true`, requires OAuth authentication for all requests. This **DOES NOT** determine validation strategy, which is done separately by `authorization_url` and `skip_jwt_verification` |
 | `oauth_audience` | string | `""` | Valid audience for OAuth tokens (for offline JWT claim validation). |
-| `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and STS exchange. |
+| `authorization_url` | string | `""` | URL of the OIDC authorization server for token validation and token exchange. |
 | `skip_jwt_verification` | boolean | `false` | When true and authorization_url is unset, the server forwards the bearer token without any local validation (no parse, no claims check, no audience check). Required to enable pure passthrough with non-JWT tokens (e.g., OpenShift OAuth sha256~…). When true and authorization_url is set, this flag has no effect — the configured OIDC provider validates tokens normally. Only use the no-authorization_url form when a downstream component (cluster, reverse proxy) is the authority. |
 | `disable_dynamic_client_registration` | boolean | `false` | When `true`, disables dynamic client registration in `.well-known` endpoints. |
 | `oauth_scopes` | string[] | `[]` | Supported client scopes for the OAuth flow. |
-| `sts_client_id` | string | `""` | OAuth client ID for backend token exchange. |
-| `sts_client_secret` | string | `""` | OAuth client secret for backend token exchange. |
-| `sts_audience` | string | `""` | Audience for STS token exchange. |
-| `sts_scopes` | string[] | `[]` | Scopes for STS token exchange. |
-| `token_exchange_strategy` | string | `""` | Token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. |
-| `sts_auth_style` | string | `"params"` | How client credentials are sent: `params` (body), `header` (Basic Auth), `assertion` (JWT), or `federated` (external IdP token file). |
-| `sts_client_cert_file` | string | `""` | Path to client certificate PEM file (for `assertion` auth style). |
-| `sts_client_key_file` | string | `""` | Path to client private key PEM file (for `assertion` auth style). |
-| `sts_federated_token_file` | string | `""` | Path to a JWT file from an external identity provider, e.g., SPIRE JWT-SVID (for `federated` auth style). |
+| `token_exchange.strategy` | string | required | Registered token exchange strategy: `rfc8693`, `keycloak-v1`, or `entra-obo`. The block enables global exchange and requires `require_oauth = true`, plus either `token_exchange.token_url` or `authorization_url` to reach a token endpoint. |
+| `token_exchange.audience` | string | `""` | Audience for the exchanged token. |
+| `token_exchange.scopes` | string[] | `[]` | Scopes for the exchanged token. |
+| `token_exchange.subject_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `subject_token_type`. |
+| `token_exchange.requested_token_type` | string | `"urn:ietf:params:oauth:token-type:access_token"` | RFC 8693 `requested_token_type`. |
+| `token_exchange.token_url` | string | *(falls back to OIDC discovery)* | Explicit token-exchange endpoint. Falls back to the endpoint discovered from `authorization_url` **only when unset** — a set-but-invalid value is rejected at startup, never silently ignored. Use this to point token exchange at a separate STS gateway (cross-realm deployments), or to enable token exchange when no `authorization_url` is configured (e.g., with `skip_jwt_verification=true`). |
+| `token_exchange.client_auth.method` | string | none | Required when client credentials are configured: `client_secret_basic`, `client_secret_post`, `private_key_jwt`, or `jwt_file`. May be omitted when only `client_id` is set for a public client. |
+| `token_exchange.client_auth.client_id` | string | `""` | OAuth client ID. May be configured without a method or secret for a public client. |
+| `token_exchange.client_auth.client_secret` 🔒 | string | `""` | Required by the client-secret methods. |
+| `token_exchange.client_auth.certificate_file` | string | `""` | Certificate PEM required by `private_key_jwt`. |
+| `token_exchange.client_auth.private_key_file` 🔒 | string | `""` | Private-key PEM required by `private_key_jwt`. |
+| `token_exchange.client_auth.token_file` 🔒 | string | `""` | JWT file required by `jwt_file`. |
 | `cluster_auth_mode` | string | `""` | Cluster auth mode: `passthrough` (forward Authorization header when present, fall back to kubeconfig when absent) or `kubeconfig` (always use kubeconfig credentials). Defaults to `passthrough`. |
 | `certificate_authority` | string | `""` | Path to CA certificate for validating authorization server connections. |
 | `server_url` | string | `""` | Public URL of the MCP server (used for OAuth metadata). |
+| `trust_proxy_headers` | boolean | `false` | When `true`, honor `X-Forwarded-*` / `X-Real-IP` from a reverse proxy. Leave `false` unless the server is behind a trusted proxy. |
+
+For release-to-release configuration migrations, see [Configuration Changes](configuration-changes.md).
 
 **Example (with client secret):**
 ```toml
@@ -516,9 +911,14 @@ authorization_url = "https://keycloak.example.com/realms/mcp"
 oauth_audience = "kubernetes-mcp-server"
 oauth_scopes = ["openid", "profile"]
 
-sts_client_id = "mcp-backend"
-sts_client_secret = "your-client-secret"
-sts_audience = "kubernetes-api"
+[token_exchange]
+strategy = "rfc8693"
+audience = "kubernetes-api"
+
+[token_exchange.client_auth]
+method = "client_secret_basic"
+client_id = "mcp-backend"
+client_secret = "your-client-secret"
 ```
 
 **Example (with certificate-based auth for Entra ID):**
@@ -527,12 +927,36 @@ require_oauth = true
 authorization_url = "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
 oauth_audience = "<CLIENT_ID>"
 
-token_exchange_strategy = "entra-obo"
-sts_client_id = "<CLIENT_ID>"
-sts_auth_style = "assertion"
-sts_client_cert_file = "/path/to/client.crt"
-sts_client_key_file = "/path/to/client.key"
-sts_scopes = ["api://<DOWNSTREAM_API>/.default"]
+[token_exchange]
+strategy = "entra-obo"
+scopes = ["api://<DOWNSTREAM_API>/.default"]
+
+[token_exchange.client_auth]
+method = "private_key_jwt"
+client_id = "<CLIENT_ID>"
+certificate_file = "/path/to/client.crt"
+private_key_file = "/path/to/client.key"
+```
+
+**Example (separate STS gateway from user-token issuer):**
+
+`authorization_url` validates the user's bearer token; `token_exchange.token_url` is the
+distinct gateway that mints the delegated cluster token. The two URLs may point at
+different hosts/realms.
+```toml
+require_oauth     = true
+authorization_url = "https://idp.example.com/realms/users"
+oauth_audience    = "kubernetes-mcp-server"
+
+[token_exchange]
+strategy  = "rfc8693"
+audience  = "kubernetes-api"
+token_url = "https://sts-gateway.internal/oauth/token"
+
+[token_exchange.client_auth]
+method        = "client_secret_post"
+client_id     = "mcp-backend"
+client_secret = "your-client-secret"
 ```
 
 **Pure token passthrough (delegate validation to the cluster):**
@@ -555,10 +979,13 @@ Configure OpenTelemetry distributed tracing and metrics. See [OTEL.md](OTEL.md) 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `telemetry.enabled` | boolean | auto | Explicitly enable/disable telemetry. Auto-enabled when `endpoint` is set. |
-| `telemetry.endpoint` | string | `""` | OTLP endpoint URL (e.g., `http://localhost:4317`). Can be overridden by `OTEL_EXPORTER_OTLP_ENDPOINT`. |
-| `telemetry.protocol` | string | `"grpc"` | OTLP protocol: `grpc` or `http/protobuf`. Can be overridden by `OTEL_EXPORTER_OTLP_PROTOCOL`. |
-| `telemetry.traces_sampler` | string | `""` | Trace sampling strategy. Can be overridden by `OTEL_TRACES_SAMPLER`. |
-| `telemetry.traces_sampler_arg` | float | - | Sampling ratio (0.0-1.0) for ratio-based samplers. Can be overridden by `OTEL_TRACES_SAMPLER_ARG`. |
+| `telemetry.service_name` | string | `""` | Trace service name. Empty uses the built-in server name. Overridden by `OTEL_SERVICE_NAME` when set. |
+| `telemetry.endpoint` | string | `""` | OTLP endpoint URL (e.g., `http://localhost:4317`). Overridden by `OTEL_EXPORTER_OTLP_ENDPOINT` when set. |
+| `telemetry.protocol` | string | `"grpc"` | OTLP protocol: `grpc` or `http/protobuf`. Overridden by `OTEL_EXPORTER_OTLP_PROTOCOL` when set. |
+| `telemetry.traces_sampler` | string | `""` | Trace sampling strategy. Overridden by `OTEL_TRACES_SAMPLER` when set. |
+| `telemetry.traces_sampler_arg` | float | - | Sampling ratio (0.0-1.0) for ratio-based samplers. Overridden by `OTEL_TRACES_SAMPLER_ARG` when set. |
+| `telemetry.logs_exporter` | string | `""` | OTLP logs exporter. Set to `none` to disable log export. Overridden by `OTEL_LOGS_EXPORTER` when set. |
+| `telemetry.metrics_exporter` | string | `""` | OTLP metrics exporter. Set to `none` to disable metrics export. Overridden by `OTEL_METRICS_EXPORTER` when set. |
 
 **Available Samplers:**
 - `always_on` - Sample all traces
@@ -582,12 +1009,12 @@ Pre-execution validation catches errors before they reach the Kubernetes API, pr
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `validation_enabled` | boolean | `false` | When `true`, enables schema validation and RBAC pre-checks for all API requests. Resource existence is always checked regardless of this setting. |
+| `validation_enabled` | boolean | `false` | When `true`, enables schema validation and RBAC pre-checks for Kubernetes API requests made through this server's Kubernetes client. Resource existence is always checked regardless of this setting. See [Cluster authorization](#cluster-authorization). |
 
-When enabled, the validation layer runs at the HTTP RoundTripper level, intercepting all Kubernetes API calls (including those from plugins like Helm, KubeVirt, and Kiali). It performs:
+When enabled, the validation layer runs at the HTTP RoundTripper level, intercepting Kubernetes API calls made through this server's Kubernetes client (including those from plugins like Helm, KubeVirt, and Kiali). It performs:
 
 - **Schema validation** — Validates resource manifests against the cluster's OpenAPI schema for create/update operations
-- **RBAC pre-checks** — Verifies permissions using `SelfSubjectAccessReview` before attempting operations
+- **RBAC pre-checks** — Sends a `SelfSubjectAccessReview` before attempting operations. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as; schema validation is unchanged. See [Cluster authorization](#cluster-authorization).
 
 Resource existence validation (catching typos like "Deploymnt" instead of "Deployment") runs as part of access control regardless of this setting.
 
@@ -600,7 +1027,9 @@ validation_enabled = true
 
 ### Confirmation Rules
 
-Prompt users for confirmation before dangerous actions. Rules operate at two levels:
+Prompt users for confirmation before dangerous actions. Best-effort guardrail. It does not change the cluster permissions of the identity the server authenticates as. See [Cluster authorization](#cluster-authorization).
+
+Rules operate at two levels:
 
 - **Tool-level** — matches on tool name or `DestructiveHint` annotation. Fires once before the tool handler runs.
 - **Kube-level** — matches on Kubernetes API verb, kind, group, version, name, or namespace. Fires per API call during handler execution.
@@ -611,7 +1040,7 @@ If multiple rules match at the same level, their messages are merged into a sing
 
 | Field | Type | Level | Description |
 |-------|------|-------|-------------|
-| `confirmation_fallback` | string | global | Default fallback: `"allow"` or `"deny"` (default: `"allow"`) |
+| `confirmation_fallback` | string | global | Default fallback: `"allow"` or `"deny"` (default: `"allow"`). See [Cluster authorization](#cluster-authorization). |
 | `tool` | string | tool | Tool name to match (e.g. `"helm_uninstall"`) |
 | `destructive` | boolean | tool | Match tools with `DestructiveHint` annotation |
 | `verb` | string | kube | Kubernetes verb (`"get"`, `"delete"`, `"list"`, etc.) |
@@ -655,6 +1084,8 @@ message = "Accessing a Secret."
 ### Toolset-Specific Configuration
 
 Some toolsets accept additional configuration via the `toolset_configs` map.
+
+For the opt-in alert management toolset, see [Alert management](alert-management.md).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -709,28 +1140,41 @@ Configure cluster provider-specific settings via the `cluster_provider_configs` 
 # kcp-specific configuration
 ```
 
-## CLI Configuration Options
+## Environment Variables
 
-The following options can be set via command-line arguments. CLI arguments override TOML configuration values.
+Empty or unset variables are ignored (they do not override TOML or defaults). Non-empty values win over files.
+
+| Variable | TOML key | Notes |
+|----------|----------|-------|
+| `MCP_CONFIG_PATH` | — | Path to the main TOML file, or `-` to read it from stdin as with `--config -`. Ignored if `--config` is set. |
+| `TLS_MIN_VERSION` | `tls_min_version` | |
+| `TLS_CIPHER_SUITES` | `tls_cipher_suites` | Comma-separated list |
+| `OTEL_SERVICE_NAME` | `telemetry.service_name` | |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `telemetry.endpoint` | |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `telemetry.protocol` | |
+| `OTEL_TRACES_SAMPLER` | `telemetry.traces_sampler` | |
+| `OTEL_TRACES_SAMPLER_ARG` | `telemetry.traces_sampler_arg` | |
+| `OTEL_LOGS_EXPORTER` | `telemetry.logs_exporter` | Use `none` to disable |
+| `OTEL_METRICS_EXPORTER` | `telemetry.metrics_exporter` | Use `none` to disable |
+| `KUBE_CLIENT_QPS` | `kube_client_qps` | |
+| `KUBE_CLIENT_BURST` | `kube_client_burst` | |
+| `KUBECONFIG_DEBOUNCE_WINDOW_MS` | `kubeconfig_debounce_window` | Integer milliseconds |
+| `CLUSTER_STATE_POLL_INTERVAL_MS` | `cluster_state_poll_interval` | Integer milliseconds |
+| `CLUSTER_STATE_DEBOUNCE_WINDOW_MS` | `cluster_state_debounce_window` | Integer milliseconds |
+| `WORKSPACE_POLL_INTERVAL_MS` | `workspace_poll_interval` | Integer milliseconds |
+| `WORKSPACE_DEBOUNCE_WINDOW_MS` | `workspace_debounce_window` | Integer milliseconds |
+
+`$KUBECONFIG` is still honored by client-go when `kubeconfig` is empty. It is not a server option and is not listed above.
+
+## CLI
 
 | Option | Description |
 |--------|-------------|
-| `--port` | Start in HTTP mode on the specified port |
-| `--log-level` | Logging verbosity (0-9) |
-| `--log-file` | Path to a server log file. Required for logging in stdio mode; replaces stdout logging in HTTP mode. Use `stderr` to log to the standard error stream. |
-| `--config` | Path to main TOML configuration file |
-| `--config-dir` | Path to drop-in configuration directory |
-| `--kubeconfig` | Path to Kubernetes configuration file |
-| `--list-output` | Output format for list operations (`yaml` or `table`) |
-| `--read-only` | Enable read-only mode |
-| `--disable-destructive` | Disable destructive operations |
-| `--stateless` | Enable stateless mode (no notifications) |
-| `--toolsets` | Comma-separated list of toolsets to enable |
-| `--disable-multi-cluster` | Disable multi-cluster support |
-| `--cluster-provider` | Cluster provider strategy (`kubeconfig`, `in-cluster`, `kcp`, `disabled`) |
-| `--tls-cert` | Path to TLS certificate file for HTTPS (must be used with `--tls-key`) |
-| `--tls-key` | Path to TLS private key file for HTTPS (must be used with `--tls-cert`) |
-| `--require-tls` | Enforce TLS for server and all outbound connections |
+| `--version` | Print version information and quit |
+| `--config` | Path of the main TOML configuration file, or `-` to read it from stdin (HTTP mode only). Overrides `$MCP_CONFIG_PATH` |
+| `--config-dir` | Directory of lexical `.toml` files. Usable alone or with `--config`. Omitted means no drop-ins. Relative paths are resolved against the working directory |
+
+HTTP mode, kubeconfig, toolsets, TLS, OAuth, and the rest of the runtime surface are TOML (and, where listed above, env). There are no runtime flags for those options.
 
 ## Complete Example
 
@@ -741,8 +1185,13 @@ A comprehensive configuration file demonstrating all major options:
 log_level = 2
 log_file = "/var/log/kubernetes-mcp-server.log"
 port = "8080"
+bind_address = "0.0.0.0"
 list_output = "table"
+max_backend_response_bytes = 4194304
+max_result_bytes = 16777216
+max_in_flight = 64
 stateless = false
+disable_localhost_protection = false
 
 # HTTP server security
 [http]
@@ -753,7 +1202,8 @@ rate_limit_burst = 10
 
 # Kubernetes connection
 kubeconfig = "/home/user/.kube/config"
-cluster_provider_strategy = "kubeconfig"
+kube_client_qps = 50
+kube_client_burst = 100
 
 # Access control
 read_only = false
@@ -778,8 +1228,7 @@ kind = "Secret"
 # Server instructions for MCP clients
 server_instructions = """
 Use this server for Kubernetes cluster management including pods, deployments,
-services, and Helm releases. This server is configured with read-only access
-to Secrets.
+services, and Helm releases. Secret is listed in denied_resources.
 """
 
 # Custom prompts
@@ -811,8 +1260,10 @@ allowed_registries = ["oci://ghcr.io/myorg", "https://charts.example.com"]
 
 ## Related Documentation
 
+- [configuration-changes.md](configuration-changes.md) - Versioned configuration migrations
 - [prompts.md](prompts.md) - MCP Prompts configuration
 - [OTEL.md](OTEL.md) - OpenTelemetry observability
 - [KIALI.md](KIALI.md) - Kiali toolset configuration
 - [KEYCLOAK_OIDC_SETUP.md](KEYCLOAK_OIDC_SETUP.md) - OAuth/OIDC setup guide
 - [getting-started-kubernetes.md](getting-started-kubernetes.md) - Kubernetes setup guide
+- [tool-rbac-metadata.md](tool-rbac-metadata.md) - Permission metadata for planning RBAC

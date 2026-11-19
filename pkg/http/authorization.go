@@ -14,7 +14,6 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
-	internalk8s "github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
 )
 
@@ -53,39 +52,28 @@ func write401(w http.ResponseWriter, wwwAuthenticateHeader, errorType, message s
 //	         - The token is then validated against the OIDC Provider.
 //
 //	         see TestAuthorizationOidcToken
-func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oauth.State) func(http.Handler) http.Handler {
+func AuthorizationMiddleware(cfgState *config.ConfigState, oauthState *oauth.State) func(http.Handler) http.Handler {
 	var skipJWTWarningOnce sync.Once
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger := klogutil.FromContext(r.Context())
-			// Skip auth for infrastructure endpoints (health, metrics) and well-known endpoints
-			// Use prefix matching per endpoint to handle sub-paths like /.well-known/oauth-protected-resource/sse
-			requestPath := r.URL.EscapedPath()
-			isWellKnown := !strings.Contains(requestPath, "..") && slices.ContainsFunc(WellKnownEndpoints, func(ep string) bool {
-				return requestPath == ep || strings.HasPrefix(requestPath, ep+"/")
-			})
-			if slices.Contains(infraPaths, r.URL.Path) || isWellKnown {
-				next.ServeHTTP(w, r)
-				return
-			}
 			// Load the latest config snapshot on every request so that
 			// SIGHUP-reloaded auth settings take effect immediately.
 			staticConfig := cfgState.Load()
-			if !staticConfig.RequireOAuth {
-				// Always extract the Authorization header so it can be forwarded
-				// to the cluster, even without OAuth validation.
-				if authHeader := r.Header.Get("Authorization"); authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-					ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
-				}
+			// Skip auth for infrastructure endpoints (health, metrics) and well-known endpoints.
+			// When metrics are on a separate port, only /healthz is exempt on the main port.
+			if slices.Contains(infraPaths(staticConfig.MetricsPort.Get() != ""), r.URL.Path) || isWellKnownPath(r.URL.EscapedPath()) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !staticConfig.RequireOAuth.Get() {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			wwwAuthenticateHeader := "Bearer realm=\"Kubernetes MCP Server\""
-			if staticConfig.OAuthAudience != "" {
-				wwwAuthenticateHeader += fmt.Sprintf(`, audience="%s"`, staticConfig.OAuthAudience)
+			if staticConfig.OAuthAudience.Get() != "" {
+				wwwAuthenticateHeader += fmt.Sprintf(`, audience="%s"`, staticConfig.OAuthAudience.Get())
 			}
 
 			authHeader := r.Header.Get("Authorization")
@@ -114,12 +102,11 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 
 			// Token passthrough, skips all JWT processing
 			// Cluster is the sole authority for validating token (ex. sha256 token with OpenShift)
-			if staticConfig.SkipJWTVerification && staticConfig.AuthorizationURL == "" {
+			if staticConfig.SkipJWTVerification.Get() && staticConfig.AuthorizationURL.Get() == "" {
 				skipJWTWarningOnce.Do(func() {
 					klogutil.LogWarn(logger, "Bearer token forwarded without local validation (skip_jwt_verification=true and no authorization_url) - the cluster is the sole authority")
 				})
-				ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
-				next.ServeHTTP(w, r.WithContext(ctx))
+				next.ServeHTTP(w, r)
 				return
 			}
 
@@ -130,14 +117,14 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 			}
 			// Offline validation
 			if err == nil {
-				err = claims.ValidateOffline(staticConfig.OAuthAudience)
+				err = claims.ValidateOffline(staticConfig.OAuthAudience.Get())
 			}
 			// Online OIDC provider validation
 			if err == nil {
 				snapshot := oauthState.Load()
 				if snapshot == nil || snapshot.OIDCProvider == nil {
 					// Provider was configured (authorization_url set) but is unavailable — reject
-					if staticConfig.AuthorizationURL != "" {
+					if staticConfig.AuthorizationURL.Get() != "" {
 						logger.V(1).Info("Authentication rejected - OIDC provider unavailable",
 							"http.request.method", r.Method,
 							"url.path", r.URL.Path,
@@ -157,7 +144,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 					http.Error(w, "JWT verification not configured - set authorization_url or skip_jwt_verification", http.StatusInternalServerError)
 					return
 				} else {
-					err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience, snapshot.OIDCProvider)
+					err = claims.ValidateWithProvider(r.Context(), staticConfig.OAuthAudience.Get(), snapshot.OIDCProvider)
 				}
 			}
 			if err != nil {
@@ -171,10 +158,7 @@ func AuthorizationMiddleware(cfgState *config.StaticConfigState, oauthState *oau
 				return
 			}
 
-			// Store the validated Authorization header in context for MCP handlers
-			// This is necessary because SSE transport doesn't propagate HTTP headers to MCP requests
-			ctx := context.WithValue(r.Context(), internalk8s.OAuthAuthorizationHeader, authHeader)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -223,9 +207,11 @@ func (c *JWTClaims) ValidateOffline(audience string) error {
 // ValidateWithProvider validates the JWT claims against the OIDC provider.
 func (c *JWTClaims) ValidateWithProvider(ctx context.Context, audience string, provider *oidc.Provider) error {
 	if provider != nil {
-		verifier := provider.Verifier(&oidc.Config{
-			ClientID: audience,
-		})
+		cfg := &oidc.Config{ClientID: audience}
+		if audience == "" {
+			cfg.SkipClientIDCheck = true
+		}
+		verifier := provider.Verifier(cfg)
 		_, err := verifier.Verify(ctx, c.Token)
 		if err != nil {
 			return fmt.Errorf("OIDC token validation error: %w", err)

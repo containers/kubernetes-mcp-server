@@ -57,9 +57,9 @@ func InitGetLogs() []api.ServerTool {
 						Description: "Output formatting for chat. 'codeblock' wraps logs in ~~~ fences (recommended). 'plain' returns raw text like kubernetes-mcp-server pods_log.",
 						Enum:        []any{"codeblock", "plain"},
 					},
-					"clusterName": {
+					"meshCluster": {
 						Type:        "string",
-						Description: "Optional. Name of the cluster to get the logs from. If not provided, will use the default cluster name in the Kiali KubeConfig",
+						Description: meshClusterDescription(),
 					},
 				},
 				Required: []string{"namespace", "name"},
@@ -71,16 +71,19 @@ func InitGetLogs() []api.ServerTool {
 				IdempotentHint:  ptr.To(false),
 				OpenWorldHint:   ptr.To(true),
 			},
-		}, Handler: workloadLogsHandler,
+		}, RBAC: LogsRBAC(), Handler: workloadLogsHandler,
 	})
 
 	return ret
 }
 
 func workloadLogsHandler(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
-	kiali := kialiclient.NewKiali(params, params.RESTConfig())
+	kiali, err := kialiclient.NewKiali(params.Config, params.RESTConfig())
+	if err != nil {
+		return api.NewToolCallResult("", err), nil
+	}
 	arguments := params.GetArguments()
-	content, err := kiali.ExecuteRequest(params.Context, KialiGetLogsEndpoint, arguments)
+	content, err := kiali.ExecuteRequest(params.Context, KialiGetLogsEndpoint, remapMeshCluster(arguments))
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to get logs: %w", err)), nil
 	}

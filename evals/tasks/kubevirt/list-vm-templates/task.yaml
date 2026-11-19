@@ -1,0 +1,157 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: kubevirt
+    project: kubevirt
+    requires: kubevirt
+  annotations:
+    project-name: "KubeVirt"
+    project-url: "https://kubevirt.io"
+  name: "list-vm-templates"
+  difficulty: easy
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-list
+        ignoreNotFound: true
+    - k8s.create:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-list
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: template.kubevirt.io/v1beta1
+          kind: VirtualMachineTemplate
+          metadata:
+            name: fedora-server
+            namespace: vmt-test-list
+          spec:
+            parameters:
+              - name: VM_NAME
+                displayName: "Virtual Machine Name"
+                required: true
+              - name: MEMORY
+                displayName: "Memory Size"
+                value: "2Gi"
+            virtualMachine:
+              metadata:
+                name: ${VM_NAME}
+              spec:
+                runStrategy: Halted
+                template:
+                  spec:
+                    domain:
+                      memory:
+                        guest: ${MEMORY}
+                      devices:
+                        disks:
+                          - name: containerdisk
+                            disk:
+                              bus: virtio
+                    volumes:
+                      - name: containerdisk
+                        containerDisk:
+                          image: quay.io/containerdisks/fedora:latest
+          ---
+          apiVersion: template.kubevirt.io/v1beta1
+          kind: VirtualMachineTemplate
+          metadata:
+            name: ubuntu-desktop
+            namespace: vmt-test-list
+          spec:
+            parameters:
+              - name: VM_NAME
+                displayName: "Virtual Machine Name"
+                required: true
+              - name: CPU_CORES
+                displayName: "CPU Cores"
+                value: "2"
+            virtualMachine:
+              metadata:
+                name: ${VM_NAME}
+              spec:
+                runStrategy: Halted
+                template:
+                  spec:
+                    domain:
+                      cpu:
+                        cores: ${CPU_CORES}
+                      memory:
+                        guest: 4Gi
+                      devices:
+                        disks:
+                          - name: containerdisk
+                            disk:
+                              bus: virtio
+                    volumes:
+                      - name: containerdisk
+                        containerDisk:
+                          image: quay.io/containerdisks/ubuntu:24.04
+          ---
+          apiVersion: template.kubevirt.io/v1beta1
+          kind: VirtualMachineTemplate
+          metadata:
+            name: centos-minimal
+            namespace: vmt-test-list
+          spec:
+            parameters:
+              - name: VM_NAME
+                displayName: "Virtual Machine Name"
+                required: true
+            virtualMachine:
+              metadata:
+                name: ${VM_NAME}
+              spec:
+                runStrategy: Halted
+                template:
+                  spec:
+                    domain:
+                      memory:
+                        guest: 1Gi
+                      devices:
+                        disks:
+                          - name: containerdisk
+                            disk:
+                              bus: virtio
+                    volumes:
+                      - name: containerdisk
+                        containerDisk:
+                          image: quay.io/containerdisks/centos-stream:9
+          EOF
+  verify:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          set -e
+          NS="vmt-test-list"
+
+          COUNT=$(kubectl get virtualmachinetemplate.template.kubevirt.io/v1beta1 -n "$NS" --no-headers 2>/dev/null | wc -l)
+          if [ "$COUNT" -ne 3 ]; then
+            echo "ERROR: Expected 3 VirtualMachineTemplates, found $COUNT"
+            exit 1
+          fi
+          echo "All 3 VirtualMachineTemplates exist in namespace"
+          exit 0
+  cleanup:
+    - script:
+        inline: |-
+          #!/usr/bin/env bash
+          kubectl delete virtualmachinetemplate.template.kubevirt.io/v1beta1 --all -n vmt-test-list --ignore-not-found=true 2>/dev/null || true
+    - k8s.delete:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: vmt-test-list
+        ignoreNotFound: true
+  prompt:
+    inline: List all VirtualMachineTemplates in the vmt-test-list namespace. Tell me how many templates are available and what their names are.

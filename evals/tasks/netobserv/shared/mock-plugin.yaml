@@ -1,0 +1,225 @@
+# Minimal NetObserv console plugin API mock for mcpchecker (Kind / local dev).
+# Matches paths in pkg/toolsets/netobserv/tools/endpoints.go.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netobserv
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netobserv-plugin-mock
+  namespace: netobserv
+data:
+  server.py: |
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json
+    import urllib.parse
+
+    NAMESPACES = ["default", "netobserv-eval"]
+    FLOW_RECORDS = {
+        "result": [
+            {
+                "name": "eval-flow-1",
+                "namespace": "default",
+                "workload": "eval-mock",
+            }
+        ],
+        "stats": {"flows": 1},
+    }
+    FLOW_METRICS = {
+        "data": [{"metric": {}, "values": [[0, "42"]]}],
+        "status": "success",
+    }
+    TLS_METRICS = {
+        "data": [
+            {
+                "metric": {"TLSVersion": "TLS 1.3"},
+                "values": [[0, "10240"]],
+            }
+        ],
+        "status": "success",
+    }
+    LAST_REQUESTS = {}
+    REQUEST_HISTORY = {}
+
+
+    def record_request(path, query):
+        entry = {
+            "path": path,
+            "query": {key: values[0] if len(values) == 1 else values for key, values in query.items()},
+        }
+        LAST_REQUESTS[path] = entry
+        REQUEST_HISTORY.setdefault(path, []).append(entry)
+
+    def first(query, key, default=""):
+        values = query.get(key, [])
+        return values[0] if values else default
+
+
+    def has_time_window(query):
+        start = first(query, "startTime")
+        end = first(query, "endTime")
+        if not start or not end:
+            return False
+        try:
+            start_i = int(start)
+            end_i = int(end)
+        except ValueError:
+            return False
+        return end_i > start_i
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            return
+
+        def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            query = urllib.parse.parse_qs(parsed.query)
+
+            if path == "/api/debug/last-request":
+                endpoint = first(query, "endpoint", "/api/loki/flow/records")
+                filters = {
+                    key: values[0]
+                    for key, values in query.items()
+                    if key != "endpoint" and values
+                }
+                if filters:
+                    for entry in reversed(REQUEST_HISTORY.get(endpoint, [])):
+                        if all(entry["query"].get(key) == value for key, value in filters.items()):
+                            body = json.dumps(entry).encode()
+                            self.send_response(200)
+                            self.send_header("Content-Type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    body = json.dumps({}).encode()
+                else:
+                    body = json.dumps(LAST_REQUESTS.get(endpoint, {})).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            record_request(path, query)
+
+            if path == "/api/resources/namespaces":
+                body = json.dumps(NAMESPACES).encode()
+            elif path == "/api/loki/flow/records":
+                if first(query, "timeRange"):
+                    self.send_error(400, "timeRange is not supported; use startTime/endTime")
+                    return
+                if not has_time_window(query):
+                    self.send_error(400, "startTime and endTime are required")
+                    return
+                filters = first(query, "filters")
+                if filters and not any(operator in filters for operator in ("=", "~", ">")):
+                    self.send_error(400, "invalid filter expression")
+                    return
+                namespace = first(query, "namespace")
+                if namespace and namespace != "default":
+                    body = json.dumps({"result": [], "stats": {"flows": 0}}).encode()
+                else:
+                    body = json.dumps(FLOW_RECORDS).encode()
+            elif path == "/api/flow/metrics":
+                if first(query, "timeRange"):
+                    self.send_error(400, "timeRange is not supported; use startTime/endTime")
+                    return
+                if not has_time_window(query):
+                    self.send_error(400, "startTime and endTime are required")
+                    return
+                aggregate_by = first(query, "aggregateBy")
+                metric_type = first(query, "type")
+                if aggregate_by == "TLSVersion" and metric_type == "Bytes":
+                    body = json.dumps(TLS_METRICS).encode()
+                elif metric_type:
+                    body = json.dumps(FLOW_METRICS).encode()
+                else:
+                    self.send_error(400, "type is required")
+                    return
+            elif path == "/api/loki/export":
+                if first(query, "timeRange"):
+                    self.send_error(400, "timeRange is not supported; use startTime/endTime")
+                    return
+                if not has_time_window(query):
+                    self.send_error(400, "startTime and endTime are required")
+                    return
+                body = b"TimeFlowStartMs,Bytes,SrcK8S_Namespace\n1,128,default\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            elif path == "/api/status":
+                status = {
+                    "loki": {"isEnabled": True, "isReady": True, "namespacesCount": 2},
+                    "prometheus": {"isEnabled": False, "isReady": False, "namespacesCount": 0}
+                }
+                body = json.dumps(status).encode()
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+
+    if __name__ == "__main__":
+        HTTPServer(("0.0.0.0", 9001), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netobserv-plugin
+  namespace: netobserv
+  labels:
+    app: netobserv-plugin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netobserv-plugin
+  template:
+    metadata:
+      labels:
+        app: netobserv-plugin
+    spec:
+      containers:
+        - name: mock
+          image: python:3.12-alpine
+          command: ["python", "/scripts/server.py"]
+          ports:
+            - containerPort: 9001
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/resources/namespaces
+              port: 9001
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: scripts
+          configMap:
+            name: netobserv-plugin-mock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netobserv-plugin
+  namespace: netobserv
+spec:
+  selector:
+    app: netobserv-plugin
+  ports:
+    - name: http
+      port: 9001
+      targetPort: 9001

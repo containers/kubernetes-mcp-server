@@ -4,6 +4,21 @@ kind: Namespace
 metadata:
   name: keycloak
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-tls
+  namespace: keycloak
+spec:
+  secretName: keycloak-tls
+  issuerRef:
+    name: selfsigned-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  dnsNames:
+  - keycloak.keycloak.svc
+  - keycloak.keycloak.svc.cluster.local
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,36 +36,56 @@ spec:
       labels:
         app: keycloak
     spec:
+      volumes:
+      - name: realm-import
+        configMap:
+          name: keycloak-realm-import
+      - name: keycloak-tls
+        secret:
+          secretName: keycloak-tls
       containers:
       - name: keycloak
         image: quay.io/keycloak/keycloak:26.4
-        args: ["start-dev"]
+        args: ["start-dev", "--import-realm"]
+        volumeMounts:
+        - name: realm-import
+          mountPath: /opt/keycloak/data/import
+          readOnly: true
+        - name: keycloak-tls
+          mountPath: /etc/keycloak/tls
+          readOnly: true
         env:
         - name: KC_BOOTSTRAP_ADMIN_USERNAME
           value: "admin"
         - name: KC_BOOTSTRAP_ADMIN_PASSWORD
           value: "admin"
         - name: KC_HOSTNAME
-          value: "https://keycloak.127-0-0-1.sslip.io:8443"
+          value: "https://keycloak.keycloak.svc:8443"
         - name: KC_HTTP_ENABLED
           value: "true"
         - name: KC_HEALTH_ENABLED
           value: "true"
-        - name: KC_PROXY_HEADERS
-          value: "xforwarded"
+        - name: KC_HTTPS_CERTIFICATE_FILE
+          value: "/etc/keycloak/tls/tls.crt"
+        - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+          value: "/etc/keycloak/tls/tls.key"
         ports:
         - name: http
           containerPort: 8080
+        - name: https
+          containerPort: 8443
         readinessProbe:
           httpGet:
             path: /health/ready
             port: 9000
+            scheme: HTTPS
           initialDelaySeconds: 30
           periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /health/live
             port: 9000
+            scheme: HTTPS
           initialDelaySeconds: 60
           periodSeconds: 30
 ---
@@ -63,9 +98,9 @@ metadata:
     app: keycloak
 spec:
   ports:
-  - name: http
-    port: 80
-    targetPort: 8080
+  - name: https
+    port: 8443
+    targetPort: 8443
   selector:
     app: keycloak
   type: ClusterIP

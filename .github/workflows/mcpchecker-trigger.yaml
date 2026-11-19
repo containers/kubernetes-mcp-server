@@ -1,0 +1,38 @@
+name: mcpchecker MCP Evaluation - Trigger
+
+# Unprivileged trigger workflow for PR-based mcpchecker evaluations.
+#
+# This workflow fires on pull_request_review and exists solely to signal the
+# main mcpchecker workflow (which chains via workflow_run). It passes NO data
+# to the main workflow — the main workflow derives the PR number and commit SHA
+# entirely from the workflow_run event metadata and the GitHub API.
+#
+# SECURITY NOTE: pull_request_review runs the workflow file from the merge ref,
+# so a fork PR can modify this file. This workflow is intentionally a no-op
+# signal. Even if a fork replaces its contents, the main workflow independently
+# verifies permissions, the SHA, and suite via the GitHub API using code from
+# the default branch.
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+# No permissions needed — this workflow is entirely unprivileged.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  route:
+    name: Route evaluation trigger
+    runs-on: ubuntu-latest
+    # Only fire when the review body contains the trigger command.
+    # This is a routing signal only — the main workflow independently verifies.
+    if: >-
+      github.repository == 'containers/kubernetes-mcp-server' &&
+      contains(github.event.review.body, '/run-mcpchecker')
+    steps:
+      - name: Signal
+        run: echo "Routing to mcpchecker evaluation workflow"

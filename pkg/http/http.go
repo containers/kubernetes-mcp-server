@@ -2,9 +2,9 @@ package http
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -21,6 +21,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
 	"github.com/containers/kubernetes-mcp-server/pkg/mcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/oauth"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 // tlsErrorFilterWriter filters out noisy TLS handshake errors from health checks
@@ -43,18 +44,23 @@ func (w *tlsErrorFilterWriter) Write(p []byte) (n int, err error) {
 }
 
 const (
-	healthEndpoint     = "/healthz"
-	statsEndpoint      = "/stats"
-	metricsEndpoint    = "/metrics"
-	mcpEndpoint        = "/mcp"
-	sseEndpoint        = "/sse"
-	sseMessageEndpoint = "/message"
+	healthEndpoint  = "/healthz"
+	statsEndpoint   = "/stats"
+	metricsEndpoint = "/metrics"
+	mcpEndpoint     = "/mcp"
 )
 
 var (
-	// infraPaths contains infrastructure endpoints which should not have oauth applied
-	infraPaths = []string{healthEndpoint, metricsEndpoint, statsEndpoint}
+	infraPathsMetricsSeparate = []string{healthEndpoint}
+	infraPathsMetricsTogether = []string{healthEndpoint, metricsEndpoint, statsEndpoint}
 )
+
+func infraPaths(metricsOnSeparatePort bool) []string {
+	if metricsOnSeparatePort {
+		return infraPathsMetricsSeparate
+	}
+	return infraPathsMetricsTogether
+}
 
 // metricsMiddleware wraps an HTTP handler to record metrics for all requests
 func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
@@ -66,8 +72,32 @@ func metricsMiddleware(next http.Handler, metrics *mcp.Server) http.Handler {
 		next.ServeHTTP(rw, r)
 
 		duration := time.Since(start)
-		metrics.GetMetrics().RecordHTTPRequest(r.Context(), r.Method, r.URL.Path, rw.statusCode, duration)
+		metrics.GetMetrics().RecordHTTPRequest(r.Context(), metricsMethod(r.Method), metricsPath(r.URL.Path), rw.statusCode, duration)
 	})
+}
+
+// metricsPath and metricsMethod map a request to bounded url.path and
+// http.request.method metric labels. Recording the raw values lets any client,
+// authenticated or not, create one series per distinct path or method (#1587):
+// once the SDK's per-metric cardinality limit is reached, real traffic is
+// folded into the otel_metric_overflow series. Known routes come from
+// knownHTTPRoute; every other path is counted as "other".
+func metricsPath(path string) string {
+	if route, ok := knownHTTPRoute(path); ok {
+		return route
+	}
+	return "other"
+}
+
+// metricsMethod keeps the standard HTTP methods and reports any other as
+// "_OTHER", as the OpenTelemetry HTTP semantic conventions do.
+func metricsMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace:
+		return method
+	}
+	return "_OTHER"
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
@@ -106,7 +136,7 @@ func statsHandler(mcpServer *mcp.Server) http.HandlerFunc {
 	}
 }
 
-func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticConfigState, oauthState *oauth.State) error {
+func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.ConfigState, oauthState *oauth.State) error {
 	logger := klogutil.FromContext(ctx)
 	// Only fields read below are startup-only; middleware reloads via cfgState.
 	staticConfig := cfgState.Load()
@@ -121,16 +151,21 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	)
 	instrumentedHandler := metricsMiddleware(wrappedMux, mcpServer)
 
-	// Note: WriteTimeout is intentionally omitted - it would kill SSE streams.
-	// ReadHeaderTimeout provides Slowloris protection; other timeouts are left
-	// at Go defaults since MCP clients maintain persistent connections.
+	// Inbound TLS min version and cipher suites are fixed for the process lifetime.
+	tlsConfig, err := tlsutil.BuildTLSConfig(staticConfig.TLSMinVersion.Get(), staticConfig.TLSCipherSuites.Get())
+	if err != nil {
+		return fmt.Errorf("failed to build TLS config: %w", err)
+	}
+
+	// Note: WriteTimeout is intentionally omitted — it would kill long-lived
+	// Streamable HTTP connections. ReadHeaderTimeout provides Slowloris
+	// protection; other timeouts are left at Go defaults since MCP clients
+	// maintain persistent connections.
 	httpServer := &http.Server{
-		Addr:              ":" + staticConfig.Port,
+		Addr:              net.JoinHostPort(staticConfig.BindAddress.Get(), staticConfig.Port.Get()),
 		Handler:           instrumentedHandler,
-		ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Duration(),
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
+		ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Get(),
+		TLSConfig:         tlsConfig,
 		// BaseContext propagates the server context (including the klog logger)
 		// to all incoming request contexts, so klogutil.FromContext(r.Context())
 		// returns the contextual logger rather than the global fallback.
@@ -139,21 +174,39 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 
 	// Only set up custom error logger for TLS mode to filter noisy TLS handshake errors
 	// from load balancer health checks
-	if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
+	if staticConfig.TLSCert.Get() != "" && staticConfig.TLSKey.Get() != "" {
 		httpServer.ErrorLog = log.New(&tlsErrorFilterWriter{underlying: os.Stderr, logger: logger}, "", 0)
 	}
 
-	sseServer := mcpServer.ServeSse()
 	streamableHttpServer := mcpServer.ServeHTTP()
-	mux.Handle(sseEndpoint, sseServer)
-	mux.Handle(sseMessageEndpoint, sseServer)
 	mux.Handle(mcpEndpoint, streamableHttpServer)
 	mux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
-	mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
 	mux.Handle("/.well-known/", WellKnownHandler(cfgState, oauthState))
+
+	metricsOnSeparatePort := staticConfig.MetricsPort.Get() != ""
+
+	if !metricsOnSeparatePort {
+		mux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
+		mux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
+	}
+
+	var metricsServer *http.Server
+	if metricsOnSeparatePort {
+		metricsMux := http.NewServeMux()
+		metricsMux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		metricsMux.HandleFunc(statsEndpoint, statsHandler(mcpServer))
+		metricsMux.Handle(metricsEndpoint, mcpServer.GetMetrics().PrometheusHandler())
+		metricsServer = &http.Server{
+			Addr:              net.JoinHostPort(staticConfig.BindAddress.Get(), staticConfig.MetricsPort.Get()),
+			Handler:           metricsMux,
+			ReadHeaderTimeout: staticConfig.HTTP.ReadHeaderTimeout.Get(),
+			BaseContext:       func(_ net.Listener) context.Context { return ctx },
+		}
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -170,19 +223,44 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	signal.Notify(sigHupChan, syscall.SIGHUP)
 	defer signal.Stop(sigHupChan)
 
-	serverErr := make(chan error, 1)
+	listeningOnAllInterfaces := staticConfig.BindAddress.Get() == "0.0.0.0" || staticConfig.BindAddress.Get() == "::"
+	if listeningOnAllInterfaces && staticConfig.TLSCert.Get() == "" && !staticConfig.RequireOAuth.Get() {
+		klogutil.LogWarn(logger,
+			"HTTP server is listening on all interfaces without TLS or authentication, "+
+				"consider setting bind_address to 127.0.0.1, enabling TLS, or enabling OAuth",
+			klogutil.Field("bind_address", staticConfig.BindAddress.Get()),
+		)
+	}
+	// The metrics server never uses TLS or OAuth, so the branch above is not
+	// sufficient: TLS/OAuth on the main server would otherwise suppress the
+	// warning while /metrics and /stats remain exposed on all interfaces.
+	if listeningOnAllInterfaces && metricsOnSeparatePort {
+		klogutil.LogWarn(logger,
+			"Metrics server is listening on all interfaces without TLS or authentication, "+
+				"exposing /metrics and /stats; TLS and OAuth on the main server do not apply. "+
+				"Consider setting bind_address to 127.0.0.1 or restricting access with a network policy",
+			klogutil.Field("bind_address", staticConfig.BindAddress.Get()),
+			klogutil.Field("metrics_port", staticConfig.MetricsPort.Get()),
+		)
+	}
+
+	serverErr := make(chan error, 2)
 	go func() {
 		var err error
-		if staticConfig.TLSCert != "" && staticConfig.TLSKey != "" {
+		endpoints := "/mcp, /healthz, /stats, /metrics"
+		if metricsOnSeparatePort {
+			endpoints = "/mcp, /healthz"
+		}
+		if staticConfig.TLSCert.Get() != "" && staticConfig.TLSKey.Get() != "" {
 			logger.Info("HTTPS server starting",
-				"server.port", staticConfig.Port,
-				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+				"server.addr", httpServer.Addr,
+				"endpoints", endpoints,
 			)
-			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert, staticConfig.TLSKey)
+			err = httpServer.ListenAndServeTLS(staticConfig.TLSCert.Get(), staticConfig.TLSKey.Get())
 		} else {
 			logger.Info("HTTP server starting",
-				"server.port", staticConfig.Port,
-				"endpoints", "/mcp, /sse, /message, /healthz, /stats, /metrics",
+				"server.addr", httpServer.Addr,
+				"endpoints", endpoints,
 			)
 			err = httpServer.ListenAndServe()
 		}
@@ -191,6 +269,19 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		}
 	}()
 
+	if metricsServer != nil {
+		go func() {
+			logger.Info("Metrics server starting",
+				"server.addr", metricsServer.Addr,
+				"endpoints", "/metrics, /stats, /healthz",
+			)
+			if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- err
+			}
+		}()
+	}
+
+	var serveErr error
 	select {
 	case sig := <-sigChan:
 		logger.Info("Received signal, initiating graceful shutdown", "signal", sig.String())
@@ -199,7 +290,7 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		logger.Info("Context cancelled, initiating graceful shutdown")
 	case err := <-serverErr:
 		logger.Error(err, "HTTP server error")
-		return err
+		serveErr = err
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -212,6 +303,12 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 		logger.Error(err, "HTTP server shutdown error")
 	}
 
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error(err, "Metrics server shutdown error")
+		}
+	}
+
 	// Always attempt MCP server shutdown (flushes metrics) even if HTTP shutdown failed
 	if err := mcpServer.Shutdown(shutdownCtx); err != nil {
 		// Don't fail Run() for errors during shutdown
@@ -219,5 +316,5 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, cfgState *config.StaticCo
 	}
 
 	logger.Info("HTTP server shutdown complete")
-	return nil
+	return serveErr
 }

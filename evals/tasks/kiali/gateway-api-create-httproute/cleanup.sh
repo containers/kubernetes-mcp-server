@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+kubectl delete httproute eval-create-route -n bookinfo --ignore-not-found
+kubectl delete gateway eval-gateway -n bookinfo --ignore-not-found

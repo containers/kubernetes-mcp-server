@@ -6,6 +6,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -15,15 +16,15 @@ type PromptSerializationSuite struct {
 }
 
 func (s *PromptSerializationSuite) TestPromptJSONSerialization() {
-	prompt := api.Prompt{
+	prompt := config.Prompt{
 		Name:        "test-prompt",
 		Title:       "Test Prompt",
 		Description: "A test prompt",
-		Arguments: []api.PromptArgument{
+		Arguments: []config.PromptArgument{
 			{Name: "arg1", Description: "First argument", Required: true},
 			{Name: "arg_opt", Description: "Optional argument", Required: false},
 		},
-		Templates: []api.PromptTemplate{
+		Templates: []config.PromptTemplate{
 			{Role: "user", Content: "Hello {{arg1}}"},
 			{Role: "assistant", Content: "How can I assist you with {{arg1}}?"},
 		},
@@ -61,7 +62,7 @@ func (s *PromptSerializationSuite) TestPromptJSONSerialization() {
 		s.JSONEq(jsonData, string(data), "marshaled JSON does not match expected")
 	})
 	s.Run("unmarshals Prompt correctly", func() {
-		var unmarshaled api.Prompt
+		var unmarshaled config.Prompt
 		err := json.Unmarshal([]byte(jsonData), &unmarshaled)
 		s.Require().NoError(err, "failed to unmarshal Prompt from JSON")
 
@@ -70,15 +71,15 @@ func (s *PromptSerializationSuite) TestPromptJSONSerialization() {
 }
 
 func (s *PromptSerializationSuite) TestPromptTOMLSerialization() {
-	prompt := api.Prompt{
+	prompt := config.Prompt{
 		Name:        "test-prompt",
 		Title:       "Test Prompt",
 		Description: "A test prompt",
-		Arguments: []api.PromptArgument{
+		Arguments: []config.PromptArgument{
 			{Name: "arg1", Description: "First argument", Required: true},
 			{Name: "arg_opt", Description: "Optional argument", Required: false},
 		},
-		Templates: []api.PromptTemplate{
+		Templates: []config.PromptTemplate{
 			{Role: "user", Content: "Hello {{arg1}}"},
 			{Role: "assistant", Content: "How can I assist you with {{arg1}}?"},
 		},
@@ -107,7 +108,7 @@ role = "assistant"
 content = "How can I assist you with {{arg1}}?"
 `
 	s.Run("unmarshals Prompt from TOML correctly", func() {
-		var unmarshaled api.Prompt
+		var unmarshaled config.Prompt
 		err := toml.Unmarshal([]byte(tomlData), &unmarshaled)
 		s.Require().NoError(err, "failed to unmarshal Prompt from TOML")
 
@@ -117,7 +118,7 @@ content = "How can I assist you with {{arg1}}?"
 		data, err := toml.Marshal(prompt)
 		s.Require().NoError(err, "failed to marshal Prompt to TOML")
 
-		var unmarshaled api.Prompt
+		var unmarshaled config.Prompt
 		err = toml.Unmarshal(data, &unmarshaled)
 		s.Require().NoError(err, "failed to unmarshal marshaled TOML")
 
@@ -127,7 +128,7 @@ content = "How can I assist you with {{arg1}}?"
 
 func (s *PromptSerializationSuite) TestPromptTemplateSerialization() {
 	s.Run("serializes template with placeholder", func() {
-		template := api.PromptTemplate{
+		template := config.PromptTemplate{
 			Role:    "user",
 			Content: "Hello {{name}}, how are you?",
 		}
@@ -135,7 +136,7 @@ func (s *PromptSerializationSuite) TestPromptTemplateSerialization() {
 		// JSON
 		jsonData, err := json.Marshal(template)
 		s.Require().NoError(err)
-		var jsonTemplate api.PromptTemplate
+		var jsonTemplate config.PromptTemplate
 		err = json.Unmarshal(jsonData, &jsonTemplate)
 		s.Require().NoError(err)
 		s.Equal(template.Role, jsonTemplate.Role)
@@ -146,7 +147,7 @@ func (s *PromptSerializationSuite) TestPromptTemplateSerialization() {
 role = "user"
 content = "Hello {{name}}, how are you?"
 `
-		var tomlTemplate api.PromptTemplate
+		var tomlTemplate config.PromptTemplate
 		err = toml.Unmarshal([]byte(tomlData), &tomlTemplate)
 		s.Require().NoError(err)
 		s.Equal(template.Role, tomlTemplate.Role)
@@ -196,7 +197,7 @@ func (s *PromptSerializationSuite) TestPromptContentSerialization() {
 
 func (s *PromptSerializationSuite) TestPromptWithOptionalFields() {
 	s.Run("omits empty optional fields in JSON", func() {
-		prompt := api.Prompt{
+		prompt := config.Prompt{
 			Name:        "minimal-prompt",
 			Description: "Minimal prompt without optional fields",
 		}
@@ -217,11 +218,11 @@ func (s *PromptSerializationSuite) TestPromptWithOptionalFields() {
 	})
 
 	s.Run("includes optional fields when present", func() {
-		prompt := api.Prompt{
+		prompt := config.Prompt{
 			Name:        "full-prompt",
 			Title:       "Full Prompt",
 			Description: "Prompt with all fields",
-			Arguments: []api.PromptArgument{
+			Arguments: []config.PromptArgument{
 				{Name: "arg1", Required: true},
 			},
 		}

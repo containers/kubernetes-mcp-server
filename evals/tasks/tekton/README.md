@@ -1,6 +1,6 @@
 # Tekton Task Stack
 
-Tekton-focused MCP eval tasks live here. Each folder represents a self-contained scenario that exercises the Tekton toolset (Pipeline and PipelineRun management, Task and TaskRun lifecycle).
+Tekton-focused MCP eval tasks live here. Each folder represents a self-contained scenario that exercises the Tekton toolset (Pipeline and PipelineRun management, Task and TaskRun lifecycle, and troubleshooting).
 
 All tasks use the `tekton-eval` namespace and require Tekton Pipelines to be installed in the cluster (`tekton.dev/v1` CRDs must be available).
 
@@ -36,7 +36,17 @@ All tasks use the `tekton-eval` namespace and require Tekton Pipelines to be ins
 
 - **[medium] restart-pipelinerun** – Restart a PipelineRun by creating a new one with the same spec
   - **Prompt:** *Restart the Tekton PipelineRun named test-run in the tekton-eval namespace.*
-  - **Tests:** `resources_get` + `resources_create` tools (core toolset)
+  - **Tests:** `tekton_pipelinerun_lifecycle` tool with `action=restart`
+
+- **[medium] cancel-pipelinerun** – Cancel a PipelineRun by setting `spec.status=Cancelled`
+  - **Prompt:** *Cancel the Tekton PipelineRun named cancel-me in the tekton-eval namespace.*
+  - **Tests:** `tekton_pipelinerun_lifecycle` tool with `action=cancel`
+
+- **[hard] troubleshoot-pipelinerun** – Gather PipelineRun status, its Pipeline definition, TaskRuns, failed or errored step logs, warning events, Pipeline-as-Code Repository, and TektonConfig context for diagnosis
+  - **Prompt:** *The Tekton PipelineRun named failed-run in the tekton-eval namespace is failing. Diagnose the likely root cause, include any Pipeline-as-Code Repository and TektonConfig context that may be relevant, and recommend the next action.*
+  - **Tests:** `pipeline-troubleshoot` prompt and PAC/TektonConfig visibility
+
+- **PipelineRun diagnosis scenarios** – Diagnose five failures reconciled by a real Tekton controller: image pull, missing Secret reference, permission denied, OOM, and non-zero script exit. Prompts describe the failed run without naming a tool. The eval requires exactly one call to `tekton_pipelinerun_diagnose` for each scenario and verifies the observed evidence, including an untrusted instruction embedded in the non-zero-exit log.
 
 ### Task Operations
 
@@ -67,6 +77,6 @@ make tekton-status
 1. Create a new subdirectory (e.g., `update-pipeline/`) with a `task.yaml` following the `mcpchecker/v1alpha2` format.
 2. Set `metadata.labels.suite: tekton` and `metadata.labels.requires: tekton` so the task is grouped correctly in eval reports and the eval framework can filter tasks that need Tekton installed.
 3. Use `tekton-eval` as the namespace for consistency across the task stack.
-4. Use the shared `helpers/cleanup-namespace.sh` script for namespace cleanup in setup steps.
+4. Use the shared `helpers/cleanup-namespace.sh` script for namespace cleanup in setup steps, and source `helpers/require-output.sh` to get `require <string>` for deterministic checks on `$AGENT_OUTPUT`.
 5. Include `ignoreNotFound: true` on all cleanup steps to keep tasks idempotent.
-6. For verify steps that check Kubernetes resource state use `script.inline` with `kubectl`; for verifying agent output use `llmJudge`.
+6. For verify steps that check Kubernetes resource state use `script.inline` with `kubectl`; for verifying literal identifiers or exact markers in agent output use a deterministic `script` check on `{agent.output}`, and reserve `llmJudge` for judging the meaning of the answer.

@@ -5,24 +5,31 @@ on:
   schedule:
     - cron: '0 9 * * 1'
 
-  # Manual trigger via PR comments
-  issue_comment:
-    types: [created]
+  # PR evaluation trigger via review comments (chained from mcpchecker-trigger.yaml)
+  # Intentional privileged gate: independently checks API-fetched maintainer
+  # permission and current PR head against immutable review.commit_id below.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ["mcpchecker MCP Evaluation - Trigger"]
+    types: [completed]
 
   # Allow manual workflow dispatch for testing
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Which task suite to run (core, helm, kubevirt, kiali, tekton, or all)'
+        description: 'Which task suite to run (core, core-readonly, helm, kubevirt, kiali, tekton, netobserv, argocd, obs, or all)'
         required: false
         default: 'core'
         type: choice
         options:
           - core
+          - core-readonly
           - helm
           - kubevirt
           - kiali
           - tekton
+          - netobserv
+          - argocd
+          - obs
           - all
       task-filter:
         description: 'Regular expression to filter tasks (optional)'
@@ -34,20 +41,21 @@ on:
         type: boolean
         default: false
 
-# Minimal permissions - no write access to PRs/issues
-# This workflow checks out and runs potentially untrusted PR code
+# Minimal permissions at workflow level. The check-trigger job escalates to
+# pull-requests: write for posting rejection comments on PRs.
 permissions:
   contents: read
   actions: read
 
 concurrency:
   # Only run once for latest commit per ref and cancel other (previous) runs.
-  # For issue_comment events, use PR number as group to avoid different PRs canceling each other.
-  group: ${{ github.workflow }}-${{ github.event_name == 'issue_comment' && format('pr-{0}', github.event.issue.number) || github.ref }}
+  # For workflow_run events, use head_branch to group by PR branch so different
+  # PRs don't cancel each other.
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_run' && format('branch-{0}', github.event.workflow_run.head_branch) || github.ref }}
   cancel-in-progress: true
 
 env:
-  KIND_CLUSTER_NAME: mcp-eval-cluster
+  MINIKUBE_PROFILE: mcp-eval-cluster
 
 defaults:
   run:
@@ -61,7 +69,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-      # Needed to comment on the PR when the TOCTOU check fails
+      # Needed to comment on the PR when the evaluation is rejected
       pull-requests: write
     # Never run on forks: the evaluation needs model/judge secrets that forks
     # don't have, so it would only ever fail there.
@@ -69,13 +77,11 @@ jobs:
       github.repository == 'containers/kubernetes-mcp-server' &&
       (github.event_name == 'schedule' ||
        github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request &&
-        contains(github.event.comment.body, '/run-mcpchecker')))
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success'))
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
-      toolsets: ${{ steps.suite.outputs.toolsets }}
-      label-selector: ${{ steps.suite.outputs.label-selector }}
+      matrix: ${{ steps.suite.outputs.matrix }}
       pr-number: ${{ steps.check.outputs.pr-number }}
       pr-sha: ${{ steps.check.outputs.pr-sha }}
       is-pr: ${{ steps.check.outputs.is-pr }}
@@ -87,97 +93,110 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
 
-            if (context.eventName === 'issue_comment') {
-              const commenter = context.payload.comment.user.login;
-              const prNum = context.payload.issue.number;
-              const commentId = context.payload.comment.id;
+            if (context.eventName === 'workflow_run') {
+              // PR evaluation path: the trigger workflow fired on
+              // pull_request_review.  We independently verify everything from
+              // the GitHub API — the trigger workflow is untrusted (runs from
+              // the merge ref, so forks can modify it).
 
-              // Only repository collaborators with admin/write access may trigger a run.
+              // Find the PR by matching the head branch name from the
+              // workflow_run metadata.  We avoid the pulls.list head: filter
+              // (which requires "owner:branch") because for fork PRs
+              // head_repository may point to the base repo or be null
+              // (deleted fork), causing the owner-qualified lookup to miss.
+              const headBranch = context.payload.workflow_run.head_branch;
+              let pr = null;
+              for await (const { data: page } of github.paginate.iterator(
+                github.rest.pulls.list,
+                { owner, repo, state: 'open', sort: 'updated', direction: 'desc', per_page: 100 },
+              )) {
+                pr = page.find(p => p.head.ref === headBranch);
+                if (pr) break;
+              }
+
+              if (!pr) {
+                core.setOutput('should-run', 'false');
+                core.info(`No open PR found for branch ${headBranch}`);
+                return;
+              }
+
+              const prNum = pr.number;
+              const currentHead = pr.head.sha;
+
+              // Fetch all reviews and find the most recent non-dismissed review
+              // containing /run-mcpchecker.
+              const reviews = await github.paginate(
+                github.rest.pulls.listReviews,
+                { owner, repo, pull_number: prNum, per_page: 100 },
+              );
+
+              let triggerReview = null;
+              for (let i = reviews.length - 1; i >= 0; i--) {
+                const r = reviews[i];
+                if (r.state === 'DISMISSED') continue;
+                if (r.body && r.body.includes('/run-mcpchecker')) {
+                  triggerReview = r;
+                  break;
+                }
+              }
+
+              if (!triggerReview) {
+                core.setOutput('should-run', 'false');
+                core.info('No review found containing /run-mcpchecker');
+                return;
+              }
+
+              // Verify the reviewer has write/admin access.
+              const reviewer = triggerReview.user.login;
               const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
-                owner, repo, username: commenter,
+                owner, repo, username: reviewer,
               });
               if (permData.permission !== 'admin' && permData.permission !== 'write') {
                 core.setOutput('should-run', 'false');
                 core.setOutput('is-pr', 'true');
                 core.setOutput('pr-number', String(prNum));
                 core.setOutput('pr-sha', '');
-                core.info(`User ${commenter} does not have permission to trigger evaluations`);
+                core.info(`Reviewer ${reviewer} does not have permission to trigger evaluations`);
                 return;
               }
 
-              // TOCTOU guard: walk the PR timeline and extract the SHA of the
-              // last commit *before* the /run-mcpchecker comment.  This is the
-              // exact code the maintainer reviewed.  If any commits or force-pushes
-              // landed after the comment, the run is rejected.  Timeline ordering
-              // is controlled by GitHub's servers and cannot be spoofed.
-              const timeline = await github.paginate(
-                github.rest.issues.listEventsForTimeline,
-                { owner, repo, issue_number: prNum, per_page: 100 },
-              );
+              // review.commit_id is set by GitHub's server when the review is
+              // created against a specific commit's diff.  It is immutable and
+              // cannot be changed by later pushes or force-pushes.
+              const reviewSha = triggerReview.commit_id;
 
-              let seenComment = false;
-              let lastCommitSha = null;
-              for (const event of timeline) {
-                if (event.event === 'committed') {
-                  if (!seenComment) {
-                    lastCommitSha = event.sha;
-                  } else {
-                    core.setOutput('should-run', 'false');
-                    core.setOutput('is-pr', 'true');
-                    core.setOutput('pr-number', String(prNum));
-                    core.setOutput('pr-sha', '');
-                    core.info('TOCTOU: PR was updated after the /run-mcpchecker comment');
-                    await github.rest.issues.createComment({
-                      owner, repo, issue_number: prNum,
-                      body: '**Evaluation not started:** the PR was updated after this ' +
-                            '`/run-mcpchecker` comment was posted. Please re-review and ' +
-                            'comment `/run-mcpchecker` again.',
-                    });
-                    return;
-                  }
-                } else if (event.event === 'head_ref_force_pushed') {
-                  if (seenComment) {
-                    core.setOutput('should-run', 'false');
-                    core.setOutput('is-pr', 'true');
-                    core.setOutput('pr-number', String(prNum));
-                    core.setOutput('pr-sha', '');
-                    core.info('TOCTOU: PR was force-pushed after the /run-mcpchecker comment');
-                    await github.rest.issues.createComment({
-                      owner, repo, issue_number: prNum,
-                      body: '**Evaluation not started:** the PR was force-pushed after this ' +
-                            '`/run-mcpchecker` comment was posted. Please re-review and ' +
-                            'comment `/run-mcpchecker` again.',
-                    });
-                    return;
-                  }
-                  // After a force-push the old commit SHAs are invalid; reset
-                  // and let subsequent committed events repopulate.
-                  lastCommitSha = null;
-                } else if (event.event === 'commented' && event.id === commentId) {
-                  seenComment = true;
-                }
-              }
-
-              if (!seenComment) {
-                core.setOutput('should-run', 'false');
-                return
-              }
-
-              if (!lastCommitSha) {
+              // Reject if the PR head has changed since the review was submitted.
+              if (currentHead !== reviewSha) {
                 core.setOutput('should-run', 'false');
                 core.setOutput('is-pr', 'true');
                 core.setOutput('pr-number', String(prNum));
                 core.setOutput('pr-sha', '');
-                core.warning('Could not determine the PR head SHA from the timeline');
+                core.info(`PR head (${currentHead}) differs from review SHA (${reviewSha})`);
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: prNum,
+                  body: '**Evaluation not started:** the PR was updated after the ' +
+                        '`/run-mcpchecker` review was submitted (review SHA: `' +
+                        reviewSha.substring(0, 7) + '`, current HEAD: `' +
+                        currentHead.substring(0, 7) + '`). Please re-review and ' +
+                        'submit a new review with `/run-mcpchecker`.',
+                });
                 return;
               }
+
+              // Parse suite from the review body (trusted — fetched from API).
+              const suiteMatch = triggerReview.body.match(
+                /\/run-mcpchecker\s+(core-readonly|core|helm|kubevirt|kiali|tekton|netobserv|argocd|obs|all)/i,
+              );
+              const suite = suiteMatch ? suiteMatch[1].toLowerCase() : '';
 
               core.setOutput('should-run', 'true');
               core.setOutput('is-pr', 'true');
               core.setOutput('pr-number', String(prNum));
-              core.setOutput('pr-sha', lastCommitSha);
-              core.info(`Pinned to SHA: ${lastCommitSha}`);
+              core.setOutput('pr-sha', reviewSha);
+              core.setOutput('suite', suite);
+              core.info(`Verified review by ${reviewer}, pinned to SHA: ${reviewSha}`);
             } else {
+              // schedule or workflow_dispatch
               core.setOutput('should-run', 'true');
               core.setOutput('is-pr', 'false');
               core.setOutput('pr-sha', context.sha);
@@ -187,112 +206,222 @@ jobs:
         id: suite
         env:
           EVENT_NAME: ${{ github.event_name }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
+          VERIFIED_SUITE: ${{ steps.check.outputs.suite }}
           INPUT_SUITE: ${{ github.event.inputs.suite }}
         run: |
-          # Suite selection: defaults to 'core', can be overridden by workflow_dispatch input or PR comment
-          SUITE="${INPUT_SUITE:-core}"
-
-          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
-            # Parse /run-mcpchecker [suite] from PR comment
-            BODY="${COMMENT_BODY//[[:space:]]/ }"
-            read -r _ FIRST_WORD _ <<< "$BODY"
-            case "${FIRST_WORD,,}" in
-              core|helm|kubevirt|kiali|tekton|all)
-                SUITE="${FIRST_WORD,,}"
-                ;;
-            esac
+          # Suite selection: for workflow_run use the suite parsed from the review
+          # body (verified via API), for workflow_dispatch use the input, for
+          # schedule run all suites in parallel, otherwise default to 'core'.
+          if [[ "$EVENT_NAME" == "workflow_run" && -n "$VERIFIED_SUITE" ]]; then
+            SUITE="$VERIFIED_SUITE"
+          elif [[ "$EVENT_NAME" == "schedule" ]]; then
+            SUITE="schedule-matrix"
+          else
+            SUITE="${INPUT_SUITE:-core}"
           fi
 
-          # Select label-selector and infrastructure based on suite
-          # All suites use the same eval.yaml file; suite controls label-selector + infra.
+          # Build a JSON matrix consumed by run-evaluation via fromJSON().
+          # Each entry carries suite name, eval config path, and required toolsets.
+          # read_only defaults to false unless a suite requires read-only mode.
+          EVAL_DIR="evals/core-eval-testing/builtin-openai"
+
+          # Helper: emit a single-entry matrix for the given suite/config/toolsets/read-only mode.
+          single_matrix() {
+            printf '{"include":[{"suite":"%s","eval-config":"%s","toolsets":"%s","read_only":%s}]}' "$1" "$2" "$3" "${4:-false}"
+          }
+
+          kiali_multicluster_entry='{
+            "suite":"kiali-multicluster",
+            "eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali-multicluster.yaml",
+            "toolsets":"core,config,kiali",
+            "mcp-config-dir":"dev/config/mcp-configs-multicluster",
+            "baseline-result":"openai-agent-multicluster-latest.json",
+            "job-display-name":"Run MCP Multicluster Evaluation"
+          }'
+
+          config_multicluster_entry='{
+            "suite":"config-multicluster",
+            "eval-config":"evals/core-eval-testing/builtin-openai/eval-config-multicluster.yaml",
+            "toolsets":"core,config",
+            "mcp-config-dir":"dev/config/mcp-configs",
+            "baseline-result":"openai-agent-config-multicluster-latest.json",
+            "job-display-name":"Run Config Multicluster Evaluation"
+          }'
+
+          append_kiali_multicluster() {
+            echo "$1" | jq -c --argjson mc "$kiali_multicluster_entry" '.include += [$mc]'
+          }
+
+          append_config_multicluster() {
+            echo "$1" | jq -c --argjson mc "$config_multicluster_entry" '.include += [$mc]'
+          }
+
           case "$SUITE" in
+            schedule-matrix)
+              # Weekly schedule: run all individual suites in parallel.
+              MATRIX=$(cat <<'EOFM'
+          {"include":[
+            {"suite":"core","eval-config":"evals/core-eval-testing/builtin-openai/eval-core.yaml","toolsets":"core,config"},
+            {"suite":"core-readonly","eval-config":"evals/core-eval-testing/builtin-openai/eval-core-readonly.yaml","toolsets":"core,config","read_only":true},
+            {"suite":"helm","eval-config":"evals/core-eval-testing/builtin-openai/eval-helm.yaml","toolsets":"core,config,helm"},
+            {"suite":"kubevirt","eval-config":"evals/core-eval-testing/builtin-openai/eval-kubevirt.yaml","toolsets":"core,config,kubevirt,tekton"},
+            {"suite":"kiali","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali.yaml","toolsets":"core,config,kiali"},
+            {"suite":"kiali-multicluster","eval-config":"evals/core-eval-testing/builtin-openai/eval-kiali-multicluster.yaml","toolsets":"core,config,kiali","mcp-config-dir":"dev/config/mcp-configs-multicluster","baseline-result":"openai-agent-multicluster-latest.json","job-display-name":"Run MCP Multicluster Evaluation"},
+            {"suite":"config-multicluster","eval-config":"evals/core-eval-testing/builtin-openai/eval-config-multicluster.yaml","toolsets":"core,config","mcp-config-dir":"dev/config/mcp-configs","baseline-result":"openai-agent-config-multicluster-latest.json","job-display-name":"Run Config Multicluster Evaluation"},
+            {"suite":"tekton","eval-config":"evals/core-eval-testing/builtin-openai/eval-tekton.yaml","toolsets":"core,config,tekton"},
+            {"suite":"netobserv","eval-config":"evals/core-eval-testing/builtin-openai/eval-netobserv.yaml","toolsets":"core,config,netobserv"},
+            {"suite":"argocd","eval-config":"evals/core-eval-testing/builtin-openai/eval-argo.yaml","toolsets":"core,config"},
+            {"suite":"obs","eval-config":"evals/core-eval-testing/builtin-openai/eval-obs.yaml","toolsets":"observability/metrics,observability/traces,observability/logs,observability/otelcol"}
+          ]}
+          EOFM
+          )
+              ;;
+            core-readonly)
+              MATRIX=$(single_matrix core-readonly "${EVAL_DIR}/eval-core-readonly.yaml" "core,config" true)
+              ;;
             helm)
-              echo "label-selector=suite=helm" >> "$GITHUB_OUTPUT"
-              echo "toolsets=core,config,helm" >> "$GITHUB_OUTPUT"
+              MATRIX=$(single_matrix helm "${EVAL_DIR}/eval-helm.yaml" "core,config,helm")
               ;;
             kubevirt)
-              echo "label-selector=suite=kubevirt" >> "$GITHUB_OUTPUT"
-              echo "toolsets=core,config,kubevirt,tekton" >> "$GITHUB_OUTPUT"
+              MATRIX=$(single_matrix kubevirt "${EVAL_DIR}/eval-kubevirt.yaml" "core,config,kubevirt,tekton")
               ;;
             kiali)
-              echo "label-selector=suite=kiali" >> "$GITHUB_OUTPUT"
-              echo "toolsets=core,config,kiali" >> "$GITHUB_OUTPUT"
+              MATRIX=$(append_kiali_multicluster "$(single_matrix kiali "${EVAL_DIR}/eval-kiali.yaml" "core,config,kiali")")
               ;;
             tekton)
-              echo "label-selector=suite=tekton" >> "$GITHUB_OUTPUT"
-              echo "toolsets=core,tekton" >> "$GITHUB_OUTPUT"
+              MATRIX=$(single_matrix tekton "${EVAL_DIR}/eval-tekton.yaml" "core,config,tekton")
+              ;;
+            netobserv)
+              MATRIX=$(single_matrix netobserv "${EVAL_DIR}/eval-netobserv.yaml" "core,config,netobserv")
+              ;;
+            argocd)
+              MATRIX=$(single_matrix argocd "${EVAL_DIR}/eval-argo.yaml" "core,config")
+              ;;
+            obs)
+              MATRIX=$(single_matrix obs "${EVAL_DIR}/eval-obs.yaml" "observability/metrics,observability/traces,observability/logs,observability/otelcol")
               ;;
             all)
-              echo "label-selector=" >> "$GITHUB_OUTPUT"  # No filter: run all taskSets
-              echo "toolsets=core,config,helm,kiali,kubevirt,tekton" >> "$GITHUB_OUTPUT"
+              MATRIX=$(append_kiali_multicluster "$(single_matrix all "${EVAL_DIR}/eval-all.yaml" "core,config,helm,kiali,kubevirt,tekton,netobserv")")
               ;;
             *)
               # Default to core suite (matches 'core' or any unrecognized suite)
-              echo "label-selector=suite=core" >> "$GITHUB_OUTPUT"
-              echo "toolsets=core,config" >> "$GITHUB_OUTPUT"
+              MATRIX=$(single_matrix core "${EVAL_DIR}/eval-core.yaml" "core,config")
               ;;
           esac
 
-  # Run mcpchecker evaluation with Kind cluster
+          echo "matrix=$(echo "$MATRIX" | jq -c .)" >> "$GITHUB_OUTPUT"
+
+  # Run mcpchecker evaluation with Minikube cluster
   run-evaluation:
-    name: Run MCP Evaluation
+    # The default-branch workflow assigns this API-visible authorization binding.
+    # PR code can forge artifacts, but cannot change the job's name via artifacts.
+    name: ${{ matrix.job-display-name || format('Run MCP Evaluation ({0})', matrix.suite) }} [PR ${{ needs.check-trigger.outputs.pr-number }} @ ${{ needs.check-trigger.outputs.pr-sha }}]
     needs: check-trigger
     if: needs.check-trigger.outputs.should-run == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.check-trigger.outputs.matrix) }}
+    env:
+      MINIKUBE_DRIVER: ${{ contains(matrix.toolsets, 'kubevirt') && 'docker' || 'podman' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Use pinned SHA to prevent TOCTOU attacks
-          # For PRs: the SHA captured when maintainer commented
-          # For other triggers: the current commit SHA
+          # For PRs: review.commit_id — the server-assigned SHA from the
+          # maintainer's review (immutable, not derived from forgeable metadata).
+          # For other triggers: the current commit SHA.
           ref: ${{ needs.check-trigger.outputs.pr-sha }}
+          # Required for fork PRs: v7's unsafe-PR-checkout guard blocks
+          # workflow_run checkouts when head_repository is a fork.  This is
+          # safe because the workflow itself runs from the default branch and
+          # the ref is pinned to the immutable, permission-verified
+          # review.commit_id — not to forgeable workflow_run metadata.
+          allow-unsafe-pr-checkout: true
+          # Baseline fetches use the public repository; PR code needs no Git credentials.
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      - name: Setup Kind cluster
-        run: make kind-create-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+      - name: Setup Minikube cluster
+        if: matrix.suite != 'kiali-multicluster' && matrix.suite != 'config-multicluster'
+        run: make minikube-create-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE"
 
-      # Only the core suite needs a resize-capable StorageClass (for resize-pvc).
-      # Runs for suite=core and for the "all" run (empty label-selector).
+      # Core tasks always run (every eval includes them) and the resize-pvc
+      # task needs a resize-capable StorageClass, so always install the CSI driver.
       - name: Install CSI hostPath driver (resize-capable StorageClass)
-        if: needs.check-trigger.outputs.label-selector == 'suite=core' || needs.check-trigger.outputs.label-selector == ''
+        if: matrix.suite != 'kiali-multicluster' && matrix.suite != 'config-multicluster'
         run: make csi-hostpath-install
 
+      - name: Setup Node
+        if: matrix.suite == 'kiali-multicluster'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Enable Corepack
+        if: matrix.suite == 'kiali-multicluster'
+        run: corepack enable
+
+      - name: Setup multicluster Kind + Istio/Kiali
+        if: matrix.suite == 'kiali-multicluster'
+        run: make setup-kiali-multicluster
+
+      - name: Setup multicluster Kind for config evals
+        if: matrix.suite == 'config-multicluster'
+        run: make setup-config-multicluster
+
       - name: Install Istio/Kiali and bookinfo demo
-        if: contains(needs.check-trigger.outputs.toolsets, 'kiali')
+        if: matrix.suite != 'kiali-multicluster' && contains(matrix.toolsets, 'kiali')
         run: make setup-kiali
 
       - name: Install KubeVirt
-        if: contains(needs.check-trigger.outputs.toolsets, 'kubevirt')
+        if: contains(matrix.toolsets, 'kubevirt')
         run: make kubevirt-install
 
       - name: Install Tekton
-        if: contains(needs.check-trigger.outputs.toolsets, 'tekton')
+        if: contains(matrix.toolsets, 'tekton')
         run: make tekton-install
+
+      - name: Install NetObserv mock plugin
+        if: contains(matrix.toolsets, 'netobserv')
+        run: make setup-netobserv
+      - name: Install ArgoCD CRDs
+        if: contains(matrix.toolsets, 'argocd')
+        run: make argocd-install
+
+      - name: Install obs stacks (Prometheus, Tempo, Loki)
+        if: contains(matrix.toolsets, 'observability/')
+        run: make obs-setup
+        timeout-minutes: 40
+
+      # Host-local MCP server cannot reach ClusterIP/.svc URLs; port-forward like kiali/netobserv.
+      - name: Expose obs backends (port-forward)
+        if: contains(matrix.toolsets, 'observability/')
+        run: make expose-obs
 
       - name: Start MCP server
         run: make run-server
         env:
-          TOOLSETS: ${{ needs.check-trigger.outputs.toolsets }}
-          MCP_CONFIG_DIR: 'dev/config/mcp-configs'
+          TOOLSETS: ${{ matrix.toolsets }}
+          READ_ONLY: ${{ matrix.read_only || false }}
+          MCP_CONFIG_DIR: ${{ matrix.mcp-config-dir || 'dev/config/mcp-configs' }}
+          MCP_EVAL_KUBECONFIG: ${{ matrix.suite == 'config-multicluster' && '_output/kubeconfig-multicluster' || '' }}
 
       - name: Run mcpchecker evaluation
         id: mcpchecker
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@v0.0.18
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-action@5c8147f67729a4547c01d5e49bee0d6c7023e929 # v0.0.22
         with:
-          eval-config: 'evals/openai-agent/eval.yaml'
+          eval-config: ${{ matrix.eval-config }}
           mcpchecker-version: 'latest'
-          label-selector: ${{ needs.check-trigger.outputs.label-selector }}
           task-filter: ${{ github.event.inputs.task-filter || '' }}
           output-format: 'json'
           verbose: ${{ github.event.inputs.verbose || 'false' }}
           upload-artifacts: 'true'
-          artifact-name: 'mcpchecker-results'
+          artifact-name: 'mcpchecker-results-${{ matrix.suite }}'
           fail-on-error: 'false'
           task-pass-threshold: '0.8'
           assertion-pass-threshold: '0.8'
@@ -305,23 +434,48 @@ jobs:
           JUDGE_BASE_URL: ${{ secrets.JUDGE_BASE_URL }}
           JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
           JUDGE_MODEL_NAME: ${{ secrets.JUDGE_MODEL_NAME }}
+          # The mcpchecker "kubernetes" extension (used by verify steps like
+          # kubernetes.listContexts) talks to the cluster independently of the
+          # MCP server under test, and otherwise falls back to the default
+          # ~/.kube/config. config-multicluster skips minikube and keeps its
+          # merged kubeconfig isolated (see build/config.mk), so it must be
+          # pointed here explicitly, matching MCP_EVAL_KUBECONFIG above.
+          KUBECONFIG: ${{ matrix.suite == 'config-multicluster' && '_output/kubeconfig-multicluster' || '' }}
 
       - name: Cleanup
         if: always()
+        env:
+          SUITE: ${{ matrix.suite }}
         run: |
           make stop-server || true
-          make kind-delete-cluster KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" || true
+          if [[ "$SUITE" == "kiali-multicluster" ]]; then
+            make kind-delete-multicluster || true
+          elif [[ "$SUITE" == "config-multicluster" ]]; then
+            make config-multicluster-cleanup || true
+          else
+            make stop-obs || true
+            make stop-netobserv || true
+            make teardown-netobserv || true
+            make minikube-delete-cluster MINIKUBE_PROFILE="$MINIKUBE_PROFILE" || true
+          fi
 
       # Compare PR results against baseline from main branch
       - name: Fetch baseline results from main
-        if: needs.check-trigger.outputs.is-pr == 'true'
+        if: needs.check-trigger.outputs.is-pr == 'true' && matrix.suite != 'kiali-multicluster'
         env:
-          EVAL_CONFIG: 'evals/openai-agent/eval.yaml'
+          EVAL_CONFIG: ${{ matrix.eval-config }}
         run: |
-          # Derive agent name from eval-config path (same logic as commit-results job)
-          AGENT_NAME=$(echo "$EVAL_CONFIG" | sed 's|evals/||; s|/eval\.yaml||')
+          # Derive result name from eval-config path: eval-core.yaml -> builtin-openai-core
+          SUITE=$(basename "$EVAL_CONFIG" .yaml | sed 's/^eval-//')
+          RESULT_NAME="builtin-openai-${SUITE}"
           git fetch origin main --depth=1
-          git show "origin/main:evals/results/${AGENT_NAME}-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
+          git show "origin/main:evals/results/${RESULT_NAME}-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
+
+      - name: Fetch baseline results from main
+        if: needs.check-trigger.outputs.is-pr == 'true' && matrix.suite == 'kiali-multicluster'
+        run: |
+          git fetch origin main --depth=1
+          git show "origin/main:evals/results/openai-agent-multicluster-latest.json" > /tmp/baseline-results.json 2>/dev/null || true
 
       - name: Check diff prerequisites
         id: diff-check
@@ -344,7 +498,7 @@ jobs:
       - name: Run mcpchecker diff
         id: mcpchecker-diff
         if: needs.check-trigger.outputs.is-pr == 'true' && steps.diff-check.outputs.has-diff == 'true'
-        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@v0.0.18
+        uses: mcpchecker/mcpchecker/.github/actions/mcpchecker-diff-action@5c8147f67729a4547c01d5e49bee0d6c7023e929 # v0.0.22
         with:
           base-results: /tmp/baseline-results.json
           current-results: ${{ steps.diff-check.outputs.results-file }}
@@ -366,28 +520,23 @@ jobs:
           HAS_DIFF: ${{ steps.diff-check.outputs.has-diff || 'false' }}
         run: |
           mkdir -p eval-context
-          cat > eval-context/context.json << EOF
-          {
-            "pr_number": "${PR_NUMBER}",
-            "pr_sha": "${PR_SHA}",
-            "tasks_passed": "${TASKS_PASSED}",
-            "tasks_total": "${TASKS_TOTAL}",
-            "task_pass_rate": "${TASK_PASS_RATE}",
-            "assertions_passed": "${ASSERTIONS_PASSED}",
-            "assertions_total": "${ASSERTIONS_TOTAL}",
-            "passed": "${PASSED}",
-            "has_diff": "${HAS_DIFF}"
-          }
-          EOF
+          jq -n --arg pr_number "$PR_NUMBER" --arg pr_sha "$PR_SHA" \
+            --arg tasks_passed "$TASKS_PASSED" --arg tasks_total "$TASKS_TOTAL" \
+            --arg task_pass_rate "$TASK_PASS_RATE" \
+            --arg assertions_passed "$ASSERTIONS_PASSED" --arg assertions_total "$ASSERTIONS_TOTAL" \
+            --arg passed "$PASSED" --arg has_diff "$HAS_DIFF" \
+            '$ARGS.named' > eval-context/context.json
           if [ -n "$DIFF_OUTPUT" ]; then
             echo "$DIFF_OUTPUT" > eval-context/diff-output.txt
           fi
 
       - name: Upload PR context
         if: always() && needs.check-trigger.outputs.is-pr == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: eval-context
+          # Keep this outside the eval-context-* namespace: the multicluster
+          # report downloads it separately from the regular suite contexts.
+          name: ${{ matrix.suite == 'kiali-multicluster' && 'kiali-multicluster-eval-context' || format('eval-context-{0}', matrix.suite) }}
           path: eval-context/
           retention-days: 1
 
@@ -395,39 +544,53 @@ jobs:
   commit-results:
     name: Commit Evaluation Results
     needs: [check-trigger, run-evaluation]
-    # Only commit results on scheduled runs, not manual dispatch or PR comments
-    if: always() && github.event_name == 'schedule' && needs.run-evaluation.result == 'success'
+    # Only commit results on scheduled runs. Use != 'cancelled' so partial
+    # results from passing suites are still committed when some matrix jobs fail.
+    if: always() && github.event_name == 'schedule' && needs.run-evaluation.result != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          # The scheduled results job pushes its update branch back to this repository.
+          persist-credentials: true
 
       - name: Download mcpchecker results
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: mcpchecker-results
+          pattern: mcpchecker-results-*
           path: mcpchecker-results/
 
       - name: Copy results to evals/results
-        env:
-          EVAL_CONFIG: 'evals/openai-agent/eval.yaml'
         run: |
-          # Extract agent name from eval-config path
-          AGENT_NAME=$(echo "$EVAL_CONFIG" | sed 's|evals/||; s|/eval\.yaml||')
-
           mkdir -p evals/results
-          # Copy the most recent mcpchecker results file with agent-specific name
-          RESULTS_FILE=$(ls -t mcpchecker-results/mcpchecker-*-out.json 2>/dev/null | head -1)
-          if [ -z "$RESULTS_FILE" ]; then
-            echo "Error: No mcpchecker results file found"
-            exit 1
-          fi
-          cp "$RESULTS_FILE" "evals/results/${AGENT_NAME}-latest.json"
+
+          # Each matrix job uploaded its own artifact (e.g. mcpchecker-results-core).
+          # Without merge-multiple, each lands in its own subdirectory.
+          for SUITE_DIR in mcpchecker-results/mcpchecker-results-*; do
+            [ -d "$SUITE_DIR" ] || continue
+
+            # Extract suite name: mcpchecker-results-core -> core
+            SUITE=$(basename "$SUITE_DIR" | sed 's/^mcpchecker-results-//')
+            if [[ "$SUITE" == "kiali-multicluster" ]]; then
+              DEST="evals/results/openai-agent-multicluster-latest.json"
+            else
+              DEST="evals/results/builtin-openai-${SUITE}-latest.json"
+            fi
+
+            RESULTS_FILE=$(ls -t "${SUITE_DIR}"/mcpchecker-*-out.json 2>/dev/null | head -1)
+            if [ -z "$RESULTS_FILE" ]; then
+              echo "Warning: No results file found for suite ${SUITE}, skipping"
+              continue
+            fi
+
+            cp "$RESULTS_FILE" "$DEST"
+            echo "Copied ${SUITE} results to ${DEST}"
+          done
 
       - name: Create Pull Request
         env:

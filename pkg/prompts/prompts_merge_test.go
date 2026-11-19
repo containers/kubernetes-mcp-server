@@ -2,16 +2,17 @@ package prompts
 
 import (
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
 )
 
 func (s *PromptsTestSuite) TestMergePrompts() {
 	s.Run("with no overlap, prompts are combined", func() {
 		base := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1"}},
-			{Prompt: api.Prompt{Name: "prompt2"}},
+			{Prompt: config.Prompt{Name: "prompt1"}},
+			{Prompt: config.Prompt{Name: "prompt2"}},
 		}
 		override := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt3"}},
+			{Prompt: config.Prompt{Name: "prompt3"}},
 		}
 
 		result := MergePrompts(base, override)
@@ -24,11 +25,11 @@ func (s *PromptsTestSuite) TestMergePrompts() {
 
 	s.Run("with overlap, override prompt replaces base prompt", func() {
 		base := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1", Description: "Base 1 description"}},
-			{Prompt: api.Prompt{Name: "prompt2", Description: "Base 2 description"}},
+			{Prompt: config.Prompt{Name: "prompt1", Description: "Base 1 description"}},
+			{Prompt: config.Prompt{Name: "prompt2", Description: "Base 2 description"}},
 		}
 		override := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1", Description: "Override 1 description"}},
+			{Prompt: config.Prompt{Name: "prompt1", Description: "Override 1 description"}},
 		}
 
 		result := MergePrompts(base, override)
@@ -42,8 +43,8 @@ func (s *PromptsTestSuite) TestMergePrompts() {
 	s.Run("with empty base, override prompts are used", func() {
 		var base []api.ServerPrompt
 		override := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1"}},
-			{Prompt: api.Prompt{Name: "prompt2"}},
+			{Prompt: config.Prompt{Name: "prompt1"}},
+			{Prompt: config.Prompt{Name: "prompt2"}},
 		}
 
 		result := MergePrompts(base, override)
@@ -54,8 +55,8 @@ func (s *PromptsTestSuite) TestMergePrompts() {
 	})
 	s.Run("with empty override, base prompts are used", func() {
 		base := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1"}},
-			{Prompt: api.Prompt{Name: "prompt2"}},
+			{Prompt: config.Prompt{Name: "prompt1"}},
+			{Prompt: config.Prompt{Name: "prompt2"}},
 		}
 		var override []api.ServerPrompt
 
@@ -75,13 +76,13 @@ func (s *PromptsTestSuite) TestMergePrompts() {
 	})
 	s.Run("with multiple overrides", func() {
 		base := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1", Description: "Base 1"}},
-			{Prompt: api.Prompt{Name: "prompt2", Description: "Base 2"}},
-			{Prompt: api.Prompt{Name: "prompt3", Description: "Base 3"}},
+			{Prompt: config.Prompt{Name: "prompt1", Description: "Base 1"}},
+			{Prompt: config.Prompt{Name: "prompt2", Description: "Base 2"}},
+			{Prompt: config.Prompt{Name: "prompt3", Description: "Base 3"}},
 		}
 		override := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "prompt1", Description: "Override 1"}},
-			{Prompt: api.Prompt{Name: "prompt3", Description: "Override 3"}},
+			{Prompt: config.Prompt{Name: "prompt1", Description: "Override 1"}},
+			{Prompt: config.Prompt{Name: "prompt3", Description: "Override 3"}},
 		}
 
 		result := MergePrompts(base, override)
@@ -96,14 +97,14 @@ func (s *PromptsTestSuite) TestMergePrompts() {
 	})
 	s.Run("base prompts come first, then overrides", func() {
 		base := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "base1"}},
-			{Prompt: api.Prompt{Name: "base2"}},
-			{Prompt: api.Prompt{Name: "base3"}},
+			{Prompt: config.Prompt{Name: "base1"}},
+			{Prompt: config.Prompt{Name: "base2"}},
+			{Prompt: config.Prompt{Name: "base3"}},
 		}
 
 		override := []api.ServerPrompt{
-			{Prompt: api.Prompt{Name: "override1"}},
-			{Prompt: api.Prompt{Name: "override2"}},
+			{Prompt: config.Prompt{Name: "override1"}},
+			{Prompt: config.Prompt{Name: "override2"}},
 		}
 
 		result := MergePrompts(base, override)
@@ -122,10 +123,10 @@ func (s *PromptsTestSuite) TestMergePrompts() {
 func (s *PromptsTestSuite) TestMergePromptsCompleteReplacement() {
 	base := []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "test-prompt",
 				Description: "Base description",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{Name: "base_arg", Required: true},
 				},
 			},
@@ -134,10 +135,10 @@ func (s *PromptsTestSuite) TestMergePromptsCompleteReplacement() {
 
 	override := []api.ServerPrompt{
 		{
-			Prompt: api.Prompt{
+			Prompt: config.Prompt{
 				Name:        "test-prompt",
 				Description: "Override description",
-				Arguments: []api.PromptArgument{
+				Arguments: []config.PromptArgument{
 					{Name: "override_arg", Required: false},
 				},
 			},

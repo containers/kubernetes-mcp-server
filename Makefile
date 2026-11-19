@@ -18,7 +18,7 @@ LD_FLAGS = -s -w \
 COMMON_BUILD_ARGS = -ldflags "$(LD_FLAGS)"
 
 GOLANGCI_LINT = $(shell pwd)/_output/tools/bin/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.11.4
+GOLANGCI_LINT_VERSION ?= v2.14.0
 
 # NPM version should not append the -dirty flag
 GIT_TAG_VERSION ?= $(shell echo $(shell git describe --tags --always) | sed 's/^v//')
@@ -58,10 +58,10 @@ build-multiarch: ## Build the project for a specific OS/ARCH (used by container 
 .PHONY: build-all-platforms
 build-all-platforms: clean tidy format lint ## Build the project for all platforms
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
-		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
+		GOOS=$(os) GOARCH=$(arch) CGO_ENABLED=0 go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
 	$(foreach arch,$(LINUX_EXTRA_ARCHS), \
-		GOOS=linux GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-linux-$(arch) ./cmd/kubernetes-mcp-server; \
+		GOOS=linux GOARCH=$(arch) CGO_ENABLED=0 go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-linux-$(arch) ./cmd/kubernetes-mcp-server; \
 	)
 
 .PHONY: test
@@ -80,31 +80,39 @@ format: ## Format the code
 tidy: ## Tidy up the go modules
 	go mod tidy
 
-# Download and install golangci-lint if not already installed
+# Download and install the requested golangci-lint version if needed
 .PHONY: golangci-lint
 golangci-lint:
-	@[ -f $(GOLANGCI_LINT) ] || { \
+	@[ "$$($(GOLANGCI_LINT) version --short 2>/dev/null)" = "$(patsubst v%,%,$(GOLANGCI_LINT_VERSION))" ] || { \
 		set -e ;\
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
+		curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(shell dirname $(GOLANGCI_LINT)) $(GOLANGCI_LINT_VERSION) ;\
 	}
 
 .PHONY: lint
 lint: golangci-lint ## Lint the code
-	$(GOLANGCI_LINT) run --verbose --print-resources-usage
+	$(GOLANGCI_LINT) run --verbose
 
 .PHONY: update-readme-tools
 update-readme-tools: ## Update the README.md and docs/configuration.md files with the latest toolsets
 	go run ./internal/tools/update-readme/main.go README.md
 	go run ./internal/tools/update-readme/main.go docs/configuration.md
 
+.PHONY: update-codeowners
+update-codeowners: ## Generate .github/CODEOWNERS from .github/ownership.json
+	go run ./internal/tools/update-codeowners/main.go
+
+.PHONY: check-codeowners
+check-codeowners: ## Check that .github/CODEOWNERS matches .github/ownership.json
+	go run ./internal/tools/update-codeowners/main.go -check
+
 ##@ Local Development
 
 .PHONY: local-env-setup
-local-env-setup: ## Setup complete local development environment with Kind cluster
+local-env-setup: ## Setup complete local development environment with Minikube cluster
 	@echo "========================================="
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "========================================="
-	$(MAKE) kind-create-cluster
+	$(MAKE) minikube-create-cluster
 	$(MAKE) keycloak-install
 	$(MAKE) build
 	@echo ""
@@ -115,19 +123,28 @@ local-env-setup: ## Setup complete local development environment with Kind clust
 	@echo "Configuration file generated:"
 	@echo "  _output/config.toml"
 	@echo ""
-	@echo "Run the MCP server with:"
-	@echo "  ./$(BINARY_NAME) --port 8008 --config _output/config.toml"
+	@echo "First start the Keycloak port-forward in another terminal:"
+	@echo "  make keycloak-port-forward"
 	@echo ""
-	@echo "Or run with MCP inspector:"
-	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME) --config _output/config.toml"
+	@echo "Run the MCP server with:"
+	@echo "  ./$(BINARY_NAME) --config _output/config.toml"
+	@echo ""
+	@echo "Start MCP Inspector in another terminal:"
+	@echo '  NODE_EXTRA_CA_CERTS="$$(pwd)/_output/cert-manager-ca/ca.crt" npx @modelcontextprotocol/inspector@latest'
+	@echo ""
+	@echo "Connect using Streamable HTTP:"
+	@echo "  URL: http://localhost:8008/mcp"
+	@echo "  OAuth client ID: mcp-client (no client secret)"
+	@echo "  OAuth scopes: openid mcp-server"
+	@echo "  Disable Request refresh token"
 
 .PHONY: local-env-setup-kubevirt
-local-env-setup-kubevirt: ## Setup complete local development environment with Kind cluster and KubeVirt
+local-env-setup-kubevirt: ## Setup complete local development environment with Minikube cluster and KubeVirt
 	@echo "========================================="
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "           with KubeVirt"
 	@echo "========================================="
-	$(MAKE) kind-create-cluster
+	$(MAKE) minikube-create-cluster
 	$(MAKE) kubevirt-install
 	$(MAKE) build
 	@echo ""
@@ -144,13 +161,36 @@ local-env-setup-kubevirt: ## Setup complete local development environment with K
 	@echo "KubeVirt is now available!"
 	@echo "Check status with: make kubevirt-status"
 
+.PHONY: local-env-setup-hco
+local-env-setup-hco: ## Setup complete local development environment with Kind cluster and HCO
+	@echo "========================================="
+	@echo "Kubernetes MCP Server - Local Setup"
+	@echo "            with HCO"
+	@echo "========================================="
+	$(MAKE) kind-create-cluster
+	$(MAKE) hco-install
+	$(MAKE) build
+	@echo ""
+	@echo "========================================="
+	@echo "Local environment ready!"
+	@echo "========================================="
+	@echo ""
+	@echo "Run the MCP server with:"
+	@echo "  ./$(BINARY_NAME)"
+	@echo ""
+	@echo "Or run with MCP inspector:"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
+	@echo ""
+	@echo "HCO is now available!"
+	@echo "Check status with: make hco-status"
+
 .PHONY: local-env-setup-tekton
-local-env-setup-tekton: ## Setup complete local development environment with Kind cluster and Tekton Pipelines
+local-env-setup-tekton: ## Setup complete local development environment with Minikube cluster and Tekton Pipelines
 	@echo "========================================="
 	@echo "Kubernetes MCP Server - Local Setup"
 	@echo "        with Tekton Pipelines"
 	@echo "========================================="
-	$(MAKE) kind-create-cluster
+	$(MAKE) minikube-create-cluster
 	$(MAKE) tekton-install
 	$(MAKE) build
 	@echo ""
@@ -167,9 +207,33 @@ local-env-setup-tekton: ## Setup complete local development environment with Kin
 	@echo "Tekton Pipelines is now available!"
 	@echo "Check status with: make tekton-status"
 
+.PHONY: local-env-setup-kuadrant
+local-env-setup-kuadrant: ## Setup complete local development environment with Minikube cluster and Kuadrant MCP Gateway
+	@echo "========================================="
+	@echo "Kubernetes MCP Server - Local Setup"
+	@echo "     with Kuadrant MCP Gateway"
+	@echo "========================================="
+	$(MAKE) minikube-create-cluster
+	$(MAKE) kuadrant-setup
+	$(MAKE) build
+	@echo ""
+	@echo "========================================="
+	@echo "Local environment ready!"
+	@echo "========================================="
+	@echo ""
+	@echo "Run the MCP server with:"
+	@echo "  ./$(BINARY_NAME)"
+	@echo ""
+	@echo "Or run with MCP inspector:"
+	@echo "  npx @modelcontextprotocol/inspector@latest \$$(pwd)/$(BINARY_NAME)"
+	@echo ""
+	@echo "Kuadrant MCP Gateway is now available!"
+	@echo "Check status with: make kuadrant-status"
+
 .PHONY: local-env-teardown
-local-env-teardown: ## Tear down the local Kind cluster
-	$(MAKE) kind-delete-cluster
+local-env-teardown: ## Tear down the local Minikube cluster
+	$(MAKE) keycloak-remove-host-entry
+	$(MAKE) minikube-delete-cluster
 
 .PHONY: print-git-tag-version
 print-git-tag-version: ## Print the GIT_TAG_VERSION

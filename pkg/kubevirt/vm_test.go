@@ -2,6 +2,8 @@ package kubevirt
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -10,8 +12,17 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 )
 
-// createTestVM creates a test VirtualMachine with the given name, namespace, and runStrategy
-func createTestVM(name, namespace string, runStrategy RunStrategy) *unstructured.Unstructured {
+// createTestVM creates a test VirtualMachine with the given name, namespace, and runStrategy.
+// An empty runStrategy leaves spec.runStrategy unset. If running is given, the deprecated
+// spec.running field is set as well.
+func createTestVM(name, namespace string, runStrategy RunStrategy, running ...bool) *unstructured.Unstructured {
+	spec := map[string]interface{}{}
+	if runStrategy != "" {
+		spec["runStrategy"] = string(runStrategy)
+	}
+	if len(running) > 0 {
+		spec["running"] = running[0]
+	}
 	vm := &unstructured.Unstructured{}
 	vm.SetUnstructuredContent(map[string]interface{}{
 		"apiVersion": "kubevirt.io/v1",
@@ -20,9 +31,7 @@ func createTestVM(name, namespace string, runStrategy RunStrategy) *unstructured
 			"name":      name,
 			"namespace": namespace,
 		},
-		"spec": map[string]interface{}{
-			"runStrategy": string(runStrategy),
-		},
+		"spec": spec,
 	})
 	return vm
 }
@@ -325,5 +334,271 @@ func TestRestartVMNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to get VirtualMachine") {
 		t.Errorf("Error = %v, want to contain 'failed to get VirtualMachine'", err)
+	}
+}
+
+func TestPauseVM(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverStatus  int
+		serverBody    string
+		initialVM     *unstructured.Unstructured
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name:         "Pause running VM",
+			serverStatus: http.StatusOK,
+			initialVM:    createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:    false,
+		},
+		{
+			name:          "VMI not found",
+			serverStatus:  http.StatusNotFound,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","message":"virtualmachineinstances.subresources.kubevirt.io \"test-vm\" not found","code":404}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+		{
+			name:          "VM already paused",
+			serverStatus:  http.StatusConflict,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Conflict","message":"VM is already paused","code":409}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+		{
+			name:          "Migration in progress",
+			serverStatus:  http.StatusConflict,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Conflict","message":"cannot pause VMI with a live migration in progress","code":409}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+		{
+			name:          "Pause fails when subresource returns error",
+			serverStatus:  http.StatusInternalServerError,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to pause VirtualMachineInstance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT, got %s", r.Method)
+				}
+				if !strings.HasSuffix(r.URL.Path, "/pause") {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+				}
+				if tt.serverBody != "" {
+					w.Header().Set("Content-Type", "application/json")
+				}
+				w.WriteHeader(tt.serverStatus)
+				if tt.serverBody != "" {
+					_, _ = w.Write([]byte(tt.serverBody))
+				}
+			}))
+			defer server.Close()
+
+			restConfig := createTestRESTConfig(server)
+			scheme := runtime.NewScheme()
+			dynamicClient := fake.NewSimpleDynamicClient(scheme, tt.initialVM)
+			ctx := context.Background()
+
+			vm, err := PauseVM(ctx, dynamicClient, restConfig, tt.initialVM.GetNamespace(), tt.initialVM.GetName())
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Error = %v, want to contain %q", err, tt.errorContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if vm == nil {
+				t.Errorf("Expected non-nil VM, got nil")
+			}
+		})
+	}
+}
+
+func TestUnpauseVM(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverStatus  int
+		serverBody    string
+		initialVM     *unstructured.Unstructured
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name:         "Unpause paused VM",
+			serverStatus: http.StatusOK,
+			initialVM:    createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:    false,
+		},
+		{
+			name:          "VMI not found",
+			serverStatus:  http.StatusNotFound,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","message":"virtualmachineinstances.subresources.kubevirt.io \"test-vm\" not found","code":404}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to unpause VirtualMachineInstance",
+		},
+		{
+			name:          "VM not paused",
+			serverStatus:  http.StatusConflict,
+			serverBody:    `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Conflict","message":"VMI is not paused","code":409}`,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to unpause VirtualMachineInstance",
+		},
+		{
+			name:          "Unpause fails when subresource returns error",
+			serverStatus:  http.StatusInternalServerError,
+			initialVM:     createTestVM("test-vm", "default", RunStrategyAlways),
+			wantError:     true,
+			errorContains: "failed to unpause VirtualMachineInstance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT, got %s", r.Method)
+				}
+				if !strings.HasSuffix(r.URL.Path, "/unpause") {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+				}
+				if tt.serverBody != "" {
+					w.Header().Set("Content-Type", "application/json")
+				}
+				w.WriteHeader(tt.serverStatus)
+				if tt.serverBody != "" {
+					_, _ = w.Write([]byte(tt.serverBody))
+				}
+			}))
+			defer server.Close()
+
+			restConfig := createTestRESTConfig(server)
+			scheme := runtime.NewScheme()
+			dynamicClient := fake.NewSimpleDynamicClient(scheme, tt.initialVM)
+			ctx := context.Background()
+
+			vm, err := UnpauseVM(ctx, dynamicClient, restConfig, tt.initialVM.GetNamespace(), tt.initialVM.GetName())
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Error = %v, want to contain %q", err, tt.errorContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if vm == nil {
+				t.Errorf("Expected non-nil VM, got nil")
+			}
+		})
+	}
+}
+
+// KubeVirt rejects a VirtualMachine that sets both spec.running and
+// spec.runStrategy ("Running and RunStrategy are mutually exclusive"), so the
+// lifecycle helpers must drop spec.running when they set spec.runStrategy.
+func TestLifecycleWithDeprecatedRunning(t *testing.T) {
+	tests := []struct {
+		name         string
+		initialVM    *unstructured.Unstructured
+		action       string
+		wantChanged  bool
+		wantStrategy RunStrategy
+	}{
+		{
+			name:         "Start VM with running: false",
+			initialVM:    createTestVM("test-vm", "default", "", false),
+			action:       "start",
+			wantChanged:  true,
+			wantStrategy: RunStrategyAlways,
+		},
+		{
+			name:        "Start VM with running: true is a no-op",
+			initialVM:   createTestVM("test-vm", "default", "", true),
+			action:      "start",
+			wantChanged: false,
+		},
+		{
+			name:         "Stop VM with running: true",
+			initialVM:    createTestVM("test-vm", "default", "", true),
+			action:       "stop",
+			wantChanged:  true,
+			wantStrategy: RunStrategyHalted,
+		},
+		{
+			name:         "Restart VM with running: true",
+			initialVM:    createTestVM("test-vm", "default", "", true),
+			action:       "restart",
+			wantChanged:  true,
+			wantStrategy: RunStrategyAlways,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewSimpleDynamicClient(runtime.NewScheme(), tt.initialVM)
+			ctx := context.Background()
+			ns, name := tt.initialVM.GetNamespace(), tt.initialVM.GetName()
+
+			var vm *unstructured.Unstructured
+			var changed bool
+			var err error
+			switch tt.action {
+			case "start":
+				vm, changed, err = StartVM(ctx, client, ns, name)
+			case "stop":
+				vm, changed, err = StopVM(ctx, client, ns, name)
+			case "restart":
+				vm, err = RestartVM(ctx, client, ns, name)
+				changed = true
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+			if tt.wantStrategy == "" {
+				return
+			}
+
+			if _, found, _ := unstructured.NestedFieldNoCopy(vm.Object, "spec", "running"); found {
+				t.Errorf("spec.running is still set, KubeVirt would reject the update")
+			}
+			strategy, found, err := GetVMRunStrategy(vm)
+			if err != nil || !found {
+				t.Fatalf("runStrategy not found: %v", err)
+			}
+			if strategy != tt.wantStrategy {
+				t.Errorf("Strategy = %q, want %q", strategy, tt.wantStrategy)
+			}
+		})
 	}
 }

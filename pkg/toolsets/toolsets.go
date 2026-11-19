@@ -37,12 +37,16 @@ func ToolsetFromString(name string) api.Toolset {
 }
 
 func Validate(toolsets []string) error {
+	var unknown []string
 	for _, toolset := range toolsets {
 		if ToolsetFromString(toolset) == nil {
-			return fmt.Errorf("invalid toolset name: %s, valid names are: %s", toolset, strings.Join(ToolsetNames(), ", "))
+			unknown = append(unknown, toolset)
 		}
 	}
-	return nil
+	if len(unknown) == 0 {
+		return nil
+	}
+	return fmt.Errorf("invalid toolset name: %s, valid names are: %s", strings.Join(unknown, ", "), strings.Join(ToolsetNames(), ", "))
 }
 
 type toolsetRegistry struct {

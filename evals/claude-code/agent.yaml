@@ -1,5 +1,0 @@
-kind: Agent
-metadata:
-  name: "claude-code-acp"
-acp:
-  cmd: "claude-agent-acp"

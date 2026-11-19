@@ -2,11 +2,9 @@ package kiali
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,33 +12,68 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/config"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
+	"github.com/containers/kubernetes-mcp-server/pkg/tlsutil"
 )
 
 type Kiali struct {
+	cfg                  *config.Config
 	bearerToken          string
 	kialiURL             string
 	kialiInsecure        bool
 	certificateAuthority string
+	tlsMinVersion        string
+	tlsCipherSuites      []string
 	requireTLS           func() bool
 }
 
-// NewKiali creates a new Kiali instance
-func NewKiali(configProvider api.BaseConfig, kubernetes *rest.Config) *Kiali {
-	kiali := &Kiali{
-		bearerToken: kubernetes.BearerToken,
-		requireTLS:  configProvider.IsRequireTLS,
+// bearerTokenFromRESTConfig returns the bearer token from an in-cluster or kubeconfig
+// REST config (inline token or projected service account token file).
+func bearerTokenFromRESTConfig(restConfig *rest.Config) string {
+	if restConfig == nil {
+		return ""
 	}
-	if cfg, ok := configProvider.GetToolsetConfig("kiali"); ok {
-		if kc, ok := cfg.(*Config); ok && kc != nil {
+	if token := strings.TrimSpace(restConfig.BearerToken); token != "" {
+		return token
+	}
+	if path := strings.TrimSpace(restConfig.BearerTokenFile); path != "" {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(contents))
+	}
+	return ""
+}
+
+// NewKiali creates a new Kiali instance
+func NewKiali(cfg *config.Config, kubernetes *rest.Config) (*Kiali, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+	if kubernetes == nil {
+		return nil, fmt.Errorf("kubernetes rest config is required")
+	}
+	kiali := &Kiali{
+		cfg:             cfg,
+		requireTLS:      func() bool { return cfg.RequireTLS.Get() },
+		tlsMinVersion:   cfg.TLSMinVersion.Get(),
+		tlsCipherSuites: cfg.TLSCipherSuites.Get(),
+		bearerToken:     bearerTokenFromRESTConfig(kubernetes),
+	}
+	if tc, ok := cfg.GetToolsetConfig("kiali"); ok {
+		if kc, ok := tc.(*Config); ok && kc != nil {
 			kiali.kialiURL = kc.Url
 			kiali.kialiInsecure = kc.Insecure
 			kiali.certificateAuthority = kc.CertificateAuthority
 		}
 	}
-	return kiali
+	if strings.TrimSpace(kiali.kialiURL) == "" {
+		kiali.kialiURL = getDiscoveredURL()
+	}
+	return kiali, nil
 }
 
 // validateAndGetURL validates the Kiali client configuration and returns the full URL
@@ -87,46 +120,48 @@ func (k *Kiali) validateAndGetURL(endpoint string) (string, error) {
 	return u.String(), nil
 }
 
-func (k *Kiali) createHTTPClient(ctx context.Context) *http.Client {
+func (k *Kiali) createHTTPClient(ctx context.Context) (*http.Client, error) {
 	logger := klogutil.FromContext(ctx)
-	// Base TLS configuration with minimum version for security
-	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: k.kialiInsecure,
+	// Build TLS options based on configuration
+	var tlsOpts []tlsutil.TLSConfigOption
+
+	// Apply InsecureSkipVerify if configured
+	if k.kialiInsecure {
+		tlsOpts = append(tlsOpts, tlsutil.WithInsecureSkipVerify(true))
 	}
 
 	// If a custom Certificate Authority is configured, load and add it
 	if caValue := strings.TrimSpace(k.certificateAuthority); caValue != "" {
-		// Read the certificate from file
 		caPEM, err := os.ReadFile(caValue)
 		if err != nil {
 			logger.Error(err, "failed to read CA certificate from file, proceeding without custom CA", "ca_file", caValue)
-			return k.wrapWithTLSEnforcement(&http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: tlsConfig,
-				},
-			})
+		} else {
+			// Start with the host system pool when possible so we don't drop system roots
+			var certPool *x509.CertPool
+			if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
+				certPool = systemPool
+			} else {
+				certPool = x509.NewCertPool()
+			}
+			if ok := certPool.AppendCertsFromPEM(caPEM); ok {
+				tlsOpts = append(tlsOpts, tlsutil.WithRootCAs(certPool))
+			} else {
+				logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
+			}
 		}
+	}
 
-		// Start with the host system pool when possible so we don't drop system roots
-		var certPool *x509.CertPool
-		if systemPool, err := x509.SystemCertPool(); err == nil && systemPool != nil {
-			certPool = systemPool
-		} else {
-			certPool = x509.NewCertPool()
-		}
-		if ok := certPool.AppendCertsFromPEM(caPEM); ok {
-			tlsConfig.RootCAs = certPool
-		} else {
-			logger.V(0).Info("failed to append provided certificate authority; proceeding without custom CA")
-		}
+	// Build TLS config from stored min version and cipher suites.
+	tlsConfig, err := tlsutil.BuildTLSConfig(k.tlsMinVersion, k.tlsCipherSuites, tlsOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
 	}
 
 	return k.wrapWithTLSEnforcement(&http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},
-	})
+	}), nil
 }
 
 // wrapWithTLSEnforcement wraps the HTTP client with TLS enforcement if require_tls is configured.
@@ -154,13 +189,21 @@ func (k *Kiali) authorizationHeader() string {
 	return "Bearer " + token
 }
 
-// maxResponseBodySize is the maximum number of bytes read from a Kiali API
-// response. Responses exceeding this limit are truncated to prevent unbounded
-// memory consumption from a misbehaving or compromised upstream server.
-const maxResponseBodySize = 512 << 10 // 512 KiB
+func (k *Kiali) backendLimit() (int64, error) {
+	// Unreachable today: NewKiali rejects a nil config and stores it. The error
+	// is defense against a future bug that builds a Kiali without one.
+	if k == nil {
+		return kubernetes.BackendLimit(nil)
+	}
+	return kubernetes.BackendLimit(k.cfg)
+}
 
-// executeRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
+// ExecuteRequest executes an HTTP request (optionally with a body) and handles common error scenarios.
 func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments map[string]any) (string, error) {
+	limit, err := k.backendLimit()
+	if err != nil {
+		return "", err
+	}
 	ApiCallURL, err := k.validateAndGetURL(endpoint)
 	if err != nil {
 		return "", err
@@ -186,18 +229,21 @@ func (k *Kiali) ExecuteRequest(ctx context.Context, endpoint string, arguments m
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Kubernetes-MCP-Server", "true")
-	client := k.createHTTPClient(ctx)
+	client, err := k.createHTTPClient(ctx)
+	if err != nil {
+		return "", err
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize+1))
+	respBody, err := kubernetes.ReadCapped(resp.Body, limit)
 	if err != nil {
+		if kubernetes.IsResponseTooLarge(err) {
+			return "", err
+		}
 		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-	if int64(len(respBody)) > maxResponseBodySize {
-		return "", fmt.Errorf("kiali API response exceeded maximum allowed size of %d bytes", maxResponseBodySize)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(respBody) > 0 {

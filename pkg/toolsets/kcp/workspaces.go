@@ -30,7 +30,11 @@ func initWorkspaceTools() []api.ServerTool {
 			},
 			ClusterAware:       ptr.To(false),
 			TargetListProvider: ptr.To(false),
-			Handler:            workspacesList,
+			RBAC: api.RBACBounded(api.RBACRequirement{
+				Verbs:  []string{"list"},
+				Target: api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tenancy.kcp.io", Resource: "workspaces"}},
+			}),
+			Handler: workspacesList,
 		},
 		{
 			Tool: api.Tool{
@@ -54,7 +58,12 @@ func initWorkspaceTools() []api.ServerTool {
 				},
 			},
 			ClusterAware: ptr.To(false),
-			Handler:      workspaceDescribe,
+			RBAC: api.RBACBounded(api.RBACRequirement{
+				Verbs:        []string{"get"},
+				Target:       api.RBACTarget{Resource: &api.RBACResourceTarget{APIGroup: "tenancy.kcp.io", Resource: "workspaces"}},
+				ResourceName: &api.RBACResourceName{Argument: "workspace"},
+			}),
+			Handler: workspaceDescribe,
 		},
 	}
 }
