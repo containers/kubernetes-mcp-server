@@ -67,42 +67,12 @@ func (c *Config) Validate() error {
 	return c.validateAllowedNamespaces()
 }
 
-// normalizeAllowedNamespaces trims, skips empties, and deduplicates preserving
-// first-occurrence order. If the only non-empty entry is "**", returns ["**"].
-// Mixed "**" + names keeps the namespace names; Validate rejects that config.
-func normalizeAllowedNamespaces(raw []string) []string {
-	if len(raw) == 0 {
-		return []string{defaultURLDiscoveryNamespace}
-	}
-	seen := sets.New[string]()
-	out := make([]string, 0, len(raw))
-	hasWildcard := false
-	for _, entry := range raw {
-		ns := strings.TrimSpace(entry)
-		if ns == "" {
-			continue
-		}
-		if ns == DiscoveryAllNamespacesWildcard {
-			hasWildcard = true
-			continue
-		}
-		if seen.Has(ns) {
-			continue
-		}
-		seen.Insert(ns)
-		out = append(out, ns)
-	}
-	if hasWildcard && len(out) == 0 {
-		return []string{DiscoveryAllNamespacesWildcard}
-	}
-	if len(out) == 0 {
-		return []string{defaultURLDiscoveryNamespace}
-	}
-	return out
-}
-
+// validateAllowedNamespaces trims, rejects empties, deduplicates preserving
+// first-occurrence order, and writes the canonical allowlist onto c.
+// Unset/empty becomes [defaultURLDiscoveryNamespace]. "**" must stand alone.
 func (c *Config) validateAllowedNamespaces() error {
 	if len(c.AllowedNamespaces) == 0 {
+		c.AllowedNamespaces = []string{defaultURLDiscoveryNamespace}
 		return nil
 	}
 	seen := sets.New[string]()
@@ -138,12 +108,11 @@ func (c *Config) validateAllowedNamespaces() error {
 
 // URLDiscoveryNamespaces returns namespaces searched for Kiali CRs and
 // well-known in-cluster Service URLs when url is empty.
-// Soft-normalizes (trim/dedupe); hard checks belong in Validate.
 func (c *Config) URLDiscoveryNamespaces() []string {
 	if c == nil || len(c.AllowedNamespaces) == 0 {
 		return []string{defaultURLDiscoveryNamespace}
 	}
-	return normalizeAllowedNamespaces(c.AllowedNamespaces)
+	return c.AllowedNamespaces
 }
 
 // DiscoverAllNamespaces reports whether discovery should list Kiali CRs cluster-wide.
