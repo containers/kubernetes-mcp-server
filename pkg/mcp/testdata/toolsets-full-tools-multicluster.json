@@ -260,8 +260,7 @@
           "type": "string"
         },
         "tailLines": {
-          "default": 100,
-          "description": "Number of lines to retrieve from the end of service logs (Optional, 0 means all logs; ignored for file queries)",
+          "description": "Number of lines to retrieve from the end of service logs. Omit to retrieve the last 100 service lines, or set to 0 to retrieve all lines. For file queries, omit this parameter or set it to 0.",
           "minimum": 0,
           "type": "integer"
         }

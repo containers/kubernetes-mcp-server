@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -30,6 +33,11 @@ func (s *NodesSuite) TearDownTest() {
 }
 
 func (s *NodesSuite) TestNodesLog() {
+	serviceLines := make([]string, 105)
+	for i := range serviceLines {
+		serviceLines[i] = fmt.Sprintf("Service line %d\n", i+1)
+	}
+	fileLog := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
 	s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Get Node response
 		if req.URL.Path == "/api/v1/nodes/existing-node" {
@@ -47,23 +55,30 @@ func (s *NodesSuite) TestNodesLog() {
 		// Get Proxy Logs
 		if req.URL.Path == "/api/v1/nodes/existing-node/proxy/logs" {
 			w.Header().Set("Content-Type", "text/plain")
-			query := req.URL.Query().Get("query")
+			params := req.URL.Query()
 			var logContent string
-			switch query {
+			switch params.Get("query") {
 			case "kubelet":
-				if req.URL.Query().Get("tailLines") != "2" {
-					w.WriteHeader(http.StatusNotAcceptable)
+				lines := serviceLines
+				if params.Has("tailLines") {
+					tail, err := strconv.ParseInt(params.Get("tailLines"), 10, 64)
+					if err != nil || tail < 0 {
+						http.Error(w, "invalid tailLines", http.StatusNotAcceptable)
+						return
+					}
+					if tail > 0 {
+						lines = lines[len(lines)-int(min(tail, int64(len(lines)))):]
+					}
+				}
+				logContent = strings.Join(lines, "")
+			case "/empty.log", "/kubelet.log", `\kubelet.log`:
+				if params.Has("tailLines") {
+					http.Error(w, "cannot specify file with options", http.StatusNotAcceptable)
 					return
 				}
-				logContent = "Line 4\nLine 5\n"
-			case "/empty.log":
-				logContent = ""
-			case "/kubelet.log":
-				if req.URL.Query().Has("tailLines") {
-					w.WriteHeader(http.StatusNotAcceptable)
-					return
+				if params.Get("query") != "/empty.log" {
+					logContent = fileLog
 				}
-				logContent = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
 			default:
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -151,73 +166,39 @@ func (s *NodesSuite) TestNodesLog() {
 				"expected descriptive message '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
 		})
 	})
-	s.Run("nodes_log(name=existing-node, query=/kubelet.log)", func() {
-		toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-			"name":  "existing-node",
-			"query": "/kubelet.log",
-		})
-		s.Require().NotNil(toolResult, "toolResult should not be nil")
-		s.Run("no error", func() {
-			s.Falsef(toolResult.IsError, "call tool should succeed")
-			s.Nilf(err, "call tool should not return error object")
-		})
-		s.Run("returns full log", func() {
-			expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-			s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
-				"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
-		})
-	})
-	for _, tailCase := range []interface{}{2, int64(2), float64(2)} {
-		s.Run("nodes_log(name=existing-node, query=kubelet, tailLines=2)", func() {
-			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-				"name":      "existing-node",
-				"query":     "kubelet",
-				"tailLines": tailCase,
-			})
-			s.Require().NotNil(toolResult, "toolResult should not be nil")
-			s.Run("no error", func() {
-				s.Falsef(toolResult.IsError, "call tool should succeed")
-				s.Nilf(err, "call tool should not return error object")
-			})
-			s.Run("returns tail log", func() {
-				expectedMessage := "Line 4\nLine 5\n"
-				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
-					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
-			})
-		})
-		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=2)", func() {
-			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-				"name":      "existing-node",
-				"query":     "/kubelet.log",
-				"tailLines": tailCase,
-			})
-			s.Require().NotNil(toolResult, "toolResult should not be nil")
-			s.Run("no error", func() {
-				s.Falsef(toolResult.IsError, "call tool should succeed")
-				s.Nilf(err, "call tool should not return error object")
-			})
-			s.Run("returns full log", func() {
-				expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
-					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
-			})
-		})
-		s.Run("nodes_log(name=existing-node, query=/kubelet.log, tailLines=-1)", func() {
-			toolResult, err := s.CallTool("nodes_log", map[string]interface{}{
-				"name":  "existing-node",
-				"query": "/kubelet.log",
-				"tail":  -1,
-			})
-			s.Require().NotNil(toolResult, "toolResult should not be nil")
-			s.Run("no error", func() {
-				s.Falsef(toolResult.IsError, "call tool should succeed")
-				s.Nilf(err, "call tool should not return error object")
-			})
-			s.Run("returns full log", func() {
-				expectedMessage := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n"
-				s.Equalf(expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text,
-					"expected log content '%s', got %v", expectedMessage, toolResult.Content[0].(*mcp.TextContent).Text)
-			})
+	cases := []struct {
+		name    string
+		query   string
+		tail    any
+		want    string
+		isError bool
+	}{
+		{"file query with no tail", "/kubelet.log", nil, fileLog, false},
+		{"file query with zero tail", "/kubelet.log", 0, fileLog, false},
+		{"file query with positive tail", "/kubelet.log", 2, "tailLines is only supported for service logs", true},
+		{"file query with backslash and positive tail", `\kubelet.log`, 2, "tailLines is only supported for service logs", true},
+		{"service query with no tail", "kubelet", nil, strings.Join(serviceLines[5:], ""), false},
+		{"service query with zero tail", "kubelet", 0, strings.Join(serviceLines, ""), false},
+		{"service query with positive tail", "kubelet", 2, strings.Join(serviceLines[103:], ""), false},
+		{"service query with oversized tail", "kubelet", 1000, strings.Join(serviceLines, ""), false},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			args := map[string]any{"name": "existing-node", "query": tc.query}
+			if tc.tail != nil {
+				args["tailLines"] = tc.tail
+			}
+			result, err := s.CallTool("nodes_log", args)
+			s.Require().NoError(err)
+			s.Require().NotNil(result)
+			s.Require().Len(result.Content, 1)
+			s.Equal(tc.isError, result.IsError)
+			got := result.Content[0].(*mcp.TextContent).Text
+			if tc.isError {
+				s.Contains(got, tc.want)
+			} else {
+				s.Equal(tc.want, got)
+			}
 		})
 	}
 }
