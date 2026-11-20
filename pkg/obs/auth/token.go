@@ -11,7 +11,9 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func readToken(ctx context.Context, restConfig *rest.Config, authMode AuthMode) (string, error) {
+// ReadToken returns the bearer token selected by authMode. An empty token means
+// no token is available; client certificates and exec plugins are not forwarded.
+func ReadToken(ctx context.Context, restConfig *rest.Config, authMode AuthMode) (string, error) {
 	switch authMode {
 	case AuthModeKubeConfig:
 		return readTokenFromRestConfig(restConfig)

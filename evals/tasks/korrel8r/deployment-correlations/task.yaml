@@ -1,0 +1,53 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  labels:
+    suite: korrel8r
+    project: korrel8r
+    requires: korrel8r
+  annotations:
+    project-name: "Korrel8r"
+    project-url: "https://korrel8r.github.io/korrel8r/"
+  name: "Investigate the checkout Deployment's resources and signals"
+  category: "Kubernetes cross-signal correlation"
+  description: "Trace a Deployment through its workload and dependencies to a verified log and readiness Event, without confusing it with a decoy."
+  difficulty: hard
+spec:
+  requires:
+    - extension: kubernetes
+      as: k8s
+  setup:
+    - script:
+        file: ../shared/setup-signals.sh
+        timeout: 480s
+  # Tool-use assertions live in the eval configs so the same prompt and judge
+  # can run against either core tools or the Korrel8r toolset.
+  verify:
+    - llmJudge:
+        contains: >-
+          Identifies the live ReplicaSet and running Pod owned by Deployment
+          korrel8r-eval/checkout-eval from returned objects or selectors, not
+          guessed names. Confirms that the Pod mounts the checkout-settings
+          ConfigMap and runs as the checkout-identity ServiceAccount. Summarizes
+          the verified related resource kinds and counts without counting graph
+          queries as actual objects. Reports the observed application log
+          "checkout-eval: dependency unavailable" from that Pod's app container
+          and a real Unhealthy Warning Event involving the same Pod. Explains
+          that the readiness probe fails while the container remains running.
+          Does not attribute the checkout-decoy log or unrelated Events to the
+          target, or claim that metrics, alerts, or traces were found. Exact
+          Event counts are not required; distinguishes suggested correlations
+          from facts confirmed in objects and signals.
+  cleanup:
+    - script:
+        file: ../shared/teardown-signals.sh
+  prompt:
+    inline: >-
+      Investigate Deployment checkout-eval in namespace korrel8r-eval. Trace
+      its live ReplicaSet and Pod, including the Pod's configuration and
+      identity dependencies. Which related resource kinds did you verify and
+      how many of each did you find? What application log message and Warning
+      Event belong to that Pod, and what do they tell you about its readiness?
+      Verify actual resource names, connections, and signals from returned data
+      rather than graph suggestions. Distinguish the target from unrelated
+      workloads in the namespace; do not infer metrics, alerts, or traces.

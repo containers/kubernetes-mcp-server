@@ -23,6 +23,7 @@ import (
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/helm"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kcp"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kiali"
+	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/korrel8r"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/kubevirt"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/logs"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets/metrics"
@@ -203,6 +204,49 @@ func (s *ToolsetsSuite) TestKubevirtToolsFilteredWithoutCRDs() {
 				}
 			}
 		})
+	})
+}
+
+func (s *ToolsetsSuite) TestKorrel8rConsoleToolsFilteredWithoutOpenShift() {
+	consoleTools := []string{"korrel8r_get_console", "korrel8r_show_in_console"}
+	s.Run("Korrel8r console tools are filtered out on a cluster with no OpenShift console", func() {
+		s.Cfg.Toolsets.SetForTest([]string{korrel8r.ToolsetName})
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Require().NoError(err, "Expected no error from ListTools")
+		s.Require().NotNil(tools, "Expected tools from ListTools")
+		s.Run("console tools are not present", func() {
+			for _, tool := range tools.Tools {
+				s.Require().NotContains(consoleTools, tool.Name, "Expected %s to not be present on a non-OpenShift cluster", tool.Name)
+			}
+		})
+		s.Run("the other korrel8r tools are still present", func() {
+			found := false
+			for _, tool := range tools.Tools {
+				found = found || tool.Name == "korrel8r_list_domains"
+			}
+			s.True(found, "Expected korrel8r_list_domains to survive the console filter")
+		})
+	})
+}
+
+func (s *ToolsetsSuite) TestKorrel8rConsoleToolsPresentInOpenShift() {
+	s.Run("Korrel8r console tools are present on OpenShift", func() {
+		s.ResetHandlers()
+		s.Handle(test.NewInOpenShiftHandler())
+		s.Cfg.Toolsets.SetForTest([]string{korrel8r.ToolsetName})
+		s.Cfg.EnableTargetCompatibilityToolFilters.SetForTest(true)
+		s.InitMcpClient()
+		tools, err := s.ListTools()
+		s.Require().NoError(err, "Expected no error from ListTools")
+		s.Require().NotNil(tools, "Expected tools from ListTools")
+		found := map[string]bool{}
+		for _, tool := range tools.Tools {
+			found[tool.Name] = true
+		}
+		s.True(found["korrel8r_get_console"], "Expected korrel8r_get_console to be present on OpenShift")
+		s.True(found["korrel8r_show_in_console"], "Expected korrel8r_show_in_console to be present on OpenShift")
 	})
 }
 
@@ -409,6 +453,7 @@ func (s *ToolsetsSuite) TestGranularToolsetsTools() {
 		&config.Toolset{},
 		&helm.Toolset{},
 		&kiali.Toolset{},
+		&korrel8r.Toolset{},
 		&kubevirt.Toolset{},
 		&logs.Toolset{},
 		&metrics.Toolset{},

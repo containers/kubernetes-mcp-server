@@ -265,6 +265,7 @@ and only needed for the project-specific scenarios noted.
 | [Helm](https://helm.sh) | `helm` | 3 |
 | [Istio](https://istio.io) | `kiali` | 5 |
 | [Kiali](https://kiali.io) | `kiali` | 16 |
+| [Korrel8r](https://korrel8r.github.io/korrel8r/) | `korrel8r` | 1 |
 | [Kubernetes](https://kubernetes.io) | - | 33 |
 | [KubeVirt](https://kubevirt.io) | `kubevirt`, `tekton` | 27 |
 | [NetObserv](https://netobserv.io) | `netobserv` | 4 |
@@ -288,6 +289,7 @@ The following sets of tools are available (toolsets marked with ✓ in the Defau
 | kubevirt                       | KubeVirt virtual machine management tools, check the [KubeVirt documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/kubevirt.md) for more details.                                                         |         |
 | netobserv                      | Network observability tools backed by the NetObserv console plugin API (flows, metrics, export). Check the [NetObserv documentation](https://github.com/containers/kubernetes-mcp-server/blob/main/docs/NETOBSERV.md) for more details. |         |
 | observability/alert-management | Toolset for listing OpenShift alerts and managing alert rules via the monitoring-plugin management API.                                                                                                                                 |         |
+| observability/korrel8r         | Correlate Kubernetes resources with logs, metrics, alerts, and traces using Korrel8r.                                                                                                                                                   |         |
 | observability/logs             | Toolset for querying Loki logs                                                                                                                                                                                                          |         |
 | observability/metrics          | Toolset for querying Prometheus and Alertmanager, including listing, creating, updating, and deleting silences.                                                                                                                         |         |
 | observability/otelcol          | Toolset for OpenTelemetry Collector configuration assistance including schema validation, component documentation, and version management.                                                                                              |         |
@@ -945,6 +947,38 @@ Do not retry 400, 404, or 413.
   - `cluster_labels` (`object`) - Not supported on this operation; omit this field.
   - `rule_id` (`string`) - Single stable alert rule ID to delete.
   - `rule_ids` (`array`) - Stable alert rule IDs to delete (at most 100 combined with rule_id).
+
+</details>
+
+<details>
+
+<summary>observability/korrel8r</summary>
+
+- **korrel8r_list_domains** - Use this when you need to find known domains and configured stores. Use 'korrel8r_list_domain_classes' to find classes for a domain.
+
+- **korrel8r_list_domain_classes** - Use this when you need a domain's classes for queries or graph goals (domain:class). Use 'korrel8r_help' for unfamiliar selectors.
+  - `domain` (`string`) **(required)** - Name of the domain to list
+
+- **korrel8r_help** - Use this when you need query syntax or examples for a specified domain.
+  - `domain` (`string`) **(required)** - Name of the domain to get help for.
+
+- **korrel8r_create_neighbors_graph** - Explore what is related to a failing workload or other resource or signal. Use first for open-ended investigations across Kubernetes resources and observability signals instead of guessing related object names. Example: {"start":{"queries":["k8s:Deployment.v1.apps:{\"namespace\":\"default\",\"name\":\"my-deployment\"}"]},"depth":2}. The selector is JSON text inside the query string; depth 1 finds direct neighbors, 2 follows one more hop. Verify relevant graph queries with 'korrel8r_get_objects'; correlation is not proof of cause.
+  - `depth` (`integer`) **(required)** - Maximum number of correlation steps to follow from the start. Depth 1 returns direct correlations only.
+  - `start` (`object`) **(required)** - Starting point for the search.
+
+- **korrel8r_create_goals_graph** - Find a specific class of data related to a resource or signal, such as application logs for a Deployment. Use for targeted investigations: {"start":{"queries":["k8s:Deployment.v1.apps:{\"namespace\":\"default\",\"name\":\"my-deployment\"}"]},"goals":["log:application"]}. The selector is JSON text inside the query string. For unfamiliar classes or selectors, use 'korrel8r_list_domains', 'korrel8r_list_domain_classes', and 'korrel8r_help' with a domain. Application logs work via the Kubernetes API without a separate log store; Events are k8s resources (k8s:Event.v1), not a separate domain. Verify graph queries with 'korrel8r_get_objects'.
+  - `goals` (``) **(required)** - Goal classes in DOMAIN:CLASS format, e.g. log:application, alert:alert.
+  - `start` (`object`) **(required)** - Starting point for the search.
+
+- **korrel8r_get_objects** - Fetch full objects to verify graph results. Pass a graph node's queries[].query (domain:class:selector), or a known query. Use 'korrel8r_help' with a domain if constructing an unfamiliar query. Bound results with constraint.limit or constraint.start/end (RFC 3339).
+  - `constraint` (``) - Set limit to bound results; start/end (RFC 3339) for time ranges.
+  - `query` (`string`) **(required)** - Query string 'domain:class:selector'. Use 'korrel8r_help' for unfamiliar query syntax.
+
+- **korrel8r_get_console** - Read the user's OpenShift console view/search when asked "what am I looking at?". Only works when the user is logged in to the OpenShift console and has enabled AI navigation for their session. Report if the console is unavailable.
+
+- **korrel8r_show_in_console** - Display a query (view) and/or graph (search) in the user's OpenShift console. Only works when the user is logged in to the OpenShift console and has enabled AI navigation for their session. Report if the console is unavailable.
+  - `search` (``) - The troubleshooting panel displays the results of this correlation search.
+  - `view` (`string`) - Query for the main console view, in DOMAIN:CLASS:SELECTOR format.
 
 </details>
 

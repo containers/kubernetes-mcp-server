@@ -105,6 +105,15 @@ update-codeowners: ## Generate .github/CODEOWNERS from .github/ownership.json
 check-codeowners: ## Check that .github/CODEOWNERS matches .github/ownership.json
 	go run ./internal/tools/update-codeowners/main.go -check
 
+.PHONY: pre-commit
+pre-commit: ## Generate artifacts, format, lint, build, and test before committing
+	$(MAKE) test-update-snapshots
+	$(MAKE) update-readme-tools
+	$(MAKE) update-codeowners
+	$(MAKE) check-codeowners
+	$(MAKE) build
+	$(MAKE) test
+
 ##@ Local Development
 
 .PHONY: local-env-setup
