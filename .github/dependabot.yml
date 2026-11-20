@@ -37,6 +37,13 @@ updates:
         patterns:
           - "*"
   - package-ecosystem: "npm"
+    directory: "/test/browser"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "npm"
     directory: "/test/browser/basic-host"
     cooldown:
       default-days: 7
