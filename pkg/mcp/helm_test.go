@@ -44,6 +44,7 @@ func (s *HelmSuite) SetupTest() {
 }
 
 func (s *HelmSuite) TearDownTest() {
+	clearHelmReleases(s.T().Context(), kubernetes.NewForConfigOrDie(test.EnvTestRestConfig()))
 	s.BaseMcpSuite.TearDownTest()
 	s.klogState.Restore()
 }
@@ -88,6 +89,35 @@ func (s *HelmSuite) TestHelmInstall() {
 				s.Equalf(float64(1), decoded[0]["revision"], "invalid helm install revision, expected 1, got %v", decoded[0]["revision"])
 			})
 		})
+	})
+}
+
+func (s *HelmSuite) TestHelmInstallInNamespace() {
+	s.InitMcpClient()
+	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
+	_, file, _, _ := runtime.Caller(0)
+	chartPath := filepath.Join(filepath.Dir(file), "testdata", "helm-chart-secret")
+	toolResult, err := s.CallTool("helm_install", map[string]interface{}{
+		"chart":     chartPath,
+		"name":      "ns-arg-release",
+		"namespace": "ns-1",
+	})
+	s.Require().NoError(err)
+	s.Require().Falsef(toolResult.IsError, "call tool failed: %v", toolResult.Content)
+	s.Run("creates the chart's objects in the namespace argument", func() {
+		_, getErr := kc.CoreV1().Secrets("ns-1").Get(s.T().Context(), "ns-arg-release-secret", metav1.GetOptions{})
+		s.NoError(getErr)
+	})
+	s.Run("creates nothing in the kubeconfig namespace", func() {
+		_, getErr := kc.CoreV1().Secrets("default").Get(s.T().Context(), "ns-arg-release-secret", metav1.GetOptions{})
+		s.Truef(errors.IsNotFound(getErr), "chart object must not be created in the kubeconfig namespace")
+	})
+	s.Run("helm_uninstall with the namespace argument deletes the chart's objects there", func() {
+		uninstall, uninstallErr := s.CallTool("helm_uninstall", map[string]interface{}{"name": "ns-arg-release", "namespace": "ns-1"})
+		s.Require().NoError(uninstallErr)
+		s.Falsef(uninstall.IsError, "call tool failed: %v", uninstall.Content)
+		_, getErr := kc.CoreV1().Secrets("ns-1").Get(s.T().Context(), "ns-arg-release-secret", metav1.GetOptions{})
+		s.Truef(errors.IsNotFound(getErr), "chart object must be deleted from the namespace argument")
 	})
 }
 
@@ -402,13 +432,21 @@ func helmReleaseSecret(name string) *corev1.Secret {
 	}
 }
 
+// clearHelmReleases removes the release records the suite creates in default and
+// ns-1, and the chart objects installed into ns-1, so no test depends on another
+// test (or subtest) uninstalling what it installed.
 func clearHelmReleases(ctx context.Context, kc *kubernetes.Clientset) {
-	secrets, _ := kc.CoreV1().Secrets("default").List(ctx, metav1.ListOptions{})
-	for _, secret := range secrets.Items {
-		if strings.HasPrefix(secret.Name, "sh.helm.release.v1.") {
-			_ = kc.CoreV1().Secrets("default").Delete(ctx, secret.Name, metav1.DeleteOptions{})
+	for _, ns := range []string{"default", "ns-1"} {
+		secrets, _ := kc.CoreV1().Secrets(ns).List(ctx, metav1.ListOptions{})
+		for _, secret := range secrets.Items {
+			if strings.HasPrefix(secret.Name, "sh.helm.release.v1.") {
+				_ = kc.CoreV1().Secrets(ns).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+			}
 		}
 	}
+	_ = kc.CoreV1().Secrets("ns-1").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/managed-by=Helm",
+	})
 }
 
 func TestHelm(t *testing.T) {
