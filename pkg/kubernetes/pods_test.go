@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilexec "k8s.io/utils/exec"
 )
 
 type ResolveContainerSuite struct {
@@ -153,6 +154,21 @@ func (s *ExecOutputSuite) TestOtherStreamErrorDropsBuffers() {
 	s.ErrorIs(err, streamErr)
 	s.Empty(stdout)
 	s.Empty(stderr)
+}
+
+func (s *ExecOutputSuite) TestNonZeroExitKeepsBuffers() {
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	out := newExecOutput(0, cancel)
+	_, err := out.stdoutWriter().Write([]byte("partial"))
+	s.Require().NoError(err)
+	_, err = out.stderrWriter().Write([]byte("why"))
+	s.Require().NoError(err)
+	exitErr := utilexec.CodeExitError{Err: errors.New("command terminated with exit code 3"), Code: 3}
+	stdout, stderr, err := out.finish(exitErr)
+	s.ErrorIs(err, exitErr)
+	s.Equal("partial", stdout)
+	s.Equal("why", stderr)
 }
 
 func (s *ExecOutputSuite) TestTruncationKeepsBytesWhenStreamErrors() {

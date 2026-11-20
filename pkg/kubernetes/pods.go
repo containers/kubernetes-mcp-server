@@ -20,6 +20,7 @@ import (
 	"k8s.io/metrics/pkg/apis/metrics"
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"k8s.io/streaming/pkg/httpstream"
+	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/ptr"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -415,6 +416,13 @@ func (o *execOutput) finish(err error) (string, string, error) {
 			_, _ = o.stderr.WriteString(backendExecTruncationNotice)
 		}
 		return o.stdout.String(), o.stderr.String(), nil
+	}
+	// A command that ran and exited with a non-zero code: keep what it wrote, which
+	// usually explains the failure. Other stream errors (a broken connection) still
+	// drop the partial buffers.
+	var exitErr utilexec.ExitError
+	if errors.As(err, &exitErr) {
+		return o.stdout.String(), o.stderr.String(), err
 	}
 	if err != nil {
 		return "", "", err
