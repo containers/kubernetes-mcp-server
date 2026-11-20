@@ -31,12 +31,11 @@ func initNodes(inspector api.ClusterInspector) []api.ServerTool {
 					},
 					"query": {
 						Type:        "string",
-						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file from the node (e.g., "/var/log/kubelet.log" or "/var/log/kube-proxy.log")`,
+						Description: `query specifies services(s) or files from which to return logs (required). Example: "kubelet" to fetch kubelet logs, "/<log-file-name>" to fetch a specific log file relative to /var/log on the node (e.g., "/kubelet.log" or "/kube-proxy.log")`,
 					},
 					"tailLines": {
 						Type:        "integer",
-						Description: "Number of lines to retrieve from the end of the logs (Optional, 0 means all logs)",
-						Default:     api.ToRawMessage(100),
+						Description: "Number of lines to retrieve from the end of service logs. Omit to retrieve the last 100 service lines, or set to 0 to retrieve all lines. For file queries, omit this parameter or set it to 0.",
 						Minimum:     ptr.To(float64(0)),
 					},
 				},
@@ -160,6 +159,8 @@ func nodesLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		if err != nil {
 			return api.NewToolCallResult("", fmt.Errorf("failed to parse tailLines parameter: %w", err)), nil
 		}
+	} else if !kubernetes.IsNodeLogFileQuery(query) {
+		tailInt = 100
 	}
 	ret, err := kubernetes.NewCore(params).NodesLog(params, name, query, tailInt)
 	if err != nil {

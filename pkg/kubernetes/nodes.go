@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,14 +12,22 @@ import (
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
+// IsNodeLogFileQuery reports whether the kubelet treats the query as a file path.
+func IsNodeLogFileQuery(query string) bool {
+	return strings.ContainsAny(query, `/\`)
+}
+
 func (c *Core) NodesLog(ctx context.Context, name string, query string, tailLines int64) (string, error) {
 	// Use the node proxy API to access logs from the kubelet
 	// https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query
-	// Common log paths:
-	// - /var/log/kubelet.log - kubelet logs
-	// - /var/log/kube-proxy.log - kube-proxy logs
-	// - /var/log/containers/ - container logs
+	// File paths are relative to /var/log and must contain a slash:
+	// - /kubelet.log - kubelet logs
+	// - /kube-proxy.log - kube-proxy logs
+	// - /containers/ - container logs
 
+	if tailLines > 0 && IsNodeLogFileQuery(query) {
+		return "", errors.New("tailLines is only supported for service logs; omit it or set it to 0 for file queries")
+	}
 	if _, err := c.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{}); err != nil {
 		return "", fmt.Errorf("failed to get node %s: %w", name, err)
 	}
@@ -27,7 +36,6 @@ func (c *Core) NodesLog(ctx context.Context, name string, query string, tailLine
 		Get().
 		AbsPath("api", "v1", "nodes", name, "proxy", "logs")
 	req.Param("query", query)
-	// Query parameters for tail
 	if tailLines > 0 {
 		req.Param("tailLines", fmt.Sprintf("%d", tailLines))
 	}
