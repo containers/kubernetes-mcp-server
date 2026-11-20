@@ -225,11 +225,8 @@ type APIResourceInfo struct {
 //
 // When kindFilter is non-empty, only kinds whose name equals kindFilter
 // (case-insensitive) are returned; an empty kindFilter returns every
-// registered resource type. This function itself imposes no requirement on
-// kindFilter -- the api_resources_list tool handler is what makes it
-// mandatory, since an LLM caller dumping every API resource type on a
-// cluster with many CRDs into its own context is a token cost and a source
-// of confusion, not a useful default. The context-aware preferred discovery
+// registered resource type. The tool handler adds descriptions and byte-bounded
+// pagination. The context-aware preferred discovery
 // call can return partial results alongside a non-nil error (e.g. one API
 // group temporarily unavailable, or a large CRD catalog slowing discovery -- see
 // containers/kubernetes-mcp-server#283); this returns whatever resources

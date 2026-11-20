@@ -1,13 +1,19 @@
 package mcp
 
 import (
+	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/containers/kubernetes-mcp-server/internal/test"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
+	"github.com/containers/kubernetes-mcp-server/pkg/config"
+	"github.com/containers/kubernetes-mcp-server/pkg/kubernetes"
 )
 
 type ToolsGoSdkSuite struct {
@@ -213,6 +219,114 @@ func (s *ToolsGoSdkSuite) TestOutputSchemaValidation() {
 		server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 		s.NotPanics(func() { server.AddTool(mcpTool, handler) })
 	})
+}
+
+func (s *ToolsGoSdkSuite) TestErrorResultContentAndLimits() {
+	toolErr := errors.New(strings.Repeat("operation failed; ", 16))
+	discovery := api.NewToolCallResultStructured(map[string]any{
+		"error": map[string]any{
+			"code":    "ambiguous_kind",
+			"message": "Specify apiVersion to select the intended Widget.",
+			"candidates": []map[string]string{
+				{"kind": "Widget", "apiVersion": "example.com/v1"},
+				{"kind": "Widget", "apiVersion": "other.example.com/v1"},
+			},
+		},
+	}, errors.New("ambiguous kind"))
+	status := map[string]any{"code": 404, "reason": "NotFound"}
+	cases := []struct {
+		name       string
+		result     *api.ToolCallResult
+		text       string
+		structured any
+	}{
+		{
+			name:       "serialized discovery error",
+			result:     discovery,
+			text:       discovery.Content,
+			structured: discovery.StructuredContent,
+		},
+		{
+			name:       "Kubernetes status with error text",
+			result:     api.NewToolCallResultFull("", status, toolErr),
+			text:       toolErr.Error(),
+			structured: status,
+		},
+		{
+			name:   "plain error ignores supplied content",
+			result: api.NewToolCallResult(strings.Repeat("unused", 100), toolErr),
+			text:   toolErr.Error(),
+		},
+		{
+			name: "multi-content error ignores supplied blocks and structured content",
+			result: &api.ToolCallResult{
+				Content:           strings.Repeat("unused", 100),
+				ContentBlocks:     []*api.ToolContent{api.NewTextToolContent(strings.Repeat("unused", 100))},
+				StructuredContent: status,
+				Error:             toolErr,
+			},
+			text: toolErr.Error(),
+		},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			size := len(tc.text)
+			if tc.structured != nil {
+				raw, err := json.Marshal(tc.structured)
+				s.Require().NoError(err)
+				size += len(raw)
+			}
+			boundary := int64(size - len(api.ResultTruncationNotice))
+			s.Require().Greater(boundary, int64(1))
+			for _, budget := range []struct {
+				name     string
+				limit    int64
+				rejected bool
+			}{
+				{name: "disabled", limit: 0},
+				{name: "exact boundary", limit: boundary},
+				{name: "one byte over", limit: boundary - 1, rejected: true},
+			} {
+				s.Run(budget.name, func() {
+					cfg := config.BaseDefault()
+					cfg.KubeConfig.SetForTest(test.EnvTestKubeconfigFile(s.T()))
+					cfg.EnableTargetCompatibilityToolFilters.SetForTest(false)
+					cfg.MaxResultBytes.SetForTest(budget.limit)
+					provider, err := kubernetes.NewProvider(s.T().Context(), cfg)
+					s.Require().NoError(err)
+					s.T().Cleanup(provider.Close)
+					server, err := NewServer(s.T().Context(), Configuration{Config: cfg}, provider)
+					s.Require().NoError(err)
+					s.T().Cleanup(server.Close)
+					_, handler, err := ServerToolToGoSdkTool(server, api.ServerTool{
+						Tool: api.Tool{
+							Name:        "error_result",
+							InputSchema: &jsonschema.Schema{Type: "object"},
+						},
+						Handler: func(api.ToolHandlerParams) (*api.ToolCallResult, error) {
+							return tc.result, nil
+						},
+					})
+					s.Require().NoError(err)
+					result, err := handler(s.T().Context(), &mcp.CallToolRequest{
+						Params: &mcp.CallToolParamsRaw{Name: "error_result", Arguments: json.RawMessage(`{}`)},
+					})
+					if budget.rejected {
+						s.ErrorContains(err, "max_result_bytes")
+						s.Nil(result)
+						return
+					}
+					s.Require().NoError(err)
+					s.True(result.IsError)
+					s.Require().Len(result.Content, 1)
+					text, ok := result.Content[0].(*mcp.TextContent)
+					s.Require().True(ok, "expected TextContent")
+					s.Equal(tc.text, text.Text)
+					s.Equal(tc.structured, result.StructuredContent)
+				})
+			}
+		})
+	}
 }
 
 func TestToolsGoSdkSuite(t *testing.T) {

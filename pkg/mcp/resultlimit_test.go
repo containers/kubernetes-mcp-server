@@ -47,6 +47,11 @@ func (s *ResultLimitSuite) TestToolResultRejectedWhenContentPlusStructuredConten
 	s.ErrorContains(rejectOversizedToolResult(1, &api.ToolCallResult{
 		Error: errors.New(strings.Repeat("e", len(api.ResultTruncationNotice)+8)),
 	}), "max_result_bytes")
+	s.ErrorContains(rejectOversizedToolResult(1, &api.ToolCallResult{
+		Content:           strings.Repeat("a", 100),
+		StructuredContent: map[string]string{"error": strings.Repeat("b", 100)},
+		Error:             errors.New("failed"),
+	}), "max_result_bytes")
 
 	image := api.NewImageToolContent(bytesOf(len(api.ResultTruncationNotice)+8), "image/png")
 	s.NoError(rejectOversizedToolResult(80, &api.ToolCallResult{
