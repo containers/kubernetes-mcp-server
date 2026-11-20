@@ -244,7 +244,7 @@
       "readOnlyHint": true,
       "title": "Validate OpenTelemetry Collector Component Configuration"
     },
-    "description": "Validate an OpenTelemetry Collector component configuration against its JSON schema.",
+    "description": "Validate an OpenTelemetry Collector component configuration against its JSON schema. Validation does not execute OTTL: statements and conditions in a valid transform or filter configuration can still fail or misbehave at run time.",
     "inputSchema": {
       "properties": {
         "component_name": {
