@@ -38,6 +38,7 @@ func init() {
 func newKubeConfigClusterProvider(ctx context.Context, cfg *config.Config) (Provider, error) {
 	ret := &kubeConfigClusterProvider{cfg: cfg}
 	ret.SetReset(ret.reset)
+	ret.SetInvalidate(ret.invalidateManagers)
 	if err := ret.reset(ctx); err != nil {
 		return nil, err
 	}
@@ -263,5 +264,16 @@ func (p *kubeConfigClusterProvider) RefreshCAs() {
 	p.mu.RUnlock()
 	for _, m := range managers {
 		m.RefreshCAs()
+	}
+}
+
+// invalidateManagers resets the cached discovery of every initialized context.
+func (p *kubeConfigClusterProvider) invalidateManagers() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, m := range p.managers {
+		if m != nil {
+			m.Invalidate()
+		}
 	}
 }
