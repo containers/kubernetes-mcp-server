@@ -40,8 +40,9 @@ func Tools(inspector api.ClusterInspector) []api.ServerTool {
 					Title:           "Virtual Machine: Clone",
 					ReadOnlyHint:    ptr.To(false),
 					DestructiveHint: ptr.To(true),
-					IdempotentHint:  ptr.To(true),
-					OpenWorldHint:   ptr.To(false),
+					// Each call creates a new VirtualMachineClone (generateName), so a repeated call is not a no-op.
+					IdempotentHint: ptr.To(false),
+					OpenWorldHint:  ptr.To(false),
 				},
 			},
 			RBAC: api.RBACBounded(api.RBACRequirement{
