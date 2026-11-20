@@ -259,6 +259,22 @@ func (s *HelmSuite) TestHelmUninstallNoReleases() {
 	})
 }
 
+func (s *HelmSuite) TestHelmUninstallReleaseLookupDenied() {
+	configtest.OverlayTOML(s.T(), &s.Cfg, `
+		denied_resources = [ { version = "v1", kind = "Secret" } ]
+	`)
+	s.InitMcpClient()
+	toolResult, err := s.CallTool("helm_uninstall", map[string]interface{}{"name": "release-behind-denied-secrets"})
+	s.Require().NoError(err)
+	s.Run("returns an error, not \"not found\"", func() {
+		s.True(toolResult.IsError, "a refused release lookup must not be reported as a missing release")
+		s.NotContains(toolResult.Content[0].(*mcp.TextContent).Text, "Release release-behind-denied-secrets not found")
+	})
+	s.Run("names the refusal", func() {
+		s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "resource not allowed")
+	})
+}
+
 func (s *HelmSuite) TestHelmUninstall() {
 	kc := kubernetes.NewForConfigOrDie(test.EnvTestRestConfig())
 	_, err := kc.CoreV1().Secrets("default").Create(s.T().Context(), &corev1.Secret{
