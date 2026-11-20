@@ -1,0 +1,17 @@
+kind: Eval
+metadata:
+  name: core-apps-e2e
+config:
+  agent:
+    type: file
+    path: agent.yaml
+    apps:
+      host: true
+  mcpConfigFile: ../../mcp-config.yaml
+  taskSets:
+    - glob: ../../tasks/core-apps/*/*.yaml
+      labelSelector:
+        suite: core-apps
+      assertions:
+        minToolCalls: 1
+        maxToolCalls: 3

@@ -12,6 +12,17 @@ Each subdirectory follows the pattern `<agent-type>-<provider>/`:
 Each contains:
 - `agent.yaml` — agent configuration (model, type)
 - `eval-core.yaml` — eval config for the `core` + `config` task suites
+- `eval-core-apps.yaml` (`builtin-openai` only so far) — smoke eval for the
+  namespace table and Pod details Apps. Requires mcpchecker v0.0.23 or newer
+  and an Apps-enabled server. Run it with:
+
+  ```bash
+  make run-server SUITE=core-apps TOOLSETS=core,config
+  make run-evals SUITE=core-apps AGENT=builtin-openai
+  ```
+
+  Other agents fail with a missing eval file until their configuration is added.
+  See [MCP Apps suite](../README.md#mcp-apps-suite-core-apps).
 - `eval-helm.yaml` — eval config for the `helm` task suite (+ core/config)
 - `eval-kubevirt.yaml` — eval config for the `kubevirt` task suite (+ core/config)
 - `eval-kiali.yaml` — eval config for the `kiali` task suite (+ core/config)
@@ -36,7 +47,10 @@ Not all agent directories have every eval file yet — `builtin-openai` is the m
 
 ## Design decisions
 
-- **Shared tasks**: All eval configs reference the same task definitions via `../../tasks/*/*/*.yaml` with `labelSelector` to filter by suite.
+- **Shared tasks**: Eval configs reference shared task definitions through globs
+  and use `labelSelector` to filter by suite.
 - **Shared MCP config**: All configs use `../../mcp-config.yaml` to connect to the same MCP server instance.
 - **Per-suite eval files**: Separate eval files per suite (instead of one combined file) allow running suites independently and setting different assertions (e.g., `maxToolCalls`).
-- **Core + config always included**: Every per-suite eval file includes the `core` and `config` task sets alongside the suite-specific tasks, ensuring baseline coverage in every run.
+- **Baseline coverage**: Most per-suite eval files also include the `core` and
+  `config` task sets. Focused suites such as `core-apps` and `core-readonly`
+  select only their own scenarios.

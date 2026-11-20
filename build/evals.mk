@@ -33,10 +33,14 @@ SUITE ?= core
 MODEL ?=
 
 # When true, run-server starts the MCP server with read_only = true so only
-# tools annotated readOnlyHint=true are exposed. Defaults to true for the
-# core-readonly suite (see evals/README.md), whose tasks assume write tools are
-# unavailable; false otherwise.
-READ_ONLY ?= $(if $(filter core-readonly,$(SUITE)),true,false)
+# tools annotated readOnlyHint=true are exposed. core-readonly tasks assume
+# write tools are unavailable; core-apps uses read-only mode to limit the
+# agent to inspection. Defaults to false for other suites (see evals/README.md).
+READ_ONLY ?= $(if $(filter core-readonly core-apps,$(SUITE)),true,false)
+
+# Apps are enabled only for the dedicated suite unless explicitly overridden.
+# This is a startup setting: restart run-server when switching suites.
+APPS_ENABLED ?= $(if $(filter core-apps,$(SUITE)),true,false)
 
 # Prefer a per-suite eval config when one exists, then try the core-eval-testing
 # suite config (what CI uses).
@@ -135,9 +139,10 @@ diff-evals: mcpchecker ## Diff latest mcpchecker results against baseline
 	$(MCPCHECKER) diff --base "$$BASELINE" --current "$$RESULTS_FILE" --output markdown
 
 .PHONY: run-server
-run-server: build ## Start MCP server in background and wait for health check (knobs: TOOLSETS, READ_ONLY, SUITE)
+run-server: build ## Start MCP server in background and wait for health check (knobs: TOOLSETS, READ_ONLY, APPS_ENABLED, SUITE)
 	@case "$(READ_ONLY)" in true|false) ;; *) echo "ERROR: READ_ONLY must be true or false, got '$(READ_ONLY)'"; exit 1;; esac
-	@echo "Starting MCP server on port $(MCP_PORT) (read_only = $(READ_ONLY))..."
+	@case "$(APPS_ENABLED)" in true|false) ;; *) echo "ERROR: APPS_ENABLED must be true or false, got '$(APPS_ENABLED)'"; exit 1;; esac
+	@echo "Starting MCP server on port $(MCP_PORT) (read_only = $(READ_ONLY), apps_enabled = $(APPS_ENABLED))..."
 	@mkdir -p _output
 	@printf 'port = "%s"\n' "$(MCP_PORT)" > _output/eval-server.toml
 	@if [ -n "$(MCP_EVAL_KUBECONFIG)" ]; then \
@@ -148,7 +153,7 @@ run-server: build ## Start MCP server in background and wait for health check (k
 	@# dir and add the eval knobs as the last file so they always take precedence.
 	@rm -rf $(MCP_EVAL_CONFIG_DIR) && mkdir -p $(MCP_EVAL_CONFIG_DIR)
 	@if ls $(MCP_CONFIG_DIR)/*.toml > /dev/null 2>&1; then cp $(MCP_CONFIG_DIR)/*.toml $(MCP_EVAL_CONFIG_DIR)/; fi
-	@printf 'read_only = %s\n' "$(READ_ONLY)" > $(MCP_EVAL_CONFIG_DIR)/zz-eval-overrides.toml
+	@printf 'read_only = %s\napps_enabled = %s\n' "$(READ_ONLY)" "$(APPS_ENABLED)" > $(MCP_EVAL_CONFIG_DIR)/zz-eval-overrides.toml
 	@if [ -n "$(TOOLSETS)" ]; then \
 		printf 'toolsets = [%s]\n' "$$(printf '%s' "$(TOOLSETS)" | sed 's/[[:space:]]*,[[:space:]]*/,/g; s/^/"/; s/,/", "/g; s/$$/"/')" >> $(MCP_EVAL_CONFIG_DIR)/zz-eval-overrides.toml; \
 	fi

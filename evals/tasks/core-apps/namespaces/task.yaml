@@ -1,0 +1,44 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: core-apps-namespaces
+  difficulty: easy
+  labels:
+    suite: core-apps
+    project: kubernetes
+  annotations:
+    project-name: Kubernetes
+    project-url: https://kubernetes.io
+spec:
+  setup:
+    - script:
+        file: ../helpers/setup.sh
+        timeout: 5m
+        env:
+          APPS_NAMESPACE: mcp-apps-namespaces
+          APPS_FIXTURE: namespace
+  cleanup:
+    - script:
+        file: ../helpers/cleanup.sh
+        timeout: 3m
+        env:
+          APPS_NAMESPACE: mcp-apps-namespaces
+  prompt:
+    inline: >-
+      Use namespaces_list to find the namespace mcp-apps-namespaces.
+      Return only one JSON object with exactly the string fields name and phase
+      for that namespace. Do not include Markdown, prose, or additional keys.
+  verify:
+    - script:
+        env:
+          AGENT_OUTPUT: "{agent.output}"
+        inline: |-
+          set -eu
+          printf '%s\n' "$AGENT_OUTPUT" | jq -e -s '
+            . == [{"name": "mcp-apps-namespaces", "phase": "Active"}]
+          ' > /dev/null
+  assertions:
+    requirePresent: true
+    apps:
+      - server: kubernetes
+        tool: namespaces_list
