@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
@@ -72,10 +73,18 @@ func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
 	}
 	w.mu.Unlock()
 
-	// captureState talks to the API server; do not hold mu across it.
+	// capture talks to the API server; do not hold mu across it.
 	// Capture before Watch returns so callers that mutate cluster state
 	// immediately afterwards are compared against the pre-watch snapshot.
-	initial := w.captureState()
+	initial, err := w.capture()
+	if isAuthError(err) {
+		// Decision: stop instead of polling with credentials the API server refuses.
+		// This happens when the server has no identity of its own, e.g. passthrough
+		// auth with a kubeconfig without credentials. The provider builds a new
+		// watcher when the kubeconfig changes, which checks again.
+		logger.Info("Cluster state watcher disabled: the API server refused discovery", "error", err)
+		return
+	}
 
 	w.mu.Lock()
 	if w.started {
@@ -103,7 +112,11 @@ func (w *ClusterState) Watch(ctx context.Context, onChange func() error) {
 				// Invalidate discovery cache to get fresh API groups
 				w.discoveryClient.Invalidate()
 
-				current := w.captureState()
+				current, err := w.capture()
+				if isAuthError(err) {
+					logger.Info("Stopping cluster state watcher: the API server refused discovery", "error", err)
+					return
+				}
 				w.mu.Lock()
 				logger.V(3).Info("Polled cluster state",
 					"cluster.api_groups.count", len(current.apiGroups),
@@ -181,12 +194,22 @@ func (w *ClusterState) Close() {
 }
 
 func (w *ClusterState) captureState() clusterState {
+	state, _ := w.capture()
+	return state
+}
+
+// capture reads the cluster state and returns the error from listing the API
+// groups, so the caller can tell when the API server refuses discovery.
+func (w *ClusterState) capture() (clusterState, error) {
 	state := clusterState{apiGroups: []string{}}
-	if groups, err := w.discoveryClient.ServerGroups(); err == nil {
+	groups, groupsErr := w.discoveryClient.ServerGroups()
+	if groupsErr == nil {
 		for _, group := range groups.Groups {
 			state.apiGroups = append(state.apiGroups, group.Name)
 		}
 		sort.Strings(state.apiGroups)
+	} else if isAuthError(groupsErr) {
+		return state, groupsErr
 	}
 	// Unlike compatibility filters, the watcher treats discovery errors as "not OpenShift".
 	// Failing closed avoids flapping reloads and imposing unnecessary OpenShift RBAC.
@@ -200,5 +223,12 @@ func (w *ClusterState) captureState() clusterState {
 			}
 		}
 	}
-	return state
+	return state, groupsErr
+}
+
+// isAuthError reports whether the API server refused the request because the
+// client is not authenticated or not allowed to run discovery. Polling again
+// with the same credentials cannot succeed.
+func isAuthError(err error) bool {
+	return apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err)
 }

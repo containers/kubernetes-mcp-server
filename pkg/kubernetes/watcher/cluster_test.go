@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -277,6 +278,111 @@ func (s *ClusterStateTestSuite) TestWatch() {
 		}, watcherPollTimeout, eventuallyTick, "timeout waiting for onChange callback")
 
 		s.GreaterOrEqual(errorCallCount.Load(), int32(1), "onChange should be called even when it returns an error")
+	})
+}
+
+// statusHandler answers every request with a metav1.Status error of the given code
+// and counts the requests it receives.
+func statusHandler(code int, reason string, requests *atomic.Int32) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		_, _ = fmt.Fprintf(w, `{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","reason":%q,"code":%d}`, reason, code)
+	})
+}
+
+func (s *ClusterStateTestSuite) TestWatchAuthErrors() {
+	for _, tc := range []struct {
+		code   int
+		reason string
+	}{
+		{http.StatusUnauthorized, "Unauthorized"},
+		{http.StatusForbidden, "Forbidden"},
+	} {
+		s.Run(fmt.Sprintf("stops polling when discovery is refused with %d", tc.code), func() {
+			s.mockServer.ResetHandlers()
+			var requests atomic.Int32
+			s.mockServer.Handle(statusHandler(tc.code, tc.reason, &requests))
+			discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
+			watcher := NewClusterState(s.T().Context(), discoveryClient, 0, 0)
+			watcher.pollInterval = 20 * time.Millisecond
+			s.T().Cleanup(watcher.Close)
+
+			watcher.Watch(s.T().Context(), func() error { return nil })
+			afterInitialCapture := requests.Load()
+
+			s.Never(func() bool {
+				return requests.Load() > afterInitialCapture
+			}, watcherNeverWindow, 10*time.Millisecond, "should not poll after the API server refused discovery")
+		})
+	}
+
+	s.Run("keeps polling when discovery fails for other reasons", func() {
+		s.mockServer.ResetHandlers()
+		var requests atomic.Int32
+		s.mockServer.Handle(statusHandler(http.StatusInternalServerError, "InternalError", &requests))
+		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
+		watcher := NewClusterState(s.T().Context(), discoveryClient, 0, 0)
+		watcher.pollInterval = 20 * time.Millisecond
+		s.T().Cleanup(watcher.Close)
+
+		watcher.Watch(s.T().Context(), func() error { return nil })
+		afterInitialCapture := requests.Load()
+
+		s.Eventually(func() bool {
+			return requests.Load() > afterInitialCapture
+		}, watcherPollTimeout, eventuallyTick, "should keep polling after a non-auth error")
+	})
+
+	s.Run("stops polling when discovery starts being refused", func() {
+		s.mockServer.ResetHandlers()
+		var refused atomic.Bool
+		var refusedRequests atomic.Int32
+		discoveryHandler := test.NewDiscoveryClientHandler()
+		forbidden := statusHandler(http.StatusForbidden, "Forbidden", &refusedRequests)
+		s.mockServer.Handle(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if refused.Load() {
+				forbidden.ServeHTTP(w, req)
+				return
+			}
+			discoveryHandler.ServeHTTP(w, req)
+		}))
+		discoveryClient := memory.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(s.mockServer.Config()))
+		watcher := NewClusterState(s.T().Context(), discoveryClient, 0, 0)
+		watcher.pollInterval = 20 * time.Millisecond
+		s.T().Cleanup(watcher.Close)
+
+		watcher.Watch(s.T().Context(), func() error { return nil })
+		s.waitForWatcherInitialState(watcher)
+		refused.Store(true)
+
+		s.Eventually(func() bool {
+			return refusedRequests.Load() > 0
+		}, watcherPollTimeout, eventuallyTick, "should poll until the API server refuses discovery")
+		s.Eventually(func() bool {
+			select {
+			case <-watcher.stoppedCh:
+				return true
+			default:
+				return false
+			}
+		}, watcherPollTimeout, eventuallyTick, "should stop the polling loop after the refusal")
+		s.Run("close returns after the loop stopped", func() {
+			done := make(chan struct{})
+			go func() {
+				watcher.Close()
+				close(done)
+			}()
+			s.Eventually(func() bool {
+				select {
+				case <-done:
+					return true
+				default:
+					return false
+				}
+			}, watcherStateTimeout, eventuallyTick, "Close should not block")
+		})
 	})
 }
 
