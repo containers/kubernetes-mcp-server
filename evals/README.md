@@ -168,6 +168,57 @@ kinds:
 - **`builtin-anthropic`** — `anthropic:claude-sonnet-4-6`
 - **`builtin-google`** — `google:gemini-3.1-pro-preview`
 
+## Pinned model versions
+
+Each directory below contains one `agent.yaml` and symlinks to the existing
+shared suite configs. The agent and judge use that directory's model.
+
+| AGENT | Explicit model ID |
+| --- | --- |
+| `builtin-claude-sonnet-4-5` | `anthropic:claude-sonnet-4-5-20250929` |
+| `builtin-claude-sonnet-5` | `anthropic:claude-sonnet-5` |
+| `builtin-gemini-3-1-pro-preview` | `google:gemini-3.1-pro-preview` |
+| `builtin-gemini-3-5-flash` | `google:gemini-3.5-flash` |
+| `builtin-gemini-3-6-flash` | `google:gemini-3.6-flash` |
+| `builtin-gemma-4-31b` | `openai:gemma-4-31b` |
+| `builtin-gpt-5-4` | `openai:gpt-5.4-2026-03-05` |
+| `builtin-gpt-5-5` | `openai:gpt-5.5-2026-04-23` |
+
+The Gemini Pro preview is exploratory and does not fulfill GA validation. The
+required GA Pro model remains excluded until its provider ID is confirmed.
+Confirm provider availability before scheduling these model IDs.
+
+```bash
+# After setting provider credentials and starting the server with core,config:
+make run-evals AGENT=builtin-claude-sonnet-4-5 SUITE=core EVAL_LABEL_SELECTOR=""
+```
+
+Set `EVAL_LABEL_SELECTOR=""` to retain the shared config's full task selection
+(including core and config). Otherwise `make run-evals` adds its usual suite
+filter. `EVAL_TASK_FILTER` can narrow runs by task name.
+
+Use the existing provider environment settings: `OPENAI_API_KEY` for OpenAI,
+`ANTHROPIC_API_KEY` for native Anthropic, or `GEMINI_USE_VERTEX=1`,
+`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` and Application Default Credentials
+for Vertex. Gemma uses an OpenAI-compatible vLLM endpoint (`OPENAI_BASE_URL` and
+`OPENAI_API_KEY` if required); record its deployed weights revision with the run.
+GPT agents enable `useResponsesApi`; use a mcpchecker version supporting that
+setting. Gemma uses Chat Completions.
+
+mcpchecker writes JSON using the shared eval name, such as
+`mcpchecker-core-e2e-out.json`; its summary records the resolved model ID. Use
+isolated workspaces per model/suite to avoid overwriting another run's output.
+The existing Prow runner in `openshift/release` collects JSON, converts it to
+JUnit, then applies pass-rate thresholds. Configure one job per pinned model
+version/suite and ensure those jobs are ingested by Sippy.
+
+The Prow runner currently passes `EVAL_CONFIG` explicitly. Update it to select
+the model directory, or remove that override so `AGENT` selects the config.
+Clear inherited label filters when the shared config's full coverage is needed,
+collect the exact result file, and preserve the model ID and self-hosted weights
+revision with the artifacts. Prow/Sippy wiring and live model validation remain
+separate integration work.
+
 ## Filtering tasks by suite
 
 The `--label-selector` flag (or the `SUITE` make variable) chooses which tasks run.
