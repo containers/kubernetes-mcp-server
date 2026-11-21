@@ -1247,7 +1247,7 @@ Explain which silence will be removed and wait for the user to agree. This calls
   - `component_type` (`string`) **(required)** - Component type: receiver, processor, exporter, extension, connector
   - `version` (`string`) - Collector version (e.g., 'v0.100.0'). Defaults to latest available.
 
-- **otelcol_validate_config** - Validate an OpenTelemetry Collector component configuration against its JSON schema.
+- **otelcol_validate_config** - Validate an OpenTelemetry Collector component configuration against its JSON schema. Validation does not execute OTTL: statements and conditions in a valid transform or filter configuration can still fail or misbehave at run time.
   - `component_name` (`string`) **(required)** - Component name from otelcol_list_components (e.g., 'otlp', 'batch', 'debug')
   - `component_type` (`string`) **(required)** - Component type: receiver, processor, exporter, extension, connector
   - `config` (`string`) **(required)** - Configuration to validate as YAML or JSON string

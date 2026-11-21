@@ -115,7 +115,7 @@ func initValidateConfig(p api.ClusterInspector) api.ServerTool {
 	return api.ServerTool{
 		Tool: api.Tool{
 			Name:        "otelcol_validate_config",
-			Description: "Validate an OpenTelemetry Collector component configuration against its JSON schema.",
+			Description: "Validate an OpenTelemetry Collector component configuration against its JSON schema. Validation does not execute OTTL: statements and conditions in a valid transform or filter configuration can still fail or misbehave at run time.",
 			InputSchema: &jsonschema.Schema{
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
