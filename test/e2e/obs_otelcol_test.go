@@ -26,7 +26,7 @@ func TestObsOtelColTools(t *testing.T) {
 				withConfig(obsOtelColConfig()),
 				withValues(viewClusterRoleBindingValues()),
 			)
-			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
+			mcpClient := test.NewMcpClient(t, nil, obsMcpClientOptions(dep.serverURL+"/mcp")...)
 			t.Cleanup(mcpClient.Close)
 			return obsOtelColTS.set(ctx, &obsOtelColState{dep: dep, mcpClient: mcpClient})
 		}).

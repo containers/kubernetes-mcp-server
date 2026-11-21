@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -20,13 +21,16 @@ type obsLogsState struct {
 var obsLogsTS testState[obsLogsState]
 
 func TestObsLogsTools(t *testing.T) {
+	if os.Getenv("SKIP_OBS_LOKI") != "" {
+		t.Skip("SKIP_OBS_LOKI set; Loki setup failed")
+	}
 	f := features.New("obs-logs-tools").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			dep := deployServer(ctx, t, cfg, "obs-logs",
 				withConfig(obsLogsConfig()),
 				withValues(obsLogsRBACValues()),
 			)
-			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
+			mcpClient := test.NewMcpClient(t, nil, obsMcpClientOptions(dep.serverURL+"/mcp")...)
 			t.Cleanup(mcpClient.Close)
 			return obsLogsTS.set(ctx, &obsLogsState{dep: dep, mcpClient: mcpClient})
 		}).
