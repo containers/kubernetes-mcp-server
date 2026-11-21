@@ -344,8 +344,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/os-observability/redhat-opentelemetry-collector/configschemas v0.0.0-20260712195227-4e7d75e0d2ec h1:VJJl0vOhtCNE78lGxvoJetrxZWGEPfRTaCIbV87zP44=
-github.com/os-observability/redhat-opentelemetry-collector/configschemas v0.0.0-20260712195227-4e7d75e0d2ec/go.mod h1:ThsbZTM538g95wb3Aj/+XHfFfpW/YBHdO5o6W0f+IRw=
+github.com/openshift/redhat-opentelemetry-collector/configschemas v0.0.0-20261118081330-9016c46647db h1:RStgpe8dLBuCvF/bOWr5JpjUObz6GZoMHmpoQ0bFOFg=
+github.com/openshift/redhat-opentelemetry-collector/configschemas v0.0.0-20261118081330-9016c46647db/go.mod h1:ks6POw3wiuUY5jkWyH6VAPGS2NrHlFyF41SC5S+I4zs=
 github.com/pandatix/go-abnf v0.5.5 h1:EXex5KkRQx4Dm6GnpAcQnIMBs9KiK0uf8p/wq+4t9PM=
 github.com/pandatix/go-abnf v0.5.5/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
 github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen v0.0.0-20260710124846-8bb49fd6ccc7 h1:mUR6Z3GIYvOMUIkcs+2p0ggzkaK7La3ZF7Ki8X9Kx0A=
