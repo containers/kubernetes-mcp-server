@@ -190,6 +190,39 @@ func (s *OutputSuite) TestTableToStructured() {
 	})
 }
 
+func (s *OutputSuite) TestMarshalYamlOmitsManagedFields() {
+	withManagedFields := func(name string) *unstructured.Unstructured {
+		u := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata":   map[string]interface{}{"name": name},
+		}}
+		u.SetManagedFields([]metav1.ManagedFieldsEntry{{Manager: "kubernetes-mcp-server", Operation: metav1.ManagedFieldsOperationApply}})
+		return u
+	}
+	s.Run("single object", func() {
+		out, err := MarshalYaml(withManagedFields("one"))
+		s.Require().NoError(err)
+		s.NotContains(out, "managedFields")
+	})
+	s.Run("slice of object pointers (write results)", func() {
+		out, err := MarshalYaml([]*unstructured.Unstructured{withManagedFields("a"), withManagedFields("b")})
+		s.Require().NoError(err)
+		s.NotContains(out, "managedFields")
+		s.Contains(out, "name: b")
+	})
+	s.Run("slice of objects", func() {
+		out, err := MarshalYaml([]unstructured.Unstructured{*withManagedFields("a")})
+		s.Require().NoError(err)
+		s.NotContains(out, "managedFields")
+	})
+	s.Run("list", func() {
+		out, err := MarshalYaml(&unstructured.UnstructuredList{Items: []unstructured.Unstructured{*withManagedFields("a")}})
+		s.Require().NoError(err)
+		s.NotContains(out, "managedFields")
+	})
+}
+
 func TestOutput(t *testing.T) {
 	suite.Run(t, new(OutputSuite))
 }
