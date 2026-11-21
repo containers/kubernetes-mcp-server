@@ -12,6 +12,7 @@ import (
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	"github.com/containers/kubernetes-mcp-server/pkg/klogutil"
+	"github.com/containers/kubernetes-mcp-server/pkg/obs/alertrunbook"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/metrics/prometheus"
 )
@@ -101,9 +102,14 @@ func convertAlert(a *ammodels.GettableAlert) Alert {
 		endsAt = a.EndsAt.String()
 	}
 
+	promoted := alertrunbook.Promote(annotations)
+
 	return Alert{
 		Labels:      labels,
 		Annotations: annotations,
+		RunbookURL:  promoted.RunbookURL,
+		Summary:     promoted.Summary,
+		Description: promoted.Description,
 		StartsAt:    startsAt,
 		EndsAt:      endsAt,
 		Status: AlertStatus{

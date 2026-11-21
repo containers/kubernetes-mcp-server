@@ -66,6 +66,9 @@ type ListedAlert struct {
 	ActiveAt    string            `json:"active_at,omitempty" jsonschema:"When the instance became active (RFC3339)"`
 	Labels      map[string]string `json:"labels,omitempty" jsonschema:"Alert instance labels"`
 	Annotations map[string]string `json:"annotations,omitempty" jsonschema:"Alert instance annotations"`
+	RunbookURL  string            `json:"runbook_url,omitempty" jsonschema:"Runbook URL from annotations (runbook_url)"`
+	Summary     string            `json:"summary,omitempty" jsonschema:"Summary from annotations"`
+	Description string            `json:"description,omitempty" jsonschema:"Description from annotations"`
 }
 
 // ListAlertRulesOutput is the structured result of list_alert_rules.
@@ -89,6 +92,9 @@ type ListedAlertRule struct {
 	Health           string            `json:"health,omitempty" jsonschema:"Prometheus rule health"`
 	Labels           map[string]string `json:"labels,omitempty" jsonschema:"Rule labels"`
 	Annotations      map[string]string `json:"annotations,omitempty" jsonschema:"Rule annotations"`
+	RunbookURL       string            `json:"runbook_url,omitempty" jsonschema:"Runbook URL from rule annotations"`
+	Summary          string            `json:"summary,omitempty" jsonschema:"Summary from rule annotations"`
+	Description      string            `json:"description,omitempty" jsonschema:"Description from rule annotations"`
 }
 
 // CreateAlertRuleOutput is the structured result of create_alert_rule.

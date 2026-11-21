@@ -23,6 +23,15 @@ Map the user's words before calling a write tool:
 - change PromQL, alert name, for, or annotations on a platform rule → not update_alert_rule (labels, classification, or drop/restore only).
 - change PromQL, alert name, for, or annotations on a user-created rule → the HTTP update API does not accept those fields; create a replacement then delete the old id after confirmation.
 
+### Runbooks and triage
+
+When investigating or when the user asks how to fix an alert:
+1. Call list_alerts or list_alert_rules and read runbook_url, summary, and description when present (promoted from rule or instance annotations).
+2. If an instance from list_alerts has no runbook_url but has rule_id, call list_alert_rules and match by id or alert name to get the rule's runbook_url.
+3. On clusters with observability/metrics only, get_alerts also returns runbook_url from Alertmanager annotations.
+
+Share runbook_url with the user; use summary and description for inline context. This toolset does not fetch linked runbook pages; do not invent documentation links or claim steps from a doc you did not read.
+
 ### Always discover first
 
 1. Call list_alert_rules before create, update, or delete. That tool returns rule definitions. list_alerts returns firing, pending, or silenced instances and may include rule_id; get_alerts does not. Do not PATCH an id taken only from get_alerts without listing the rule. A non-empty rule_id from list_alerts is the stable id.

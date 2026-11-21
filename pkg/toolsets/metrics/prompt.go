@@ -7,6 +7,8 @@ const (
 
 When the user asks about issues, errors, failures, outages, or things going wrong - consider calling get_alerts first to see what's currently firing. Alert labels provide exact identifiers (namespaces, pods, services) useful for targeted metric queries.
 
+When get_alerts returns runbook_url, share that link with the user and use summary and description from the alert for context. This toolset does not fetch runbook page content; do not claim you followed steps from the linked doc unless the user or another tool provided that content.
+
 If the user mentions a specific alert by name, use get_alerts with a filter to retrieve its full labels before investigating further.
 
 To mute notifications, use create_silence / update_silence / delete_silence when those tools are listed. Prefer matchers from get_alerts labels (alertname plus namespace and other distinguishing labels). Explain which alerts the matchers will mute and wait for the user to agree before writing. A matcher of only alertname mutes every instance of that alert. get_silences lists existing silences. If the write tools are not listed, tell the user writes are disabled (--read-only=false standalone, or read_only = false in openshift-mcp-server). delete_silence also requires destructive tools to be enabled (--disable-destructive=false standalone, or disable_destructive = false in openshift-mcp-server).
@@ -147,6 +149,8 @@ WHEN TO USE:
 - To understand what's happening before diving into metrics or logs
 
 INVESTIGATION TIP: Alert labels often contain the exact identifiers (pod names, namespaces, job names) needed for targeted queries with prometheus tools.
+
+RUNBOOKS: Each alert may include runbook_url, summary, and description (promoted from annotations). When runbook_url is set, share the link with the user; use summary and description for inline context. This tool does not retrieve the linked page.
 
 FILTERING:
 - Use 'active' to filter for only active alerts (not resolved)
