@@ -1,0 +1,97 @@
+name: Bump Loki Operator
+# NOTE: This can be scrapped once dependabot is capable
+# (https://github.com/dependabot/dependabot-core/issues/12506)
+
+on:
+  schedule:
+    # Operator releases are ~bimonthly; check weekly.
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-loki-operator:
+    if: github.repository == 'containers/kubernetes-mcp-server'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check for new Loki Operator release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          kustomization="test/e2e/manifests/obs/loki/prereqs/kubernetes/kustomization.yaml"
+          current=$(grep -oP '\?ref=operator/v\K[0-9.]+' "$kustomization")
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+
+          # Latest non-prerelease operator/v* release from grafana/loki.
+          latest=$(gh api repos/grafana/loki/releases --jq '
+            [ .[] | select(.tag_name | startswith("operator/v"))
+                  | select(.prerelease | not)
+                  | .tag_name | ltrimstr("operator/v") ] | first')
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+
+          if [ "$current" = "$latest" ]; then
+            echo "Already up to date (operator/v${current})"
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Update available: operator/v${current} -> operator/v${latest}"
+            echo "bump=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply version bump
+        if: steps.check.outputs.bump == 'true'
+        env:
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          f="test/e2e/manifests/obs/loki/prereqs/kubernetes/kustomization.yaml"
+          sed -i "s|?ref=operator/v${CURRENT}|?ref=operator/v${LATEST}|" "$f"
+          sed -i "s|newTag: \"${CURRENT}\"|newTag: \"${LATEST}\"|" "$f"
+          git diff
+
+      - name: Create pull request
+        if: steps.check.outputs.bump == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          branch="auto/bump-loki-operator-v${LATEST}"
+
+          # Idempotent: skip if a PR for this version already exists.
+          if gh pr list --head "$branch" --json number --jq 'length' \
+               | grep -qx '[1-9][0-9]*'; then
+            echo "PR already exists for operator/v${LATEST}; skipping."
+            exit 0
+          fi
+
+          gh auth setup-git
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "chore(deps): bump Loki Operator to v${LATEST}
+
+          Update the obs e2e Kustomize overlay from operator/v${CURRENT} to
+          operator/v${LATEST}."
+          git push origin "$branch"
+
+          gh pr create \
+            --title "chore(deps): bump Loki Operator to v${LATEST}" \
+            --body "Automated bump of the Loki Operator Kustomize overlay.
+
+          | Component | Current | Latest |
+          |-----------|---------|--------|
+          | grafana/loki operator | v${CURRENT} | v${LATEST} |
+
+          Release: https://github.com/grafana/loki/releases/tag/operator/v${LATEST}" \
+            --base main \
+            --head "$branch"
