@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - https://github.com/grafana/loki/operator/config/overlays/community?ref=operator/v0.10.2
+  - https://github.com/grafana/loki/operator/config/overlays/community?ref=operator/v0.12.0
 patches:
   # The upstream community overlay references a cert secret name in the
   # Deployment that doesn't match the secret created by the Certificate CR.
@@ -29,4 +29,4 @@ patches:
 images:
   - name: quay.io/openshift-logging/loki-operator
     newName: docker.io/grafana/loki-operator
-    newTag: "0.10.2"
+    newTag: "0.12.0"

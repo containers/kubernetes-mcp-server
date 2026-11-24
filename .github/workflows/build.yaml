@@ -80,8 +80,19 @@ jobs:
       - name: Validate ownership and check CODEOWNERS
         run: make check-codeowners
 
+  validate-kustomize:
+    name: Validate Kustomize remote refs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate obs prereqs resolve
+        run: kubectl kustomize test/e2e/manifests/obs/loki/prereqs/kubernetes/ > /dev/null
+
   build:
-    needs: [check-format, check-readme, check-codeowners]
+    needs: [check-format, check-readme, check-codeowners, validate-kustomize]
     name: Build on ${{ matrix.os }}
     strategy:
       fail-fast: false
