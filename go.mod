@@ -61,7 +61,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
 	k8s.io/kubectl v0.37.2
 	k8s.io/metrics v0.37.2
-	k8s.io/streaming v0.37.2
+	k8s.io/streaming v0.37.3
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd
 	knative.dev/pkg v0.0.0-20260622140654-39ebae2ee2dc
 	sigs.k8s.io/controller-runtime v0.25.3
