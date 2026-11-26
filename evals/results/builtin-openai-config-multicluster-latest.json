@@ -24,7 +24,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "kind": {
@@ -66,7 +66,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "continue": {
@@ -97,7 +97,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "continue": {
@@ -124,7 +124,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "name": {
@@ -155,7 +155,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "name": {
@@ -175,7 +175,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "name": {
@@ -210,7 +210,7 @@
                   "type": "string"
                 },
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "name": {
@@ -235,7 +235,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "name": {
@@ -259,7 +259,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "continue": {
@@ -291,7 +291,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "continue": {
@@ -334,7 +334,7 @@
                   "type": "string"
                 },
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "name": {
@@ -368,7 +368,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "image": {
@@ -400,7 +400,7 @@
             "inputSchema": {
               "properties": {
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "resource": {
@@ -424,7 +424,7 @@
                   "type": "string"
                 },
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "gracePeriodSeconds": {
@@ -462,7 +462,7 @@
                   "type": "string"
                 },
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "kind": {
@@ -496,7 +496,7 @@
                   "type": "string"
                 },
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "continue": {
@@ -544,7 +544,7 @@
                   "type": "string"
                 },
                 "context": {
-                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-east if not set",
+                  "description": "Optional parameter selecting which context to run the tool in. Defaults to kind-west if not set",
                   "type": "string"
                 },
                 "kind": {
