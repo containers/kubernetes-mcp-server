@@ -37,7 +37,8 @@ func (c *Core) ResourcesList(ctx context.Context, gvk *schema.GroupVersionKind, 
 	if err != nil {
 		return nil, err
 	}
-	if isNamespaced && !c.canIUse(ctx, gvr, namespace, "list") && namespace == "" {
+	// The access review only matters for an all-namespaces list; skip it when a namespace is given.
+	if isNamespaced && namespace == "" && !c.canIUse(ctx, gvr, namespace, "list") {
 		namespace = c.NamespaceOrDefault("")
 	} else if !isNamespaced {
 		// Cluster-scoped resources never have a namespace, even when the caller provides one.
