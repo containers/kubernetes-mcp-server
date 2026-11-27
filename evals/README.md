@@ -168,6 +168,72 @@ kinds:
 - **`builtin-anthropic`** — `anthropic:claude-sonnet-4-6`
 - **`builtin-google`** — `google:gemini-3.1-pro-preview`
 
+## Model evaluation slots
+
+The table maps requested models to provider model IDs. Each configured directory
+contains an `agent.yaml` and symlinks to the shared suite configs. The agent and
+judge use that directory's model.
+
+Directory names are stable evaluation slots per model family: `latest` and,
+where configured, `previous`. These are maintained selections, not provider
+aliases or automatic discovery of newly released models. Each `agent.yaml`
+keeps an explicit model ID so the configuration for a run remains reviewable.
+
+When advancing a family, move the previous latest model ID and any model-specific
+settings into its `previous/agent.yaml`, then update `latest/agent.yaml`
+and the table below. Directory names and CI job selectors stay unchanged.
+Record the repository revision and resolved model ID with results to preserve
+reproducibility after a slot is updated.
+
+| Requested model ID | AGENT | Explicit provider model ID |
+| --- | --- | --- |
+| `claude-sonnet-4-5-20251001` | `builtin-claude-sonnet-previous` | `anthropic:claude-sonnet-4-5-20250929` |
+| `claude-sonnet-5` | `builtin-claude-sonnet-latest` | `anthropic:claude-sonnet-5` |
+| `gemini-3.1-pro` | Pending GA availability | — |
+| `gemini-3.5-flash` | `builtin-gemini-flash-previous` | `google:gemini-3.5-flash` |
+| `gemini-3.6-flash` | `builtin-gemini-flash-latest` | `google:gemini-3.6-flash` |
+| `gemma-4-31b` | `builtin-gemma-latest` | `openai:gemma-4-31b` (self-hosted vLLM) |
+| `gpt-5.4` | `builtin-gpt-previous` | `openai:gpt-5.4-2026-03-05` |
+| `gpt-5.5` | `builtin-gpt-latest` | `openai:gpt-5.5-2026-04-23` |
+
+The GPT slots use OpenAI's dated snapshots to satisfy the pinning requirement.
+Anthropic documents `claude-sonnet-4-5-20250929` as the Sonnet 4.5 snapshot and
+[lists its Claude API retirement for November 30, 2026](https://platform.claude.com/docs/en/about-claude/model-deprecations).
+Confirm provider access before scheduling it. Google documents only
+[`gemini-3.1-pro-preview`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-pro)
+for Gemini 3.1 Pro. Add the GA slot when its Vertex model ID is available.
+
+```bash
+# With provider credentials set and the server running with TOOLSETS=core
+make run-evals AGENT=builtin-claude-sonnet-latest SUITE=core
+```
+
+With a credential-free kubeconfig fixture, enable `TOOLSETS=core,config` and set
+`EVAL_LABEL_SELECTOR=""` to run both core and config tasks. `EVAL_TASK_FILTER`
+can narrow runs by task name.
+
+Use the existing provider environment settings: `OPENAI_API_KEY` for OpenAI,
+`ANTHROPIC_API_KEY` for native Anthropic, or `GEMINI_USE_VERTEX=1`,
+`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` and Application Default Credentials
+for Vertex. Gemma uses an OpenAI-compatible vLLM endpoint (`OPENAI_BASE_URL` and
+`OPENAI_API_KEY` if required); record its deployed weights revision with the run.
+GPT agents enable `useResponsesApi`; use a mcpchecker version supporting that
+setting. Gemma uses Chat Completions.
+
+mcpchecker writes JSON using the shared eval name, such as
+`mcpchecker-core-e2e-out.json`; its summary records the resolved model ID. Use
+isolated workspaces per model/suite to avoid overwriting another run's output.
+The existing Prow runner in `openshift/release` collects JSON, converts it to
+JUnit, then applies pass-rate thresholds. Configure one job per model evaluation
+slot/suite and ensure those jobs are ingested by Sippy.
+
+Prow jobs must set `EVAL_CONFIG` to the model's suite YAML, for example
+`evals/core-eval-testing/builtin-gpt-latest/eval-core.yaml`. The runner passes
+this path directly to Make. For core jobs on live clusters, keep
+`EVAL_LABEL_SELECTOR=suite=core` and set `TOOLSETS=core` to exclude the
+`configuration_view` tool. Keep the result JSON with the resolved model ID
+and, for self-hosted models, the weights revision.
+
 ## Filtering tasks by suite
 
 The `--label-selector` flag (or the `SUITE` make variable) chooses which tasks run.
