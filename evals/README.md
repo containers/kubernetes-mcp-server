@@ -14,7 +14,7 @@ evals/
 ├── core-eval-testing/              # Agent configs and per-suite eval configs (see below)
 ├── results/                        # Committed eval results (baselines)
 └── tasks/                          # Shared task library, grouped by suite (see tasks/README.md)
-    └── <suite>/                    # core, config, helm, kiali, kubevirt, tekton, netobserv, obs
+    └── <suite>/                    # core, core-apps, config, helm, argocd, kiali, kubevirt, tekton, netobserv, obs
         └── <task-name>/
             ├── <task-name>.yaml    # Task definition (prompt, verify, labels). kubevirt/tekton use task.yaml
             ├── setup.sh            # Optional pre-task cluster setup
@@ -24,7 +24,8 @@ evals/
 ```
 
 Tasks are grouped into suites via a `suite: <name>` label. The available suites are
-`core`, `config`, `helm`, `kiali`, `kubevirt`, `tekton`, `netobserv`, `obs`, and `korrel8r`.
+`core`, `core-apps`, `config`, `helm`, `argocd`, `kiali`, `kubevirt`, `tekton`,
+`netobserv`, `obs`, and `korrel8r`.
 
 A second, orthogonal `readonly: "true"` label marks tasks that are safe to run
 against a server started with `read_only = true`. It cuts across the `suite:` label
@@ -242,12 +243,62 @@ toolsets and `READ_ONLY=true`. It can also be selected through the workflow's
 manual suite input or a maintainer's `/run-mcpchecker core-readonly` review.
 Other suites retain their normal read-write server mode.
 
+## MCP Apps suite (`core-apps`)
+
+Requires mcpchecker v0.0.23 or newer. This smoke suite covers two
+representative tools: `namespaces_list` for a table app and `pods_get` for a
+resource-details app. Metrics and broader per-tool coverage can be added later;
+no Metrics API or cluster addon is required for this suite.
+
+The eval configuration currently exists only for `AGENT=builtin-openai` (the
+default). Other agents, such as `AGENT=builtin-anthropic`, fail with a missing
+`eval-core-apps.yaml` until an eval configuration is added for that agent.
+
+Each task creates fixtures with `kubectl`, asks the agent to inspect them through
+MCP tools, and checks its answer for fixture data. `assertions.apps` requires
+each targeted tool to be called and its UI resource to be retrievable as nonempty
+`text/html;profile=mcp-app`. `requirePresent: true` makes missing tools fail
+instead of skipping coverage. The agent declares Apps host support using
+`apps.host: true`. Resource validation does not render HTML or run JavaScript;
+keep using `make browser-test` for rendering, sorting, theming, and resizing.
+
+Start a fresh eval server when switching suites:
+
+```bash
+make stop-server
+make run-server SUITE=core-apps TOOLSETS=core,config
+make run-evals SUITE=core-apps
+make stop-server
+```
+
+`SUITE=core-apps` defaults `READ_ONLY=true` and `APPS_ENABLED=true` for
+`run-server`. Read-only mode limits the agent to inspection; setup and cleanup
+create and delete fixtures separately through `kubectl`. These settings are
+written to its generated eval drop-in and do not change the product defaults.
+Other suites default `APPS_ENABLED=false`;
+`APPS_ENABLED=true|false` can be set explicitly. Apps enablement requires a
+restart: `run-evals` connects to the running server and cannot change it.
+All tasks in the suite share that server. Setup and cleanup use your kubeconfig
+and manage only their labeled `mcp-apps-*` fixture namespaces.
+
+The weekly CI matrix includes this suite. It can also be selected manually or
+through a maintainer review containing `/run-mcpchecker core-apps`.
+It runs separately from `all`, whose server retains Apps-disabled defaults.
+See [the task documentation](tasks/core-apps/readme.md) for coverage details.
+
 ## Versions
 
 `make mcpchecker` installs `mcpchecker@latest`. CI runs the same binary version:
 `.github/workflows/mcpchecker.yaml` calls `mcpchecker-action` (currently pinned at
-`v0.0.18`) with `mcpchecker-version: latest`. If you need to reproduce CI exactly,
+`v0.0.23`) with `mcpchecker-version: latest`. If you need to reproduce CI exactly,
 pin the binary with `make mcpchecker MCPCHECKER_VERSION=<version>`.
+
+The Make target installs only when the binary is absent. To upgrade an existing
+repo-local installation for Apps assertions:
+
+```bash
+GOBIN="$PWD/_output/tools/bin" go install github.com/mcpchecker/mcpchecker/cmd/mcpchecker@v0.0.23
+```
 
 `make claude-agent-acp` likewise installs `@agentclientprotocol/claude-agent-acp@latest`;
 pin it with `make claude-agent-acp CLAUDE_AGENT_ACP_VERSION=<version>` for local

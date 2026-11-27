@@ -5,6 +5,7 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 ## Task Families
 
 - [Core tasks](core/) – core cluster workflows such as creating pods, fixing deployments, managing RBAC, or debugging state issues.
+- [Core Apps tasks](core-apps/) – core tool workflows with MCP Apps HTML resource assertions.
 - [Config tasks](config/) – workflows that exercise the configuration toolset (contexts, current config).
 - [Helm tasks](helm/) – workflows that exercise the Helm toolset (install, list, uninstall releases).
 - [ArgoCD tasks](argocd/) – GitOps workflows that exercise ArgoCD CRDs (Application, AppProject, ApplicationSet, ArgoCD instance management).
@@ -16,7 +17,10 @@ This directory hosts the reusable task scenarios that power MCP evaluations for 
 
 ## Anatomy of a Task
 
-Most subdirectories under `core/`, `config/`, `helm/`, `kiali/`, `kubevirt/`, `netobserv/`, or `tekton/` define a single scenario (a few, like `kiali/scripts/`, `kubevirt/helpers/`, and `tekton/helpers/`, hold shared helpers instead):
+Most subdirectories under `core/`, `core-apps/`, `config/`, `helm/`, `argocd/`,
+`kiali/`, `kubevirt/`, `netobserv/`, `obs/`, or `tekton/` define a single scenario
+(a few, like `core-apps/helpers/`, `kiali/scripts/`, `kubevirt/helpers/`, and
+`tekton/helpers/`, hold shared helpers instead):
 
 1. `*.yaml` – declarative description consumed by the evaluation harness (prompts, success criteria, required tools).
 2. `setup.sh` / `verify.sh` / `cleanup.sh` – shell hooks (optional) that prime the cluster, assert post-conditions, and reset resources so tasks stay idempotent.
