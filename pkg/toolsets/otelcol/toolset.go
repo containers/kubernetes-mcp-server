@@ -8,7 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	serverconfig "github.com/containers/kubernetes-mcp-server/pkg/config"
-	"github.com/os-observability/redhat-opentelemetry-collector/configschemas"
+	"github.com/openshift/redhat-opentelemetry-collector/configschemas"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/toolcfg"
 	"github.com/containers/kubernetes-mcp-server/pkg/toolsets"

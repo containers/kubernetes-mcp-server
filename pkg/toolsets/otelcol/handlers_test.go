@@ -7,7 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
-	"github.com/os-observability/redhat-opentelemetry-collector/configschemas"
+	"github.com/openshift/redhat-opentelemetry-collector/configschemas"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/obs/toolcfg"
 )
@@ -45,6 +45,17 @@ func TestSchemaLoaderWindowsPaths(t *testing.T) {
 	}
 	if !slices.Contains(versions, "0.144.0") {
 		t.Fatalf("expected 0.144.0 in versions: %v", versions)
+	}
+}
+
+func TestLatestSchemaVersion(t *testing.T) {
+	loader := NewSchemaLoaderFromFS(configschemas.Schemas, "schemas")
+	got, err := loader.GetLatestVersion()
+	if err != nil {
+		t.Fatalf("latest version: %v", err)
+	}
+	if got != "0.163.2" {
+		t.Fatalf("latest schema version = %q, want %q", got, "0.163.2")
 	}
 }
 
