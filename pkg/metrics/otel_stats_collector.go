@@ -112,7 +112,7 @@ func createMetricsExporter(ctx context.Context, cfg *config.TelemetryConfig) (sd
 	switch protocol {
 	case "http/protobuf", "http":
 		logger.V(2).Info("Using HTTP/protobuf OTLP metrics exporter", "telemetry.metrics.exporter.protocol", protocol)
-		return otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(endpoint))
+		return otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(cfg.HTTPEndpointURL("metrics")))
 
 	case "grpc", "":
 		if protocol == "" {
