@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -501,7 +502,12 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	}
 	stdout, stderr, err := kubernetes.NewCore(params).PodsExec(params, params.Config, ns, name, container, command)
 	if err != nil {
-		return api.NewToolCallResult("", fmt.Errorf("failed to exec in pod %s in namespace %s: %w", name, ns, err)), nil
+		err = fmt.Errorf("failed to exec in pod %s in namespace %s: %w", name, ns, err)
+		if stdout == "" && stderr == "" {
+			return api.NewToolCallResult("", err), nil
+		}
+		// A command that ran and failed: return its output with the error.
+		return api.NewToolCallResult("", fmt.Errorf("%w\n%s", err, execStreams(stdout, stderr))), nil
 	}
 
 	// Prefer stdout, fallback to stderr, or indicate no output
@@ -513,6 +519,22 @@ func podsExec(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 		ret = fmt.Sprintf("The executed command in pod %s in namespace %s has not produced any output", name, ns)
 	}
 	return api.NewToolCallResult(ret, nil), nil
+}
+
+// execStreams renders captured stdout and stderr, labelled, for an exec error.
+func execStreams(stdout, stderr string) string {
+	var b strings.Builder
+	for _, stream := range []struct{ name, text string }{{"stdout", stdout}, {"stderr", stderr}} {
+		if stream.text == "" {
+			continue
+		}
+		b.WriteString("--- " + stream.name + " ---\n")
+		b.WriteString(stream.text)
+		if !strings.HasSuffix(stream.text, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 func podsLog(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
