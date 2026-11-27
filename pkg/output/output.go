@@ -175,22 +175,28 @@ func tableToStructured(t *metav1.Table) []map[string]any {
 	return result
 }
 
+// MarshalYaml renders v as YAML. Kubernetes objects, alone, in a list or in a
+// slice (the shape write tools return), are rendered without
+// metadata.managedFields, as the read path does.
 func MarshalYaml(v any) (string, error) {
 	switch t := v.(type) {
-	//case unstructured.UnstructuredList:
-	//	for i := range t.Items {
-	//		t.Items[i].SetManagedFields(nil)
-	//	}
-	//	v = t.Items
 	case *unstructured.UnstructuredList:
 		for i := range t.Items {
 			t.Items[i].SetManagedFields(nil)
 		}
 		v = t.Items
-	//case unstructured.Unstructured:
-	//	t.SetManagedFields(nil)
 	case *unstructured.Unstructured:
 		t.SetManagedFields(nil)
+	case []*unstructured.Unstructured:
+		for _, item := range t {
+			if item != nil {
+				item.SetManagedFields(nil)
+			}
+		}
+	case []unstructured.Unstructured:
+		for i := range t {
+			t[i].SetManagedFields(nil)
+		}
 	}
 	ret, err := yml.Marshal(v)
 	if err != nil {
