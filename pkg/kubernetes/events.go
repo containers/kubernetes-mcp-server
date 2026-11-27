@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
 	v1 "k8s.io/api/core/v1"
@@ -40,7 +41,7 @@ func (c *Core) EventsList(ctx context.Context, namespace string, options api.Lis
 		}
 		eventMap = append(eventMap, map[string]any{
 			"Namespace": event.Namespace,
-			"Timestamp": timestamp.String(),
+			"Timestamp": timestamp.UTC().Format(time.RFC3339Nano),
 			"Type":      event.Type,
 			"Reason":    event.Reason,
 			"InvolvedObject": map[string]string{
