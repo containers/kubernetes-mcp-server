@@ -539,10 +539,16 @@ func podsRun(params api.ToolHandlerParams) (*api.ToolCallResult, error) {
 	ns := p.OptionalString("namespace", "")
 	name := p.OptionalString("name", "")
 	image := p.RequiredString("image")
-	port := int32(p.OptionalInt64("port", 0))
+	portValue := p.OptionalInt64("port", 0)
 	if err := p.Err(); err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to run pod: %w", err)), nil
 	}
+	// 0 (or no port) exposes nothing; anything else must be a valid TCP port, checked
+	// before the conversion to int32 so large values cannot wrap into range.
+	if portValue < 0 || portValue > 65535 {
+		return api.NewToolCallResult("", fmt.Errorf("failed to run pod: port must be between 1 and 65535, got %d", portValue)), nil
+	}
+	port := int32(portValue)
 	resources, err := kubernetes.NewCore(params).PodsRun(params, ns, name, image, port)
 	if err != nil {
 		return api.NewToolCallResult("", fmt.Errorf("failed to run pod %s in namespace %s: %w", name, ns, err)), nil

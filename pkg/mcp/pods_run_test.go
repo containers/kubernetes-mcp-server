@@ -24,6 +24,14 @@ func (s *PodsRunSuite) TestPodsRun() {
 		s.Equalf("failed to run pod: image parameter required", toolResult.Content[0].(*mcp.TextContent).Text,
 			"invalid error message, got %v", toolResult.Content[0].(*mcp.TextContent).Text)
 	})
+	s.Run("pods_run with a port out of range returns error", func() {
+		for _, port := range []interface{}{-80, 70000, 4294967376} {
+			toolResult, err := s.CallTool("pods_run", map[string]interface{}{"image": "nginx", "name": "out-of-range-port", "port": port})
+			s.Require().NoError(err)
+			s.Truef(toolResult.IsError, "port %v must be refused", port)
+			s.Contains(toolResult.Content[0].(*mcp.TextContent).Text, "port must be between 1 and 65535")
+		}
+	})
 	s.Run("pods_run(image=nginx, namespace=nil), uses configured namespace", func() {
 		podsRunNilNamespace, err := s.CallTool("pods_run", map[string]interface{}{"image": "nginx"})
 		s.Run("no error", func() {
