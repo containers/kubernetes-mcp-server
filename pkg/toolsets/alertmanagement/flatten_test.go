@@ -18,7 +18,10 @@ func TestFlattenListedAlerts(t *testing.T) {
 				alertSourceLabel:    "platform",
 				managedClusterLabel: "cluster-a",
 			},
-			Annotations:    map[string]string{"summary": "ok"},
+			Annotations: map[string]string{
+				"summary":     "ok",
+				"runbook_url": "https://example.com/runbook",
+			},
 			State:          "firing",
 			ActiveAt:       &activeAt,
 			Value:          "1",
@@ -39,6 +42,8 @@ func TestFlattenListedAlerts(t *testing.T) {
 	require.Equal(t, "id-1", got[0].RuleID)
 	require.Equal(t, "cluster-a", got[0].Cluster)
 	require.Equal(t, "2026-01-02T03:04:05Z", got[0].ActiveAt)
+	require.Equal(t, "https://example.com/runbook", got[0].RunbookURL)
+	require.Equal(t, "ok", got[0].Summary)
 	require.Equal(t, "id-from-label", got[1].RuleID)
 }
 
@@ -63,6 +68,10 @@ func TestFlattenListedRules(t *testing.T) {
 						alertSourceLabel:   "platform",
 						ruleManagedByLabel: "operator",
 					},
+					Annotations: map[string]string{
+						"runbook_url": "https://example.com/watchdog",
+						"summary":     "watchdog",
+					},
 				},
 				{
 					Name:  "UserAlert",
@@ -83,6 +92,8 @@ func TestFlattenListedRules(t *testing.T) {
 	require.Len(t, got, 2)
 	require.Equal(t, "id-1", got[0].ID)
 	require.Equal(t, "operator", got[0].ManagementStatus)
+	require.Equal(t, "https://example.com/watchdog", got[0].RunbookURL)
+	require.Equal(t, "watchdog", got[0].Summary)
 	require.Equal(t, "id-2", got[1].ID)
 	require.Equal(t, managementUserCreated, got[1].ManagementStatus)
 	require.Equal(t, "critical", got[1].Severity)

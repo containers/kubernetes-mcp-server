@@ -1,6 +1,15 @@
 package alertmanagement
 
-import "time"
+import (
+	"time"
+
+	"github.com/containers/kubernetes-mcp-server/pkg/obs/alertrunbook"
+)
+
+func applyPromotedAnnotations(annotations map[string]string) (runbookURL, summary, description string) {
+	p := alertrunbook.Promote(annotations)
+	return p.RunbookURL, p.Summary, p.Description
+}
 
 func flattenListedAlerts(alerts []prometheusAlert) []ListedAlert {
 	out := make([]ListedAlert, 0, len(alerts))
@@ -26,6 +35,7 @@ func flattenListedAlerts(alerts []prometheusAlert) []ListedAlert {
 		if alert.ActiveAt != nil && !alert.ActiveAt.IsZero() {
 			listed.ActiveAt = alert.ActiveAt.UTC().Format(time.RFC3339)
 		}
+		listed.RunbookURL, listed.Summary, listed.Description = applyPromotedAnnotations(alert.Annotations)
 		out = append(out, listed)
 	}
 	return out
@@ -54,6 +64,7 @@ func flattenListedRules(groups []prometheusRuleGroup) []ListedAlertRule {
 				Labels:           labels,
 				Annotations:      rule.Annotations,
 			}
+			listed.RunbookURL, listed.Summary, listed.Description = applyPromotedAnnotations(rule.Annotations)
 			out = append(out, listed)
 		}
 	}
