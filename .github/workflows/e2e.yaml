@@ -37,8 +37,7 @@ jobs:
         run: make e2e-full-setup
 
       - name: Run e2e tests
-        # Skip TestObs* toolset suites only; keep TestObservability* in the default job
-        run: make e2e-test E2E_ARGS="-skip '^TestObs[A-Z]'"
+        run: make e2e-test
 
       - name: Cleanup
         if: always()

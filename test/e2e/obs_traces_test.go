@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/containers/kubernetes-mcp-server/internal/test"
@@ -21,13 +22,16 @@ type obsTracesState struct {
 var obsTracesTS testState[obsTracesState]
 
 func TestObsTracesTools(t *testing.T) {
+	if os.Getenv("SKIP_OBS_TEMPO") != "" {
+		t.Skip("SKIP_OBS_TEMPO set; Tempo setup failed")
+	}
 	f := features.New("obs-traces-tools").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			dep := deployServer(ctx, t, cfg, "obs-traces",
 				withConfig(obsTracesConfig()),
 				withValues(obsTracesRBACValues()),
 			)
-			mcpClient := test.NewMcpClient(t, nil, test.WithEndpoint(dep.serverURL+"/mcp"))
+			mcpClient := test.NewMcpClient(t, nil, obsMcpClientOptions(dep.serverURL+"/mcp")...)
 			t.Cleanup(mcpClient.Close)
 			return obsTracesTS.set(ctx, &obsTracesState{dep: dep, mcpClient: mcpClient})
 		}).
