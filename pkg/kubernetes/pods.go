@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	labelutil "k8s.io/apimachinery/pkg/labels"
@@ -80,6 +81,21 @@ func (c *Core) PodsGet(ctx context.Context, namespace, name string) (*unstructur
 	}, c.NamespaceOrDefault(namespace), name)
 }
 
+// PodCleanupError is returned by PodsDelete when the Pod was deleted but a
+// Service or Route that pods_run created for it could not be listed or
+// deleted.
+type PodCleanupError struct {
+	Namespace string
+	Name      string
+	Errs      []error
+}
+
+func (e *PodCleanupError) Error() string {
+	return fmt.Sprintf("pod %s/%s was deleted, but its managed resources were not all deleted: %v", e.Namespace, e.Name, errors.Join(e.Errs...))
+}
+
+func (e *PodCleanupError) Unwrap() []error { return e.Errs }
+
 func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, error) {
 	namespace = c.NamespaceOrDefault(namespace)
 	pod, err := c.ResourcesGet(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name)
@@ -93,34 +109,46 @@ func (c *Core) PodsDelete(ctx context.Context, namespace, name string) (string, 
 		AppKubernetesName:      pod.GetLabels()[AppKubernetesName],
 	}.AsSelector()
 
+	// Delete the Pod first: if that is refused, its managed Service and Route stay in place.
+	if err := c.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name, nil); err != nil {
+		return "", err
+	}
+	if !isManaged {
+		return "Pod deleted successfully", nil
+	}
+
+	var cleanupErrs []error
 	// Delete managed service
-	if isManaged {
-		services := c.CoreV1().Services(namespace)
-		if sl, _ := services.List(ctx, metav1.ListOptions{
-			LabelSelector: managedLabelSelector.String(),
-		}); sl != nil {
-			for _, svc := range sl.Items {
-				_ = services.Delete(ctx, svc.Name, metav1.DeleteOptions{})
+	services := c.CoreV1().Services(namespace)
+	if sl, err := services.List(ctx, metav1.ListOptions{LabelSelector: managedLabelSelector.String()}); err != nil {
+		cleanupErrs = append(cleanupErrs, fmt.Errorf("listing its Services: %w", err))
+	} else {
+		for _, svc := range sl.Items {
+			if err := services.Delete(ctx, svc.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				cleanupErrs = append(cleanupErrs, fmt.Errorf("service %s: %w", svc.Name, err))
 			}
 		}
 	}
 
 	// Delete managed Route
-	if isManaged && c.supportsGroupVersion("route.openshift.io/v1") {
+	if c.supportsGroupVersion("route.openshift.io/v1") {
 		routeResources := c.DynamicClient().
 			Resource(schema.GroupVersionResource{Group: "route.openshift.io", Version: "v1", Resource: "routes"}).
 			Namespace(namespace)
-		if rl, _ := routeResources.List(ctx, metav1.ListOptions{
-			LabelSelector: managedLabelSelector.String(),
-		}); rl != nil {
+		if rl, err := routeResources.List(ctx, metav1.ListOptions{LabelSelector: managedLabelSelector.String()}); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("listing its Routes: %w", err))
+		} else {
 			for _, route := range rl.Items {
-				_ = routeResources.Delete(ctx, route.GetName(), metav1.DeleteOptions{})
+				if err := routeResources.Delete(ctx, route.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+					cleanupErrs = append(cleanupErrs, fmt.Errorf("route %s: %w", route.GetName(), err))
+				}
 			}
 		}
-
 	}
-	return "Pod deleted successfully",
-		c.ResourcesDelete(ctx, &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, namespace, name, nil)
+	if len(cleanupErrs) > 0 {
+		return "", &PodCleanupError{Namespace: namespace, Name: name, Errs: cleanupErrs}
+	}
+	return "Pod deleted successfully", nil
 }
 
 func (c *Core) PodsLog(ctx context.Context, namespace, name, container string, previous bool, tail int64) (string, error) {
