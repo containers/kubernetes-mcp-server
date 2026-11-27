@@ -36,6 +36,7 @@ Living documentation for implemented and planned features:
 
 | Spec | Description | Status |
 |------|-------------|--------|
+| **[API discovery and schema inspection](specs/api-discovery.md)** | Described type inventory and full-schema-first OpenAPI v3 lookup | Implemented |
 | **[Validation](specs/validation.md)** | Pre-execution validation layer (resource existence, schema, RBAC) | Implemented |
 | **[Structured Tool Output](specs/structured-output.md)** | Conventions for tools that emit `structuredContent` | Implemented |
 | **[Config Option Framework](specs/config.md)** | Unified `Option[T]` config: vectors, precedence, provenance | Implemented |
@@ -54,4 +55,3 @@ Living documentation for implemented and planned features:
 
 - **[Releases](releases.md)** - Release cadence, versioning, and published artifacts
 - **[Main README](../README.md)** - Project overview and general information
-

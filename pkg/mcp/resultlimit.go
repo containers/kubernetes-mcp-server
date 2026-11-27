@@ -30,14 +30,16 @@ func toolResultWithinLimit(limit int64, content string, structured any) error {
 }
 
 // rejectOversizedToolResult rejects a tool result that is still over the cap
-// after aggregators have truncated. A tool error is measured as its error text
-// plus any structured error content. When ContentBlocks is set, those
-// bytes replace Content, including image data.
+// after aggregators have truncated. Measure only the content retained by the
+// MCP converters, including both text and structured content when present.
 func rejectOversizedToolResult(limit int64, result *api.ToolCallResult) error {
 	if limit <= 0 || result == nil {
 		return nil
 	}
-	if result.Error != nil {
+	if result.Error != nil && len(result.ContentBlocks) > 0 {
+		return overResultLimit(limit, len(result.Error.Error()))
+	}
+	if result.Error != nil && (result.StructuredContent == nil || result.Content == "") {
 		size, err := structuredSize(result.StructuredContent)
 		if err != nil {
 			return err

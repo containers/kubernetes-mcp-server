@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -85,6 +86,18 @@ func (s *TextResultSuite) TestNewStructuredResult() {
 		s.Require().True(ok, "expected TextContent")
 		s.Equal("metrics unavailable", tc.Text)
 		s.Nil(result.StructuredContent)
+	})
+	s.Run("retains explicitly serialized structured errors", func() {
+		content := `{"error":{"code":"unknown_kind","candidates":[{"kind":"Widget","apiVersion":"example.com/v1"}]}}`
+		var structured map[string]any
+		s.Require().NoError(json.Unmarshal([]byte(content), &structured))
+		result := NewStructuredResult(content, structured, errors.New("unknown kind"))
+		s.True(result.IsError)
+		s.Require().Len(result.Content, 1)
+		text, ok := result.Content[0].(*mcp.TextContent)
+		s.Require().True(ok, "expected TextContent")
+		s.Equal(content, text.Text)
+		s.Equal(structured, result.StructuredContent)
 	})
 }
 

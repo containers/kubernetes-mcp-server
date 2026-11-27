@@ -434,8 +434,17 @@ In case multi-cluster support is enabled (default) and you have access to multip
   - `namespace` (`string`) - Optional Namespace to get/update the namespaced resource scale from (ignored in case of cluster scoped resources). If not provided, will get/update resource scale from configured namespace
   - `scale` (`integer`) - Optional scale to update the resources scale to. If not provided, will return the current scale of the resource, and not update it
 
-- **api_resources_list** - Look up the Kubernetes API resource type(s) matching a specific kind you already have in mind (apiVersion, plural resource name, whether namespaced), using the server's preferred version for each match -- the same data 'kubectl api-resources' shows for that kind. Use this to discover the correct apiVersion for a kind before calling resources_get, resources_list, resources_create_or_update, resources_delete, or resources_scale, especially for CRDs whose apiVersion isn't already known.
-  - `kind` (`string`) **(required)** - Required case-insensitive exact filter on kind (e.g. 'Deployment', 'Route'). Matches the same Kind across every API group and version, so the result can still contain multiple API resource entries.
+- **api_resources_list** - Discover available Kubernetes API types, not instances. With no arguments, returns preferred types with root-description summaries; start unfiltered when terminology is uncertain. Optional exact kind, group and apiVersion filters and a literal substring query narrow results. The server pages by bytes: if continue is present, pass it with the same filters to retrieve remaining types. Use api_resources_explain to inspect a type's live schema.
+  - `apiVersion` (`string`) - Optional exact apiVersion filter, such as apps/v1
+  - `continue` (`string`) - Opaque continuation returned by the previous call; reuse the same filters, restart without this token if discovery changes
+  - `group` (`string`) - Optional exact API group filter; an explicit empty string selects the core group
+  - `kind` (`string`) - Optional case-insensitive exact kind filter; matches across API groups
+  - `query` (`string`) - Optional case-insensitive literal substring over kind, plural resource name and API group only; does not search descriptions or aliases. No regex. Start unfiltered if terminology is uncertain
+
+- **api_resources_explain** - Explain one Kubernetes kind's live OpenAPI v3 schema, without reading instances or CRD objects. apiVersion is optional for a unique kind with complete discovery; incomplete discovery requires an explicit apiVersion, and ambiguity returns candidates. Returns full descriptions and validation rules when they fit 24 KiB; otherwise at most three coarse branches are visibly marked x-mcp-omitted with path-based explanations and expand arguments. A compacted response is successful but complete=false. Expand only branches needed for the task via fieldPath. Field queries include ancestor validation context; OpenAPI does not cover all admission/controller behaviour.
+  - `apiVersion` (`string`) - Optional served group/version, such as apps/v1 (core: v1). Required for ambiguity or incomplete discovery; otherwise uses the unique kind's preferred version
+  - `fieldPath` (`string`) - Optional dot-separated property path; traverses arrays and map values implicitly, e.g. spec.template.spec.containers.image. Use omissions[].expand arguments to inspect a collapsed branch
+  - `kind` (`string`) **(required)** - Exact Kubernetes kind to explain
 
 </details>
 
