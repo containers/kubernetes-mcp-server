@@ -368,13 +368,16 @@ Configure HTTP server settings to protect against denial-of-service attacks.
 | `http.max_body_bytes` | integer | `16777216` | Maximum size of request body in bytes (default: 16 MB). One term in the [pod memory floor](scaling.md). Stdio frames use the same number. |
 | `http.rate_limit_rps` | float | `0` | Maximum requests per second per session. When `0` (default), rate limiting is disabled. |
 | `http.rate_limit_burst` | integer | `0` (effective `10`) | Maximum burst size for rate limiting. Allows short bursts above the rate limit. Only effective when `rate_limit_rps > 0`. `0` uses the built-in burst of 10. |
+| `http.client_rate_limit_rps` | float | `0` | Maximum MCP requests per second per client, across all of its sessions and in stateless mode. A client is the subject of a verified bearer token, otherwise the client IP address. When `0` (default), it is disabled. |
+| `http.client_rate_limit_burst` | integer | `0` (effective `10`) | Maximum burst size for per-client rate limiting. Only effective when `client_rate_limit_rps > 0`. `0` uses the built-in burst of 10. |
 
 Duration values use Go duration syntax: `"30s"`, `"5m"`, `"1h30m"`.
 
 **Security Considerations:**
 - `read_header_timeout` is the primary defense against Slowloris attacks, which send headers extremely slowly to exhaust server connections
 - `max_body_bytes` prevents memory exhaustion from unbounded request payloads. The 16 MB default accommodates large Kubernetes manifests (CRDs, ConfigMaps)
-- `rate_limit_rps` prevents any single session from overwhelming the server with requests. Rate limiting is per-session, so one client hitting the limit does not affect other sessions. Requests with no session ID (e.g., STDIO transport) bypass rate limiting.
+- `rate_limit_rps` prevents any single session from overwhelming the server with requests. Rate limiting is per-session, so one client hitting the limit does not affect other sessions. Requests with no session ID (e.g., STDIO transport, or every request in `stateless` mode) bypass rate limiting.
+- `client_rate_limit_rps` limits each client however many sessions it opens, and also applies in `stateless` mode. Requests over the limit get HTTP `429 Too Many Requests` with a `Retry-After` header. With `require_oauth` and a verified token the client is the token subject; otherwise it is the client IP address, which honours `trust_proxy_headers`. Clients behind one proxy or NAT without a verified token share one limit. With `trust_proxy_headers`, the proxy must overwrite `X-Forwarded-For`, or clients can choose their own key. See [the spec](specs/client-rate-limiting.md).
 
 **Example:**
 ```toml
@@ -383,6 +386,8 @@ read_header_timeout = "10s"
 max_body_bytes = 16777216    # 16 MB
 rate_limit_rps = 5           # 5 requests per second per session
 rate_limit_burst = 10        # allow bursts of up to 10 requests
+client_rate_limit_rps = 20   # 20 MCP requests per second per client
+client_rate_limit_burst = 40
 ```
 
 ### Memory Bounds

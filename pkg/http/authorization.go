@@ -158,7 +158,8 @@ func AuthorizationMiddleware(cfgState *config.ConfigState, oauthState *oauth.Sta
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			// The token is verified, so its subject can identify the client (ClientRateLimitMiddleware).
+			next.ServeHTTP(w, r.WithContext(withVerifiedSubject(r.Context(), claims.Subject)))
 		})
 	}
 }

@@ -126,7 +126,7 @@ Empty `port` (stdio) with `require_oauth = true` fails the load. OAuth is HTTP-o
 | `tls_min_version` | `TLS_MIN_VERSION` | no (inbound) |
 | `tls_cipher_suites` | `TLS_CIPHER_SUITES` | no (inbound) |
 | `http.read_header_timeout` | — | no |
-| `http.max_body_bytes`, `http.rate_limit_rps`, `http.rate_limit_burst` | — | yes |
+| `http.max_body_bytes`, `http.rate_limit_rps`, `http.rate_limit_burst`, `http.client_rate_limit_rps`, `http.client_rate_limit_burst` | — | yes |
 | `require_oauth`, `oauth_*`, `authorization_url`, `skip_jwt_verification`, `disable_dynamic_client_registration`, `server_url`, `certificate_authority`, `trust_proxy_headers`, `token_exchange.*` | — | yes |
 | `telemetry.*` | matching `OTEL_*` | no |
 | `kube_client_qps`, `kube_client_burst` | `KUBE_CLIENT_QPS`, `KUBE_CLIENT_BURST` | no |

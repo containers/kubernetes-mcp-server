@@ -1066,6 +1066,28 @@ startup.
 <td>no</td>
 <td></td>
 </tr>
+<tr>
+<td>http.client_rate_limit_rps</td>
+<td>float64</td>
+<td><code>0</code> (disabled)</td>
+<td><code>http.client_rate_limit_rps</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td></td>
+</tr>
+<tr>
+<td>http.client_rate_limit_burst</td>
+<td>int</td>
+<td><code>10</code> when RPS &gt; 0</td>
+<td><code>http.client_rate_limit_burst</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 
