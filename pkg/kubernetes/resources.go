@@ -1,9 +1,12 @@
 package kubernetes
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"regexp"
+	"io"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -15,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utiljson "k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/discovery"
 )
@@ -63,21 +67,61 @@ func (c *Core) ResourcesGet(ctx context.Context, gvk *schema.GroupVersionKind, n
 }
 
 func (c *Core) ResourcesCreateOrUpdate(ctx context.Context, resource string) ([]*unstructured.Unstructured, error) {
-	separator := regexp.MustCompile(`\r?\n---\r?\n`)
-	resources := separator.Split(resource, -1)
+	parsedResources, err := ParseManifests(resource)
+	if err != nil {
+		return nil, err
+	}
+	return c.resourcesCreateOrUpdate(ctx, parsedResources)
+}
+
+// ParseManifests splits a YAML or JSON stream into Kubernetes objects the way
+// kubectl's YAML reader does: a document separator is a line starting with
+// "---", optionally followed by spaces and a comment, and documents that hold
+// nothing (blank, comment-only, null, a trailing separator) are skipped. Every
+// document is decoded before anything is sent to the cluster, so a document
+// that cannot be decoded, or has no apiVersion or kind, fails the whole call
+// without writing anything.
+func ParseManifests(resource string) ([]*unstructured.Unstructured, error) {
+	reader := yaml.NewYAMLReader(bufio.NewReader(strings.NewReader(resource)))
 	var parsedResources []*unstructured.Unstructured
-	for _, r := range resources {
-		var obj unstructured.Unstructured
-		if err := yaml.NewYAMLToJSONDecoder(strings.NewReader(r)).Decode(&obj); err != nil {
-			return nil, err
+	for {
+		document, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		// documents are numbered as the objects they hold: empty ones are not counted
+		index := len(parsedResources) + 1
+		if err != nil {
+			return nil, fmt.Errorf("document %d: %w", index, err)
+		}
+		// As in kubectl's StreamVisitor, only a document that decodes to nothing or to
+		// null (blank, comment-only, a trailing separator) is skipped. An explicit empty
+		// object such as {} is kept, so it fails the apiVersion and kind check below.
+		var raw runtime.RawExtension
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(document), 4096).Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("document %d: %w", index, err)
+		}
+		raw.Raw = bytes.TrimSpace(raw.Raw)
+		if len(raw.Raw) == 0 || bytes.Equal(raw.Raw, []byte("null")) {
+			continue
+		}
+		obj := &unstructured.Unstructured{}
+		if err := utiljson.Unmarshal(raw.Raw, &obj.Object); err != nil {
+			return nil, fmt.Errorf("document %d: %w", index, err)
+		}
+		if obj.GetAPIVersion() == "" || obj.GetKind() == "" {
+			return nil, fmt.Errorf("document %d: apiVersion and kind are required (nothing was applied)", index)
 		}
 
 		// remove the status from the resource, disallowing agent from directly editing (only controllers should be allowed to do this)
 		delete(obj.Object, "status")
 
-		parsedResources = append(parsedResources, &obj)
+		parsedResources = append(parsedResources, obj)
 	}
-	return c.resourcesCreateOrUpdate(ctx, parsedResources)
+	if len(parsedResources) == 0 {
+		return nil, errors.New("no Kubernetes object found in the resource argument")
+	}
+	return parsedResources, nil
 }
 
 func (c *Core) ResourcesDelete(ctx context.Context, gvk *schema.GroupVersionKind, namespace, name string, gracePeriodSeconds *int64) error {
