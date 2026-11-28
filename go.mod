@@ -14,8 +14,8 @@ require (
 	github.com/google/gnostic-models v0.7.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
-	github.com/korrel8r/korrel8r/pkg/api v0.13.5
-	github.com/korrel8r/korrel8r/pkg/mcp v0.13.5
+	github.com/korrel8r/korrel8r/pkg/api v0.13.7
+	github.com/korrel8r/korrel8r/pkg/mcp v0.13.7
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/os-observability/redhat-opentelemetry-collector/configschemas v0.0.0-20260712195227-4e7d75e0d2ec
 	github.com/pavolloffay/opentelemetry-mcp-server/modules/schemagen v0.0.0-20260710124846-8bb49fd6ccc7
