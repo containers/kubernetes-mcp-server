@@ -113,7 +113,7 @@ func (s *HelmSuite) TestSimplify() {
 func (s *HelmSuite) TestValidateChartReference() {
 	s.Run("without config", func() {
 		s.Run("allows oci:// scheme", func() {
-			s.NoError(validateChartReference("oci://ghcr.io/nginxinc/charts/nginx-ingress", nil))
+			s.NoError(validateChartReference("oci://ghcr.io/nginx/charts/nginx-ingress", nil))
 		})
 		s.Run("allows https:// scheme", func() {
 			s.NoError(validateChartReference("https://charts.example.com/grafana-7.0.0.tgz", nil))

@@ -22,7 +22,7 @@ func initHelm() []api.ServerTool {
 				Properties: map[string]*jsonschema.Schema{
 					"chart": {
 						Type:        "string",
-						Description: "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+						Description: "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginx/charts/nginx-ingress)",
 					},
 					"values": {
 						Type:        "object",
