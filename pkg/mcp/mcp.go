@@ -51,6 +51,9 @@ func (c *Configuration) Toolsets() []api.Toolset {
 func (c *Configuration) ListOutput() output.Output {
 	if c.listOutput == nil {
 		c.listOutput = output.FromString(c.Config.ListOutput.Get())
+		if c.listOutput == output.Table {
+			c.listOutput = output.NewTable(c.ListOutputWide.Get(), c.ListOutputShowLabels.Get())
+		}
 	}
 	return c.listOutput
 }

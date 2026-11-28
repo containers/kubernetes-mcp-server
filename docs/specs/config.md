@@ -501,6 +501,28 @@ startup.
 <td>DROP <code>--list-output</code></td>
 </tr>
 <tr>
+<td>list_output_wide</td>
+<td>bool</td>
+<td><code>true</code></td>
+<td><code>list_output_wide</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td>New; table list output wide columns</td>
+</tr>
+<tr>
+<td>list_output_show_labels</td>
+<td>bool</td>
+<td><code>true</code></td>
+<td><code>list_output_show_labels</code></td>
+<td>—</td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td>New; table list output LABELS column</td>
+</tr>
+<tr>
 <td>apps_enabled</td>
 <td>bool</td>
 <td><code>false</code></td>
