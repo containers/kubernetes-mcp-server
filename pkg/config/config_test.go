@@ -1581,7 +1581,7 @@ func (s *ConfigSuite) TestDump() {
 		s.Contains(logs, "yaml")
 	})
 
-	s.Run("logs toolset_configs with parse source", func() {
+	s.Run("logs opted-in toolset values and the parse source", func() {
 		buf.Reset()
 		if _, ok := toolsetConfigRegistry.parsers["dump-ext"]; !ok {
 			RegisterToolsetConfig("dump-ext", toolsetConfigForTestParser)
@@ -1589,16 +1589,37 @@ func (s *ConfigSuite) TestDump() {
 		loaded, err := ReadToml(s.T().Context(), []byte(`
 [toolset_configs.dump-ext]
 enabled = true
-endpoint = "https://example.com"
+endpoint = "https://log-user:log-password@example.com/private-path?credential=query-token#fragment-token"
 timeout = 1
+token = "extension-secret"
 `))
 		s.Require().NoError(err)
 		loaded.Dump(ctx, nil)
-		klog.Flush()
 		logs := buf.String()
-		s.Contains(logs, `option="toolset_configs"`)
-		s.Contains(logs, "dump-ext")
-		s.Contains(logs, "<toml>")
+		s.Contains(logs, `option="toolset_configs" value="[dump-ext] (<toml>)"`)
+		s.Contains(logs, `option="toolset_configs.dump-ext.enabled" value="true"`)
+		s.Contains(logs, `option="toolset_configs.dump-ext.endpoint" value="https://example.com"`)
+		s.NotContains(logs, "log-user")
+		s.NotContains(logs, "log-password")
+		s.NotContains(logs, "private-path")
+		s.NotContains(logs, "query-token")
+		s.NotContains(logs, "fragment-token")
+		s.NotContains(logs, "extension-secret")
+
+		buf.Reset()
+		next, err := ReadToml(s.T().Context(), []byte(`
+[toolset_configs.dump-ext]
+enabled = true
+endpoint = "https://example.org/service"
+timeout = 2
+`), WithPrevious(loaded))
+		s.Require().NoError(err)
+		next.Dump(ctx, loaded)
+		logs = buf.String()
+		s.Contains(logs, `option="toolset_configs.dump-ext.endpoint" value="https://example.org" changed=true previous="https://example.com"`)
+		s.Contains(logs, `option="toolset_configs.dump-ext.timeout" value="2" changed=true previous="1"`)
+		s.NotContains(logs, "log-password")
+		s.NotContains(logs, "private-path")
 	})
 }
 

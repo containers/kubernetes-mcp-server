@@ -12,8 +12,8 @@ import (
 
 // Config holds Helm toolset configuration
 type Config struct {
-	AllowedRegistries []string `toml:"allowed_registries,omitempty"`
-	StorageDriver     string   `toml:"storage_driver,omitempty"`
+	AllowedRegistries []string `toml:"allowed_registries,omitempty" configLog:"value"`
+	StorageDriver     string   `toml:"storage_driver,omitempty" configLog:"value"`
 }
 
 var _ config.ExtendedConfig = (*Config)(nil)

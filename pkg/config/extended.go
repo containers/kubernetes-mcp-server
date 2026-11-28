@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"reflect"
 	"strings"
 
@@ -204,4 +205,45 @@ func rejectContainerUnknown(raw, parsed any, path string) error {
 		return rejectUnknownSlice(raw, derefType(rt.Elem()), path)
 	}
 	return nil
+}
+
+// extendedLogValues includes only fields that explicitly opt in to logging.
+// Unmarked fields may contain credentials or runtime state.
+func extendedLogValues(table string, parsed map[string]ExtendedConfig) map[string]string {
+	values := make(map[string]string)
+	for name, cfg := range parsed {
+		value := reflect.Indirect(reflect.ValueOf(cfg))
+		if value.Kind() != reflect.Struct {
+			continue
+		}
+		for i := range value.NumField() {
+			field := value.Type().Field(i)
+			key, _, _ := strings.Cut(field.Tag.Get("toml"), ",")
+			if !field.IsExported() || key == "" || key == "-" {
+				continue
+			}
+			fieldValue := value.Field(i)
+			path := table + "." + name + "." + key
+			switch field.Tag.Get("configLog") {
+			case "value":
+				values[path] = stringify(fieldValue.Interface())
+			case "url":
+				values[path] = endpointForLog(fieldValue.String())
+			}
+		}
+	}
+	return values
+}
+
+// endpointForLog keeps only the origin. URL components such as user info,
+// query parameters, or a path can contain credentials.
+func endpointForLog(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return redactedValue
+	}
+	return (&url.URL{Scheme: parsed.Scheme, Host: parsed.Host}).String()
 }

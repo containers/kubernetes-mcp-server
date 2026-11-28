@@ -21,10 +21,10 @@ func init() {
 type Config struct {
 	// AuthMode controls where the bearer token is obtained for authenticating
 	// against the monitoring-plugin management API.
-	AuthMode auth.AuthMode `toml:"auth_mode,omitempty"`
+	AuthMode auth.AuthMode `toml:"auth_mode,omitempty" configLog:"value"`
 
 	// ManagementAPIURL is the base URL of the monitoring-plugin management API.
-	ManagementAPIURL string `toml:"management_api_url,omitempty"`
+	ManagementAPIURL string `toml:"management_api_url,omitempty" configLog:"url"`
 
 	// ClientMetrics holds HTTP client metrics for instrumenting outbound requests.
 	ClientMetrics *instrumentation.ClientMetrics `toml:"-"`
