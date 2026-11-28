@@ -19,7 +19,7 @@
     "inputSchema": {
       "properties": {
         "chart": {
-          "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)",
+          "description": "Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginx/charts/nginx-ingress)",
           "type": "string"
         },
         "name": {

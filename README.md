@@ -444,7 +444,7 @@ In case multi-cluster support is enabled (default) and you have access to multip
 <summary>helm</summary>
 
 - **helm_install** - Install (deploy) a Helm chart to create a release in the current or provided namespace
-  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginxinc/charts/nginx-ingress)
+  - `chart` (`string`) **(required)** - Chart reference to install (for example: stable/grafana, oci://ghcr.io/nginx/charts/nginx-ingress)
   - `name` (`string`) - Name of the Helm release (Optional, random name if not provided)
   - `namespace` (`string`) - Namespace to install the Helm chart in (Optional, current namespace if not provided)
   - `values` (`object`) - Values to pass to the Helm chart (Optional)
