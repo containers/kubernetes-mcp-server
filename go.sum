@@ -281,8 +281,8 @@ github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dv
 github.com/kelseyhightower/envconfig v1.4.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
 github.com/klauspost/compress v1.20.3 h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
 github.com/klauspost/compress v1.20.3/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
-github.com/korrel8r/korrel8r/pkg/api v0.13.7 h1:uPcYljIGW1myYLQG9FcG6tCIESfWsvFd7v+I1CV+E04=
-github.com/korrel8r/korrel8r/pkg/api v0.13.7/go.mod h1:f2+n/HMbHPrGFcjJECS2yvGx3ntxm+jUgVnIrmmen3A=
+github.com/korrel8r/korrel8r/pkg/api v0.13.8 h1:M9z8HNrRbAKzW+FjwNyWIHNMmhTQXD0xpkGqEr9ZZ/w=
+github.com/korrel8r/korrel8r/pkg/api v0.13.8/go.mod h1:f2+n/HMbHPrGFcjJECS2yvGx3ntxm+jUgVnIrmmen3A=
 github.com/korrel8r/korrel8r/pkg/mcp v0.13.7 h1:jdLOWxf9blJB5aWqtnSbnrJm1Iu+RxWOaqB5IQs8lq4=
 github.com/korrel8r/korrel8r/pkg/mcp v0.13.7/go.mod h1:Mdkt7X06CnY4D9SUpn2sJUE4ZOI+1vnozkmSk8RH8/Q=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
